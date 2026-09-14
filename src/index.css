@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-100 text-slate-900 font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom scrollbars for high-density markbook tables */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Achievement Category Accents */
+.badge-k {
+  @apply bg-blue-50 text-blue-700 border border-blue-200 font-semibold;
+}
+.badge-t {
+  @apply bg-purple-50 text-purple-700 border border-purple-200 font-semibold;
+}
+.badge-c {
+  @apply bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold;
+}
+.badge-a {
+  @apply bg-amber-50 text-amber-800 border border-amber-200 font-semibold;
+}
