@@ -230,6 +230,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
           id: newSaId,
           assessmentId: activeCell.assessmentId,
           classEnrollmentId: activeCell.enrollmentId,
+          classSectionId,
           workflowStatus: 'assessed',
           completionStatus: editCompletion,
           isLate: editIsLate,
@@ -248,22 +249,31 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
         await db.studentAssessments.add(sa);
       } else {
         // Update flags without overwriting mark!
+        const updatedVersion = sa.version + 1;
         await db.studentAssessments.update(sa.id, {
           completionStatus: editCompletion,
           isLate: editIsLate,
+          classSectionId,
           updatedAt: now,
-          version: sa.version + 1
+          version: updatedVersion
         });
+        sa = { ...sa, version: updatedVersion, completionStatus: editCompletion, isLate: editIsLate };
       }
 
       // Record Category Result via transactional service
       if (editScore.trim() !== '') {
+        const existingCr = categoryResults.find(
+          r => r.studentAssessmentId === sa!.id && r.assessmentCategoryId === activeCell.categoryId && r.deletedAt === null
+        );
+
         await markbookService.recordCategoryResult({
           studentAssessmentId: sa.id,
           assessmentCategoryId: activeCell.categoryId,
           rawScore: editScore.trim(),
           inputFormat: editFormat,
           feedback: editFeedback.trim() || null,
+          expectedVersion: existingCr ? existingCr.version : undefined,
+          expectedStudentAssessmentVersion: sa.version,
           userId: 'user-tyler',
           deviceId: 'desktop-client'
         });

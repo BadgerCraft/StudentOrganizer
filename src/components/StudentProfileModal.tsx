@@ -178,6 +178,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           id: saId,
           assessmentId: assessId,
           classEnrollmentId: enrollmentId,
+          classSectionId: enrollment.classSectionId,
           workflowStatus: 'assessed',
           completionStatus: 'complete',
           isLate: false,
@@ -203,6 +204,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
         rawScore: customScore.trim(),
         inputFormat: 'percentage',
         feedback: customFeedback.trim() || null,
+        expectedStudentAssessmentVersion: 1,
         userId: 'user-tyler',
         deviceId: 'desktop-client'
       });

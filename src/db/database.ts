@@ -133,6 +133,132 @@ export class OntarioTeacherDB extends Dexie {
       syncMutations: 'id, deviceId, &mutationId, transactionId, entityName, entityId, createdAt, acknowledgedAt',
       syncCursors: 'id, deviceId, organizationId, &[deviceId+organizationId]'
     });
+
+    this.version(2).stores({
+      studentAssessments: 'id, assessmentId, classEnrollmentId, classSectionId, &[assessmentId+classEnrollmentId], workflowStatus, completionStatus, isLate, [classSectionId+deletedAt], deletedAt',
+      categoryResults: 'id, studentAssessmentId, assessmentCategoryId, &[studentAssessmentId+assessmentCategoryId], [assessmentCategoryId+deletedAt], deletedAt',
+      syncMutations: 'id, deviceId, &mutationId, transactionId, organizationId, status, entityName, entityId, createdAt, [deviceId+organizationId+status]'
+    }).upgrade(async tx => {
+      const mutations = await tx.table('syncMutations').toArray();
+      for (const m of mutations) {
+        let orgId: string | null = null;
+        try {
+          if (m.entityName === 'categoryResults') {
+            const cr = await tx.table('categoryResults').get(m.entityId);
+            if (cr) {
+              const sa = await tx.table('studentAssessments').get(cr.studentAssessmentId);
+              if (sa) {
+                const enr = await tx.table('classEnrollments').get(sa.classEnrollmentId);
+                if (enr) {
+                  const sec = await tx.table('classSections').get(enr.classSectionId);
+                  if (sec) {
+                    const course = await tx.table('courses').get(sec.courseId);
+                    if (course) orgId = course.organizationId;
+                  }
+                }
+              }
+            }
+          } else if (m.entityName === 'studentAssessments') {
+            const sa = await tx.table('studentAssessments').get(m.entityId);
+            if (sa) {
+              const enr = await tx.table('classEnrollments').get(sa.classEnrollmentId);
+              if (enr) {
+                const sec = await tx.table('classSections').get(enr.classSectionId);
+                if (sec) {
+                  const course = await tx.table('courses').get(sec.courseId);
+                  if (course) orgId = course.organizationId;
+                }
+              }
+            }
+          } else if (m.entityName === 'participationEvents') {
+            const pe = await tx.table('participationEvents').get(m.entityId);
+            if (pe) {
+              const sec = await tx.table('classSections').get(pe.classSectionId);
+              if (sec) {
+                const course = await tx.table('courses').get(sec.courseId);
+                if (course) orgId = course.organizationId;
+              }
+            }
+          } else if (m.entityName === 'seatPositions') {
+            const sp = await tx.table('seatPositions').get(m.entityId);
+            if (sp) {
+              const layout = await tx.table('seatingLayouts').get(sp.seatingLayoutId);
+              if (layout) {
+                const sec = await tx.table('classSections').get(layout.classSectionId);
+                if (sec) {
+                  const course = await tx.table('courses').get(sec.courseId);
+                  if (course) orgId = course.organizationId;
+                }
+              }
+            }
+          } else if (m.entityName === 'gradeOverrides') {
+            const ov = await tx.table('gradeOverrides').get(m.entityId);
+            if (ov) {
+              const enr = await tx.table('classEnrollments').get(ov.classEnrollmentId);
+              if (enr) {
+                const sec = await tx.table('classSections').get(enr.classSectionId);
+                if (sec) {
+                  const course = await tx.table('courses').get(sec.courseId);
+                  if (course) orgId = course.organizationId;
+                }
+              }
+            }
+          } else if (m.entityName === 'studentNotes') {
+            const note = await tx.table('studentNotes').get(m.entityId);
+            if (note) {
+              const enr = await tx.table('classEnrollments').get(note.classEnrollmentId);
+              if (enr) {
+                const sec = await tx.table('classSections').get(enr.classSectionId);
+                if (sec) {
+                  const course = await tx.table('courses').get(sec.courseId);
+                  if (course) orgId = course.organizationId;
+                }
+              }
+            }
+          } else if (m.entityName === 'assessments') {
+            const a = await tx.table('assessments').get(m.entityId);
+            if (a) {
+              const sec = await tx.table('classSections').get(a.classSectionId);
+              if (sec) {
+                const course = await tx.table('courses').get(sec.courseId);
+                if (course) orgId = course.organizationId;
+              }
+            }
+          }
+        } catch {
+          orgId = null;
+        }
+
+        const isAcknowledged = m.acknowledgedAt != null;
+        if (orgId) {
+          await tx.table('syncMutations').update(m.id, {
+            organizationId: orgId,
+            status: isAcknowledged ? 'acknowledged' : 'pending'
+          });
+        } else {
+          await tx.table('syncMutations').update(m.id, {
+            organizationId: '00000000-0000-0000-0000-000000000000',
+            status: 'failed',
+            lastError: 'QUARANTINED_ORPHAN_MUTATION: Unable to determine organizationId during v1-to-v2 upgrade'
+          });
+        }
+      }
+
+      // Backfill classSectionId on existing studentAssessments if missing
+      const sas = await tx.table('studentAssessments').toArray();
+      for (const sa of sas) {
+        if (!sa.classSectionId) {
+          try {
+            const enr = await tx.table('classEnrollments').get(sa.classEnrollmentId);
+            if (enr) {
+              await tx.table('studentAssessments').update(sa.id, { classSectionId: enr.classSectionId });
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      }
+    });
   }
 }
 

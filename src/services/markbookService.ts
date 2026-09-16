@@ -1,11 +1,13 @@
 import type { OntarioTeacherDB } from '../db/database';
 import { normalizeEnteredScore } from './calculationEngine';
+import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
 import type {
   CategoryResult,
   ScoreInputFormat,
   UUID,
   AuditEntry,
-  SyncMutation
+  SyncMutation,
+  StudentAssessment
 } from '../types/schema';
 
 export interface RecordCategoryResultParams {
@@ -14,7 +16,8 @@ export interface RecordCategoryResultParams {
   rawScore: string;
   inputFormat: ScoreInputFormat;
   feedback?: string | null; // undefined = unchanged, null = clear, string = new value
-  expectedVersion?: number;
+  expectedVersion?: number; // Mandatory if updating existing CategoryResult
+  expectedStudentAssessmentVersion?: number; // Mandatory if existing result updated
   userId: UUID;
   deviceId: UUID;
 }
@@ -37,19 +40,20 @@ export class MarkbookDomainService {
   constructor(private db: OntarioTeacherDB) {}
 
   /**
-   * Executes atomic, in-transaction validation, normalization, scoring, audit, and sync mutation.
+   * Executes atomic, in-transaction authorization, validation, normalization, scoring, audit, and sync mutations.
    */
   async recordCategoryResult(params: RecordCategoryResultParams): Promise<CategoryResult> {
     return await this.db.transaction(
       'rw',
       [
+        ...AUTH_TABLES(this.db),
         this.db.studentAssessments,
         this.db.assessments,
         this.db.assessmentCategories,
         this.db.classEnrollments,
-        this.db.classSections,
         this.db.reportingPeriods,
         this.db.categoryResults,
+        this.db.gradingPolicies,
         this.db.markScaleEntries,
         this.db.auditEntries,
         this.db.syncMutations
@@ -91,30 +95,59 @@ export class MarkbookDomainService {
           throw new ValidationError('Enrollment class section does not match assessment class section.');
         }
 
+        // Validate reporting period exists and is open
         const repPeriod = await this.db.reportingPeriods.get(assessment.reportingPeriodId);
-        if (repPeriod && repPeriod.isClosed) {
+        if (!repPeriod || repPeriod.deletedAt !== null) {
+          throw new ValidationError(`Assessment references non-existent or deleted reporting period.`);
+        }
+        if (repPeriod.isClosed) {
           throw new ValidationError(`Reporting period "${repPeriod.name}" is closed.`);
         }
 
-        // 2. Fetch Active Scale Entries for Normalization
-        let scaleEntries = [];
-        if (catDef.markScaleVersionId) {
-          scaleEntries = await this.db.markScaleEntries
-            .where('markScaleVersionId')
-            .equals(catDef.markScaleVersionId)
-            .toArray();
-        } else {
-          // Default to latest version in DB
-          scaleEntries = await this.db.markScaleEntries.toArray();
+        // 2. In-Transaction Authorization Check
+        const auth = await assertClassSectionWriteAccess(this.db, params.userId, assessment.classSectionId);
+        const derivedOrgId = auth.organizationId;
+
+        // 3. Single-Path Deterministic Scale Fallback
+        let scaleVersionId = catDef.markScaleVersionId;
+        if (!scaleVersionId) {
+          // Prefer reporting-period policy
+          const rpPolicy = await this.db.gradingPolicies
+            .where({ classSectionId: assessment.classSectionId, reportingPeriodId: assessment.reportingPeriodId })
+            .first();
+          if (rpPolicy && rpPolicy.deletedAt === null) {
+            scaleVersionId = rpPolicy.defaultMarkScaleVersionId;
+          } else {
+            // Fallback to class section default policy
+            const defaultPolicy = await this.db.gradingPolicies
+              .where({ classSectionId: assessment.classSectionId, scopeKey: 'DEFAULT' })
+              .first();
+            if (defaultPolicy && defaultPolicy.deletedAt === null) {
+              scaleVersionId = defaultPolicy.defaultMarkScaleVersionId;
+            }
+          }
         }
 
-        // 3. Deterministic Domain Normalization
+        if (!scaleVersionId) {
+          throw new ValidationError('No mark scale version or default grading policy configured for this category.');
+        }
+
+        const scaleEntries = await this.db.markScaleEntries
+          .where('markScaleVersionId')
+          .equals(scaleVersionId)
+          .toArray();
+
+        if (scaleEntries.length === 0 && params.inputFormat === 'scale_code') {
+          throw new ValidationError(`Configured mark scale version "${scaleVersionId}" has no valid scale entries.`);
+        }
+
+        // 4. Deterministic Domain Normalization
         const norm = normalizeEnteredScore(params.rawScore, params.inputFormat, catDef.maxScore, scaleEntries);
         if (norm.error) {
           throw new ValidationError(norm.error);
         }
 
-        // 4. Check Existing Result & Optimistic Concurrency
+        // 5. Check Existing Result & Mandatory Optimistic Concurrency
         const existing = await this.db.categoryResults
           .where({
             studentAssessmentId: params.studentAssessmentId,
@@ -132,9 +165,19 @@ export class MarkbookDomainService {
             throw new ValidationError('Cannot update a deleted category result. Restore it first.');
           }
 
-          if (params.expectedVersion !== undefined && existing.version !== params.expectedVersion) {
+          if (params.expectedVersion === undefined) {
+            throw new ValidationError(`expectedVersion is mandatory when updating an existing category result.`);
+          }
+
+          if (existing.version !== params.expectedVersion) {
             throw new ConcurrencyConflictError(
               `Version conflict on categoryResult ${existing.id}. Expected ${params.expectedVersion}, got ${existing.version}.`
+            );
+          }
+
+          if (params.expectedStudentAssessmentVersion !== undefined && sa.version !== params.expectedStudentAssessmentVersion) {
+            throw new ConcurrencyConflictError(
+              `Version conflict on parent studentAssessment ${sa.id}. Expected ${params.expectedStudentAssessmentVersion}, got ${sa.version}.`
             );
           }
 
@@ -186,17 +229,18 @@ export class MarkbookDomainService {
           await this.db.categoryResults.add(result);
         }
 
-        // 5. Update parent student assessment workflow & timestamp
-        const updatedSA = {
+        // 6. Update parent student assessment workflow & timestamp
+        const updatedSA: StudentAssessment = {
           ...sa,
-          workflowStatus: 'assessed' as const,
+          classSectionId: assessment.classSectionId,
+          workflowStatus: 'assessed',
           assessedAt: now,
           updatedAt: now,
           version: sa.version + 1
         };
         await this.db.studentAssessments.put(updatedSA);
 
-        // 6. Append-Only Structured Audit Entry
+        // 7. Append-Only Structured Audit Entry
         const auditEntry: AuditEntry = {
           id: crypto.randomUUID(),
           entityName: 'categoryResults',
@@ -212,29 +256,54 @@ export class MarkbookDomainService {
         };
         await this.db.auditEntries.add(auditEntry);
 
-        // 7. Enqueue Idempotent Sync Mutation
-        const syncMutation: SyncMutation = {
+        // 8. Enqueue Complete Transaction Sync Mutations (Size: 2)
+        const mutationCategoryResult: SyncMutation = {
           id: crypto.randomUUID(),
           deviceId: params.deviceId,
+          organizationId: derivedOrgId,
           mutationId: crypto.randomUUID(),
           transactionId: txId,
           sequenceNumber: 1,
-          transactionSize: 2, // categoryResult + studentAssessment
+          transactionSize: 2,
           entityName: 'categoryResults',
           entityId: result.id,
           operation: action,
           payloadJson: JSON.stringify(result),
           baseVersion: action === 'UPDATE' ? (existing?.version ?? 0) : 0,
+          status: 'pending',
           createdAt: now,
           attemptCount: 0,
           lastAttemptAt: null,
           lastError: null,
           acknowledgedAt: null
         };
-        await this.db.syncMutations.add(syncMutation);
+
+        const mutationStudentAssessment: SyncMutation = {
+          id: crypto.randomUUID(),
+          deviceId: params.deviceId,
+          organizationId: derivedOrgId,
+          mutationId: crypto.randomUUID(),
+          transactionId: txId,
+          sequenceNumber: 2,
+          transactionSize: 2,
+          entityName: 'studentAssessments',
+          entityId: updatedSA.id,
+          operation: 'UPDATE',
+          payloadJson: JSON.stringify(updatedSA),
+          baseVersion: sa.version,
+          status: 'pending',
+          createdAt: now,
+          attemptCount: 0,
+          lastAttemptAt: null,
+          lastError: null,
+          acknowledgedAt: null
+        };
+
+        await this.db.syncMutations.bulkAdd([mutationCategoryResult, mutationStudentAssessment]);
 
         return result;
       }
     );
   }
 }
+

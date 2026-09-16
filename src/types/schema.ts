@@ -388,6 +388,7 @@ export interface StudentAssessment {
   id: UUID;
   assessmentId: UUID;
   classEnrollmentId: UUID;
+  classSectionId: UUID; // Denormalized for fast section query indexing
   workflowStatus: WorkflowStatus;
   completionStatus: CompletionStatus;
   isLate: boolean;
@@ -472,7 +473,7 @@ export interface ParticipationDailySummary {
   positiveCount: number;
   needsFollowupCount: number;
   totalPoints: number;
-  lastEventAt: ISOTimestampString;
+  lastEventAt: ISOTimestampString | null;
 }
 
 // 7. Student Notes & Structured Audit Log
@@ -506,10 +507,12 @@ export interface AuditEntry {
 
 // 8. Sync Infrastructure
 export type SyncOperation = 'INSERT' | 'UPDATE' | 'DELETE';
+export type SyncMutationStatus = 'pending' | 'acknowledged' | 'failed';
 
 export interface SyncMutation {
   id: UUID;
   deviceId: UUID;
+  organizationId: UUID;
   mutationId: UUID; // Idempotent key
   transactionId: UUID;
   sequenceNumber: number;
@@ -519,6 +522,7 @@ export interface SyncMutation {
   operation: SyncOperation;
   payloadJson: string;
   baseVersion: number;
+  status: SyncMutationStatus;
   createdAt: ISOTimestampString;
   attemptCount: number;
   lastAttemptAt: ISOTimestampString | null;

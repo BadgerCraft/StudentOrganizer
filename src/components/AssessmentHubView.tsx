@@ -115,6 +115,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
         id: crypto.randomUUID(),
         assessmentId: assessId,
         classEnrollmentId: enr.id,
+        classSectionId: classSection.id,
         workflowStatus: 'assigned' as const,
         completionStatus: 'incomplete' as const,
         isLate: false,

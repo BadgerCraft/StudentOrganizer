@@ -131,37 +131,43 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   };
 
   const handleArrangeAlphabetically = async () => {
-    await seatingService.arrangeAlphabetically(layout.id);
+    await seatingService.arrangeAlphabetically(layout.id, 'user-tyler', 'desktop-client');
     onRefresh();
   };
 
   const handleConfirmRandomize = async () => {
-    await seatingService.randomizeSeats(layout.id);
+    await seatingService.randomizeSeats(layout.id, 'user-tyler', 'desktop-client');
     setShowRandomConfirm(false);
     onRefresh();
   };
 
   const handleToggleAttendance = async (enrollmentId: UUID, e: React.MouseEvent) => {
     e.stopPropagation();
-    const existing = attendanceMap.get(enrollmentId);
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = attendanceRecords.find(a => a.classEnrollmentId === enrollmentId && a.localSchoolDate === today);
     const now = new Date().toISOString();
-    const today = now.slice(0, 10);
-    const session = await db.classSessions.where('classSectionId').equals(layout.classSectionId).first();
+
+    const nextStatus: Record<string, 'present' | 'absent' | 'late' | 'excused'> = {
+      present: 'late',
+      late: 'absent',
+      absent: 'excused',
+      excused: 'present'
+    };
 
     if (existing) {
-      const newStatus = existing.status === 'absent' ? 'present' : 'absent';
       await db.attendanceRecords.update(existing.id, {
-        status: newStatus,
-        updatedAt: now
+        status: nextStatus[existing.status] || 'present',
+        updatedAt: now,
+        version: existing.version + 1
       });
     } else {
       await db.attendanceRecords.add({
         id: crypto.randomUUID(),
         classEnrollmentId: enrollmentId,
-        classSessionId: session ? session.id : 'session-default',
+        classSessionId: 'session-eng-today',
         localSchoolDate: today,
-        status: 'absent',
-        reason: 'Marked absent in Class View',
+        status: 'late',
+        reason: null,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
@@ -179,7 +185,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
 
   const handleDrop = async (targetRow: number, targetCol: number) => {
     if (!draggedSeat || layout.isLocked) return;
-    await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId);
+    await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId, 'user-tyler', 'desktop-client');
     setDraggedSeat(null);
     onRefresh();
   };

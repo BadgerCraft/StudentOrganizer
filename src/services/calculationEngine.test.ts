@@ -101,8 +101,8 @@ describe('Calculation Engine - Normalization and Two-Stage Aggregation', () => {
     ];
 
     const studentAssessments: StudentAssessment[] = [
-      { id: 'sa1', assessmentId: 'a1', classEnrollmentId: 'e1', workflowStatus: 'assessed', completionStatus: 'complete', isLate: false, assignedAt: '', dueAt: '', submittedAt: '', assessedAt: '', returnedAt: '', overallFeedback: null, privateNotes: null, createdAt: '', updatedAt: '', deletedAt: null, version: 1 },
-      { id: 'sa2', assessmentId: 'a2', classEnrollmentId: 'e1', workflowStatus: 'assessed', completionStatus: 'complete', isLate: false, assignedAt: '', dueAt: '', submittedAt: '', assessedAt: '', returnedAt: '', overallFeedback: null, privateNotes: null, createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+      { id: 'sa1', assessmentId: 'a1', classEnrollmentId: 'e1', classSectionId: 'cs-1', workflowStatus: 'assessed', completionStatus: 'complete', isLate: false, assignedAt: '', dueAt: '', submittedAt: '', assessedAt: '', returnedAt: '', overallFeedback: null, privateNotes: null, createdAt: '', updatedAt: '', deletedAt: null, version: 1 },
+      { id: 'sa2', assessmentId: 'a2', classEnrollmentId: 'e1', classSectionId: 'cs-1', workflowStatus: 'assessed', completionStatus: 'complete', isLate: false, assignedAt: '', dueAt: '', submittedAt: '', assessedAt: '', returnedAt: '', overallFeedback: null, privateNotes: null, createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
     ];
 
     const categoryResults: CategoryResult[] = [
@@ -146,5 +146,94 @@ describe('Calculation Engine - Normalization and Two-Stage Aggregation', () => {
     expect(overall.isOverridden).toBe(true);
     expect(overall.finalOverall).toBe(88.0);
     expect(overall.overrideRationale).toContain('Teacher professional judgment');
+  });
+
+  it('rejects malformed scores with alpha suffixes and non-positive maxScore', () => {
+    // Malformed percentage with alphanumeric suffix
+    const r1 = normalizeEnteredScore('85garbage', 'percentage', 100, sampleScaleEntries);
+    expect(r1.error).toContain('Invalid percentage format');
+
+    const r2 = normalizeEnteredScore('75%junk', 'percentage', 100, sampleScaleEntries);
+    expect(r2.error).toContain('Invalid percentage format');
+
+    // Malformed raw points
+    const r3 = normalizeEnteredScore('10abc/20xyz', 'raw_points', 20, sampleScaleEntries);
+    expect(r3.error).toContain('Invalid score format');
+
+    const r4 = normalizeEnteredScore('15/20junk', 'raw_points', 20, sampleScaleEntries);
+    expect(r4.error).toContain('Invalid score format');
+
+    const r5 = normalizeEnteredScore('12foo', 'raw_points', 20, sampleScaleEntries);
+    expect(r5.error).toContain('Invalid raw score');
+
+    // Non-positive or non-finite maxScore
+    const r6 = normalizeEnteredScore('85', 'percentage', 0, sampleScaleEntries);
+    expect(r6.error).toContain('Configured maxScore must be a positive finite number');
+
+    const r7 = normalizeEnteredScore('85', 'percentage', -10, sampleScaleEntries);
+    expect(r7.error).toContain('Configured maxScore must be a positive finite number');
+
+    const r8 = normalizeEnteredScore('85', 'percentage', NaN, sampleScaleEntries);
+    expect(r8.error).toContain('Configured maxScore must be a positive finite number');
+  });
+
+  it('calculates missing work correctly when completionStatus is missing with no CategoryResult', () => {
+    const assessments: Assessment[] = [
+      { id: 'a1', classSectionId: 'cs-1', unitId: 'u1', reportingPeriodId: 'rp-1', code: 'A1', title: 'Task 1', assessmentType: 'summative', assignedAt: '', dueAt: '', isLocked: false, createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+    ];
+    const categories: AssessmentCategory[] = [
+      { id: 'cat-a1-k', assessmentId: 'a1', categoryCode: 'K', maxScore: 100, evidenceWeight: 1.0, markScaleVersionId: 'v1', createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+    ];
+    const studentAssessments: StudentAssessment[] = [
+      { id: 'sa1', assessmentId: 'a1', classEnrollmentId: 'e1', classSectionId: 'cs-1', workflowStatus: 'assigned', completionStatus: 'missing', isLate: false, assignedAt: '', dueAt: '', submittedAt: null, assessedAt: null, returnedAt: null, overallFeedback: null, privateNotes: null, createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+    ];
+    // Notice: ZERO categoryResults rows exist for this student assessment!
+    const categoryResults: CategoryResult[] = [];
+
+    // 1. Policy: zero_with_warning -> should yield 0.0%
+    const policyZero: GradingPolicy = {
+      id: 'pol-1', classSectionId: 'cs-1', reportingPeriodId: 'rp-1', scopeKey: 'rp-1',
+      weightK: 25, weightT: 25, weightC: 25, weightA: 25,
+      excludeFormative: true, missingWorkPolicy: 'zero_with_warning', defaultMarkScaleVersionId: 'v1', decimalPrecision: 1,
+      createdAt: '', updatedAt: '', deletedAt: null, version: 1
+    };
+    const resZero = calculateCategoryScore('e1', 'rp-1', 'K', assessments, categories, studentAssessments, categoryResults, policyZero, []);
+    expect(resZero.calculatedScore).toBe(0.0);
+    expect(resZero.validAssessmentCount).toBe(1);
+
+    // 2. Policy: floor_r -> should yield 35.0%
+    const policyFloor: GradingPolicy = { ...policyZero, missingWorkPolicy: 'floor_r' };
+    const resFloor = calculateCategoryScore('e1', 'rp-1', 'K', assessments, categories, studentAssessments, categoryResults, policyFloor, []);
+    expect(resFloor.calculatedScore).toBe(35.0);
+    expect(resFloor.validAssessmentCount).toBe(1);
+
+    // 3. Policy: exclude -> should yield null
+    const policyExclude: GradingPolicy = { ...policyZero, missingWorkPolicy: 'exclude' };
+    const resExclude = calculateCategoryScore('e1', 'rp-1', 'K', assessments, categories, studentAssessments, categoryResults, policyExclude, []);
+    expect(resExclude.calculatedScore).toBeNull();
+    expect(resExclude.validAssessmentCount).toBe(0);
+  });
+
+  it('explicitly ignores unassigned assessments when StudentAssessment row is absent', () => {
+    const assessments: Assessment[] = [
+      { id: 'a1', classSectionId: 'cs-1', unitId: 'u1', reportingPeriodId: 'rp-1', code: 'A1', title: 'Task 1', assessmentType: 'summative', assignedAt: '', dueAt: '', isLocked: false, createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+    ];
+    const categories: AssessmentCategory[] = [
+      { id: 'cat-a1-k', assessmentId: 'a1', categoryCode: 'K', maxScore: 100, evidenceWeight: 1.0, markScaleVersionId: 'v1', createdAt: '', updatedAt: '', deletedAt: null, version: 1 }
+    ];
+    // No StudentAssessment row for e1
+    const studentAssessments: StudentAssessment[] = [];
+    const categoryResults: CategoryResult[] = [];
+
+    const policy: GradingPolicy = {
+      id: 'pol-1', classSectionId: 'cs-1', reportingPeriodId: 'rp-1', scopeKey: 'rp-1',
+      weightK: 25, weightT: 25, weightC: 25, weightA: 25,
+      excludeFormative: true, missingWorkPolicy: 'zero_with_warning', defaultMarkScaleVersionId: 'v1', decimalPrecision: 1,
+      createdAt: '', updatedAt: '', deletedAt: null, version: 1
+    };
+
+    const res = calculateCategoryScore('e1', 'rp-1', 'K', assessments, categories, studentAssessments, categoryResults, policy, []);
+    expect(res.calculatedScore).toBeNull();
+    expect(res.validAssessmentCount).toBe(0);
   });
 });
