@@ -42,7 +42,6 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
   // New assessment form state
   const [title, setTitle] = useState('');
-  const [code, setCode] = useState('');
   const [selectedUnitId, setSelectedUnitId] = useState(units[0]?.id || 'unit-default');
   const [assessmentType, setAssessmentType] = useState<'summative' | 'formative'>('summative');
   const [dueDate, setDueDate] = useState('2026-10-15T23:59:00Z');
@@ -84,7 +83,8 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
         classSectionId: classSection.id,
         unitId: selectedUnitId,
         reportingPeriodId: policy?.reportingPeriodId || 'rp-midterm',
-        code: code.trim().toUpperCase(),
+        // Keep the unique database code without asking the teacher to invent one.
+        code: `A-${assessId}`,
         title: title.trim(),
         assessmentType,
         assignedAt: now,
@@ -131,7 +131,6 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
     setShowCreateModal(false);
     setTitle('');
-    setCode('');
     onRefresh();
   };
 
@@ -204,7 +203,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                      {a.code} &bull; {unit ? unit.code : 'Unit'}
+                      {unit ? unit.code : 'Unit'}
                     </span>
                     <h3 className="font-bold text-slate-900 text-sm mt-1">{a.title}</h3>
                   </div>
@@ -260,18 +259,12 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <h3 className="text-base font-bold text-slate-900 mb-3">Create New Assessment</h3>
             <form onSubmit={handleCreateAssessment} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Code</label>
-                  <input type="text" required value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. U2-ESSAY" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Type</label>
-                  <select value={assessmentType} onChange={e => setAssessmentType(e.target.value as any)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
-                    <option value="summative">Summative</option>
-                    <option value="formative">Formative</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Type</label>
+                <select value={assessmentType} onChange={e => setAssessmentType(e.target.value as any)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
+                  <option value="summative">Summative</option>
+                  <option value="formative">Formative</option>
+                </select>
               </div>
 
               <div>
