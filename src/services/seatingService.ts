@@ -1,6 +1,7 @@
 import type { OntarioTeacherDB } from '../db/database';
-import type { SeatPosition, UUID } from '../types/schema';
+import type { SeatPosition, SyncMutation, UUID } from '../types/schema';
 import { ValidationError } from './markbookService';
+import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
 
 export class SeatingDomainService {
   constructor(private db: OntarioTeacherDB) {}
@@ -8,19 +9,30 @@ export class SeatingDomainService {
   /**
    * Assigns a student enrollment to a seat coordinate (row, col).
    * Enforces:
+   * - In-transaction authorization.
    * - Layout bounds.
    * - Occupied-only storage (empty seats are deleted rows).
    * - One seat per enrollment per layout.
+   * - Transactional audit entries and sync mutations.
    */
   async assignSeat(
     seatingLayoutId: UUID,
     row: number,
     col: number,
-    classEnrollmentId: UUID | null
+    classEnrollmentId: UUID | null,
+    userId: UUID,
+    deviceId: UUID
   ): Promise<SeatPosition | null> {
     return await this.db.transaction(
       'rw',
-      [this.db.seatingLayouts, this.db.classEnrollments, this.db.seatPositions],
+      [
+        ...AUTH_TABLES(this.db),
+        this.db.seatingLayouts,
+        this.db.classEnrollments,
+        this.db.seatPositions,
+        this.db.auditEntries,
+        this.db.syncMutations
+      ],
       async () => {
         const layout = await this.db.seatingLayouts.get(seatingLayoutId);
         if (!layout || layout.deletedAt !== null) {
@@ -31,13 +43,18 @@ export class SeatingDomainService {
           throw new ValidationError(`Seating layout "${layout.name}" is locked.`);
         }
 
+        // Authorization check
+        const auth = await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+        const derivedOrgId = auth.organizationId;
+
         if (row < 0 || row >= layout.rows || col < 0 || col >= layout.cols) {
           throw new ValidationError(`Coordinates (${row}, ${col}) are outside layout dimensions (${layout.rows}x${layout.cols}).`);
         }
 
         const now = new Date().toISOString();
+        const txId = crypto.randomUUID();
 
-        // Check if there is already an existing seat occupant at this coordinate
+        // Check occupant at target coordinate
         const existingAtCoord = await this.db.seatPositions
           .where({ seatingLayoutId, row, col })
           .first();
@@ -46,6 +63,41 @@ export class SeatingDomainService {
         if (classEnrollmentId === null) {
           if (existingAtCoord) {
             await this.db.seatPositions.delete(existingAtCoord.id);
+
+            await this.db.auditEntries.add({
+              id: crypto.randomUUID(),
+              entityName: 'seatPositions',
+              entityId: existingAtCoord.id,
+              action: 'DELETE',
+              transactionId: txId,
+              previousStateJson: JSON.stringify(existingAtCoord),
+              newStateJson: null,
+              diffJson: null,
+              userId,
+              timestamp: now,
+              clientVersion: '1.0.0'
+            });
+
+            await this.db.syncMutations.add({
+              id: crypto.randomUUID(),
+              deviceId,
+              organizationId: derivedOrgId,
+              mutationId: crypto.randomUUID(),
+              transactionId: txId,
+              sequenceNumber: 1,
+              transactionSize: 1,
+              entityName: 'seatPositions',
+              entityId: existingAtCoord.id,
+              operation: 'DELETE',
+              payloadJson: JSON.stringify(existingAtCoord),
+              baseVersion: existingAtCoord.version,
+              status: 'pending',
+              createdAt: now,
+              attemptCount: 0,
+              lastAttemptAt: null,
+              lastError: null,
+              acknowledgedAt: null
+            });
           }
           return null;
         }
@@ -59,7 +111,7 @@ export class SeatingDomainService {
           throw new ValidationError(`Enrollment does not belong to section ${layout.classSectionId}.`);
         }
 
-        // Check if this student is already seated elsewhere in this layout
+        // Check if student is already seated elsewhere in this layout
         const existingStudentSeat = await this.db.seatPositions
           .where({ seatingLayoutId, classEnrollmentId })
           .first();
@@ -69,17 +121,17 @@ export class SeatingDomainService {
             return existingStudentSeat; // Already in target seat
           }
 
-          // If target coordinate has another student, swap them!
+          // Swap occupant if target coordinate occupied
           if (existingAtCoord) {
-            await this.db.seatPositions.put({
+            const swappedAtCoord = {
               ...existingAtCoord,
               row: existingStudentSeat.row,
               col: existingStudentSeat.col,
               updatedAt: now,
               version: existingAtCoord.version + 1
-            });
+            };
+            await this.db.seatPositions.put(swappedAtCoord);
           } else {
-            // Delete old position
             await this.db.seatPositions.delete(existingStudentSeat.id);
           }
 
@@ -91,12 +143,47 @@ export class SeatingDomainService {
             version: existingStudentSeat.version + 1
           };
           await this.db.seatPositions.put(updatedPosition);
+
+          await this.db.auditEntries.add({
+            id: crypto.randomUUID(),
+            entityName: 'seatPositions',
+            entityId: updatedPosition.id,
+            action: 'UPDATE',
+            transactionId: txId,
+            previousStateJson: JSON.stringify(existingStudentSeat),
+            newStateJson: JSON.stringify(updatedPosition),
+            diffJson: JSON.stringify({ row: { old: existingStudentSeat.row, new: row }, col: { old: existingStudentSeat.col, new: col } }),
+            userId,
+            timestamp: now,
+            clientVersion: '1.0.0'
+          });
+
+          await this.db.syncMutations.add({
+            id: crypto.randomUUID(),
+            deviceId,
+            organizationId: derivedOrgId,
+            mutationId: crypto.randomUUID(),
+            transactionId: txId,
+            sequenceNumber: 1,
+            transactionSize: 1,
+            entityName: 'seatPositions',
+            entityId: updatedPosition.id,
+            operation: 'UPDATE',
+            payloadJson: JSON.stringify(updatedPosition),
+            baseVersion: existingStudentSeat.version,
+            status: 'pending',
+            createdAt: now,
+            attemptCount: 0,
+            lastAttemptAt: null,
+            lastError: null,
+            acknowledgedAt: null
+          });
+
           return updatedPosition;
         }
 
-        // If student was not previously seated:
+        // Student was not previously seated
         if (existingAtCoord) {
-          // Replace occupant
           const updated: SeatPosition = {
             ...existingAtCoord,
             classEnrollmentId,
@@ -104,6 +191,42 @@ export class SeatingDomainService {
             version: existingAtCoord.version + 1
           };
           await this.db.seatPositions.put(updated);
+
+          await this.db.auditEntries.add({
+            id: crypto.randomUUID(),
+            entityName: 'seatPositions',
+            entityId: updated.id,
+            action: 'UPDATE',
+            transactionId: txId,
+            previousStateJson: JSON.stringify(existingAtCoord),
+            newStateJson: JSON.stringify(updated),
+            diffJson: JSON.stringify({ classEnrollmentId: { old: existingAtCoord.classEnrollmentId, new: classEnrollmentId } }),
+            userId,
+            timestamp: now,
+            clientVersion: '1.0.0'
+          });
+
+          await this.db.syncMutations.add({
+            id: crypto.randomUUID(),
+            deviceId,
+            organizationId: derivedOrgId,
+            mutationId: crypto.randomUUID(),
+            transactionId: txId,
+            sequenceNumber: 1,
+            transactionSize: 1,
+            entityName: 'seatPositions',
+            entityId: updated.id,
+            operation: 'UPDATE',
+            payloadJson: JSON.stringify(updated),
+            baseVersion: existingAtCoord.version,
+            status: 'pending',
+            createdAt: now,
+            attemptCount: 0,
+            lastAttemptAt: null,
+            lastError: null,
+            acknowledgedAt: null
+          });
+
           return updated;
         }
 
@@ -119,6 +242,42 @@ export class SeatingDomainService {
           version: 1
         };
         await this.db.seatPositions.add(newPosition);
+
+        await this.db.auditEntries.add({
+          id: crypto.randomUUID(),
+          entityName: 'seatPositions',
+          entityId: newPosition.id,
+          action: 'INSERT',
+          transactionId: txId,
+          previousStateJson: null,
+          newStateJson: JSON.stringify(newPosition),
+          diffJson: null,
+          userId,
+          timestamp: now,
+          clientVersion: '1.0.0'
+        });
+
+        await this.db.syncMutations.add({
+          id: crypto.randomUUID(),
+          deviceId,
+          organizationId: derivedOrgId,
+          mutationId: crypto.randomUUID(),
+          transactionId: txId,
+          sequenceNumber: 1,
+          transactionSize: 1,
+          entityName: 'seatPositions',
+          entityId: newPosition.id,
+          operation: 'INSERT',
+          payloadJson: JSON.stringify(newPosition),
+          baseVersion: 0,
+          status: 'pending',
+          createdAt: now,
+          attemptCount: 0,
+          lastAttemptAt: null,
+          lastError: null,
+          acknowledgedAt: null
+        });
+
         return newPosition;
       }
     );
@@ -126,19 +285,32 @@ export class SeatingDomainService {
 
   /**
    * Arranges active students in the class alphabetically by last name into the layout.
+   * Pre-validates capacity so active students are NEVER silently dropped.
    */
-  async arrangeAlphabetically(seatingLayoutId: UUID): Promise<void> {
+  async arrangeAlphabetically(seatingLayoutId: UUID, userId: UUID, deviceId: UUID): Promise<void> {
     await this.db.transaction(
       'rw',
-      [this.db.seatingLayouts, this.db.classEnrollments, this.db.students, this.db.seatPositions],
+      [
+        ...AUTH_TABLES(this.db),
+        this.db.seatingLayouts,
+        this.db.classEnrollments,
+        this.db.students,
+        this.db.seatPositions,
+        this.db.auditEntries,
+        this.db.syncMutations
+      ],
       async () => {
         const layout = await this.db.seatingLayouts.get(seatingLayoutId);
         if (!layout || layout.deletedAt !== null) throw new ValidationError('Layout not found.');
         if (layout.isLocked) throw new ValidationError('Layout is locked.');
 
-        const now = new Date().toISOString();
+        const auth = await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+        const derivedOrgId = auth.organizationId;
 
-        // Get enrollments for this class
+        const now = new Date().toISOString();
+        const txId = crypto.randomUUID();
+
+        // Get active enrollments for this class
         const enrollments = await this.db.classEnrollments
           .where('classSectionId')
           .equals(layout.classSectionId)
@@ -152,6 +324,12 @@ export class SeatingDomainService {
           student: students[i]
         })).filter(p => p.student && p.student.deletedAt === null);
 
+        // Capacity check before removing existing seats!
+        const capacity = layout.rows * layout.cols;
+        if (paired.length > capacity) {
+          throw new ValidationError(`Layout capacity (${capacity} seats) is insufficient for active enrollment (${paired.length} students).`);
+        }
+
         paired.sort((a, b) => {
           const lCompare = (a.student?.lastName ?? '').localeCompare(b.student?.lastName ?? '');
           if (lCompare !== 0) return lCompare;
@@ -163,11 +341,12 @@ export class SeatingDomainService {
 
         // Fill grid row by row
         const newPositions: SeatPosition[] = [];
+        const syncMutations: SyncMutation[] = [];
         let pIdx = 0;
         for (let r = 0; r < layout.rows; r++) {
           for (let c = 0; c < layout.cols; c++) {
             if (pIdx < paired.length) {
-              newPositions.push({
+              const pos: SeatPosition = {
                 id: crypto.randomUUID(),
                 seatingLayoutId,
                 row: r,
@@ -177,12 +356,36 @@ export class SeatingDomainService {
                 updatedAt: now,
                 deletedAt: null,
                 version: 1
+              };
+              newPositions.push(pos);
+
+              syncMutations.push({
+                id: crypto.randomUUID(),
+                deviceId,
+                organizationId: derivedOrgId,
+                mutationId: crypto.randomUUID(),
+                transactionId: txId,
+                sequenceNumber: pIdx + 1,
+                transactionSize: paired.length,
+                entityName: 'seatPositions',
+                entityId: pos.id,
+                operation: 'INSERT',
+                payloadJson: JSON.stringify(pos),
+                baseVersion: 0,
+                status: 'pending',
+                createdAt: now,
+                attemptCount: 0,
+                lastAttemptAt: null,
+                lastError: null,
+                acknowledgedAt: null
               });
+
               pIdx++;
             }
           }
         }
         await this.db.seatPositions.bulkAdd(newPositions);
+        await this.db.syncMutations.bulkAdd(syncMutations);
       }
     );
   }
@@ -190,14 +393,23 @@ export class SeatingDomainService {
   /**
    * Randomly reshuffles students across occupied positions.
    */
-  async randomizeSeats(seatingLayoutId: UUID): Promise<void> {
+  async randomizeSeats(seatingLayoutId: UUID, userId: UUID, deviceId: UUID): Promise<void> {
     await this.db.transaction(
       'rw',
-      [this.db.seatingLayouts, this.db.seatPositions],
+      [
+        ...AUTH_TABLES(this.db),
+        this.db.seatingLayouts,
+        this.db.seatPositions,
+        this.db.auditEntries,
+        this.db.syncMutations
+      ],
       async () => {
         const layout = await this.db.seatingLayouts.get(seatingLayoutId);
         if (!layout || layout.deletedAt !== null) throw new ValidationError('Layout not found.');
         if (layout.isLocked) throw new ValidationError('Layout is locked.');
+
+        const auth = await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+        const derivedOrgId = auth.organizationId;
 
         const existingSeats = await this.db.seatPositions
           .where('seatingLayoutId')
@@ -215,6 +427,8 @@ export class SeatingDomainService {
         }
 
         const now = new Date().toISOString();
+        const txId = crypto.randomUUID();
+
         const updated = existingSeats.map((s, idx) => ({
           ...s,
           classEnrollmentId: enrollmentIds[idx],
@@ -222,7 +436,29 @@ export class SeatingDomainService {
           version: s.version + 1
         }));
 
+        const syncMutations: SyncMutation[] = updated.map((u, idx) => ({
+          id: crypto.randomUUID(),
+          deviceId,
+          organizationId: derivedOrgId,
+          mutationId: crypto.randomUUID(),
+          transactionId: txId,
+          sequenceNumber: idx + 1,
+          transactionSize: updated.length,
+          entityName: 'seatPositions',
+          entityId: u.id,
+          operation: 'UPDATE',
+          payloadJson: JSON.stringify(u),
+          baseVersion: existingSeats[idx].version,
+          status: 'pending',
+          createdAt: now,
+          attemptCount: 0,
+          lastAttemptAt: null,
+          lastError: null,
+          acknowledgedAt: null
+        }));
+
         await this.db.seatPositions.bulkPut(updated);
+        await this.db.syncMutations.bulkAdd(syncMutations);
       }
     );
   }

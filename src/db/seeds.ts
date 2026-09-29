@@ -19,12 +19,20 @@ import type {
   UserPreference
 } from '../types/schema';
 
-export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
-  const orgCount = await db.organizations.count();
-  if (orgCount > 0) return;
+import { getSchoolLocalDate } from '../utils/dateUtils';
+
+const seedingPromises = new WeakMap<OntarioTeacherDB, Promise<void>>();
+
+export function seedDatabase(db: OntarioTeacherDB): Promise<void> {
+  const existing = seedingPromises.get(db);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    const orgCount = await db.organizations.count();
+    if (orgCount > 0) return;
 
   const now = new Date().toISOString();
-  const today = now.slice(0, 10);
+  const today = getSchoolLocalDate();
 
   const boardId = 'org-board-peel';
   const schoolId = 'org-school-port-credit';
@@ -34,7 +42,7 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
     parentOrganizationId: null,
     parentScopeKey: 'ROOT',
     organizationType: 'board',
-    name: 'Peel District School Board',
+    name: 'Demo District School Board',
     code: 'PDSB',
     createdAt: now,
     updatedAt: now,
@@ -47,7 +55,7 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
     parentOrganizationId: boardId,
     parentScopeKey: boardId,
     organizationType: 'school',
-    name: 'Port Credit Secondary School',
+    name: 'Demo Secondary School',
     code: 'PCSS',
     createdAt: now,
     updatedAt: now,
@@ -60,8 +68,8 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
   const teacherUser: User = {
     id: teacherId,
     authSubject: 'google-oauth2|local-teacher-demo',
-    email: 't.henderson@pdsb.net',
-    name: 'Tyler Henderson',
+    email: 'taylor.demo@example.invalid',
+    name: 'Taylor Demo',
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
@@ -349,18 +357,19 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
   }
   await db.seatPositions.bulkAdd(seatPositions);
   const eventTypes: ParticipationEventType[] = [
-    { id: 'pet-idea', organizationId: schoolId, name: 'Contributed an idea', code: 'CONTRIB_IDEA', icon: 'Lightbulb', color: '#2563eb', classification: 'positive', defaultPoints: 1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-question', organizationId: schoolId, name: 'Asked a useful question', code: 'ASK_QUESTION', icon: 'HelpCircle', color: '#059669', classification: 'positive', defaultPoints: 1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-peer', organizationId: schoolId, name: 'Responded to a peer', code: 'PEER_RESPONSE', icon: 'MessageSquare', color: '#7c3aed', classification: 'positive', defaultPoints: 1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-evidence', organizationId: schoolId, name: 'Used evidence', code: 'USED_EVIDENCE', icon: 'BookOpen', color: '#0284c7', classification: 'positive', defaultPoints: 1.5, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-risk', organizationId: schoolId, name: 'Took an intellectual risk', code: 'INTELLECT_RISK', icon: 'Flame', color: '#ea580c', classification: 'positive', defaultPoints: 2.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-group', organizationId: schoolId, name: 'Supported group learning', code: 'GROUP_SUPPORT', icon: 'Users', color: '#16a34a', classification: 'positive', defaultPoints: 1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-prep', organizationId: schoolId, name: 'Demonstrated preparation', code: 'DEMO_PREP', icon: 'CheckCircle', color: '#0891b2', classification: 'positive', defaultPoints: 1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-offtask', organizationId: schoolId, name: 'Off task', code: 'OFF_TASK', icon: 'AlertCircle', color: '#dc2626', classification: 'needs_followup', defaultPoints: -1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-unprep', organizationId: schoolId, name: 'Unprepared', code: 'UNPREPARED', icon: 'XCircle', color: '#e11d48', classification: 'needs_followup', defaultPoints: -1.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-prompting', organizationId: schoolId, name: 'Needed prompting', code: 'NEEDED_PROMPT', icon: 'AlertTriangle', color: '#d97706', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-dominate', organizationId: schoolId, name: 'Dominated discussion', code: 'DOM_DISCUSS', icon: 'Volume2', color: '#ca8a04', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
-    { id: 'pet-noparticipate', organizationId: schoolId, name: 'Did not participate when expected', code: 'NO_PARTICIPATE', icon: 'EyeOff', color: '#9333ea', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-idea', organizationId: schoolId, name: 'Contributed an idea', code: 'CONTRIB_IDEA', icon: 'Lightbulb', color: '#2563eb', classification: 'positive', defaultPoints: 1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'T', sortOrder: 1, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-question', organizationId: schoolId, name: 'Asked a useful question', code: 'ASK_QUESTION', icon: 'HelpCircle', color: '#059669', classification: 'positive', defaultPoints: 1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'T', sortOrder: 2, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-peer', organizationId: schoolId, name: 'Responded to a peer', code: 'PEER_RESPONSE', icon: 'MessageSquare', color: '#7c3aed', classification: 'positive', defaultPoints: 1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'C', sortOrder: 3, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-evidence', organizationId: schoolId, name: 'Used evidence', code: 'USED_EVIDENCE', icon: 'BookOpen', color: '#0284c7', classification: 'positive', defaultPoints: 1.5, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'C', sortOrder: 4, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-risk', organizationId: schoolId, name: 'Took an intellectual risk', code: 'INTELLECT_RISK', icon: 'Flame', color: '#ea580c', classification: 'positive', defaultPoints: 2.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'T', sortOrder: 5, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-group', organizationId: schoolId, name: 'Supported group learning', code: 'GROUP_SUPPORT', icon: 'Users', color: '#16a34a', classification: 'positive', defaultPoints: 1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'A', sortOrder: 6, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-prep', organizationId: schoolId, name: 'Demonstrated preparation', code: 'DEMO_PREP', icon: 'CheckCircle', color: '#0891b2', classification: 'positive', defaultPoints: 1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: 'K', sortOrder: 7, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-neutral-obs', organizationId: schoolId, name: 'General observation', code: 'GENERAL_OBS', icon: 'FileText', color: '#64748b', classification: 'neutral', defaultPoints: 0.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 1, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-offtask', organizationId: schoolId, name: 'Off task', code: 'OFF_TASK', icon: 'AlertCircle', color: '#dc2626', classification: 'needs_followup', defaultPoints: -1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 1, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-unprep', organizationId: schoolId, name: 'Unprepared', code: 'UNPREPARED', icon: 'XCircle', color: '#e11d48', classification: 'needs_followup', defaultPoints: -1.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 2, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-prompting', organizationId: schoolId, name: 'Needed prompting', code: 'NEEDED_PROMPT', icon: 'AlertTriangle', color: '#d97706', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 3, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-dominate', organizationId: schoolId, name: 'Dominated discussion', code: 'DOM_DISCUSS', icon: 'Volume2', color: '#ca8a04', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 4, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
+    { id: 'pet-noparticipate', organizationId: schoolId, name: 'Did not participate when expected', code: 'NO_PARTICIPATE', icon: 'EyeOff', color: '#9333ea', classification: 'needs_followup', defaultPoints: 0.0, isArchived: false, recordingMode: 'quick_tally', defaultCategoryCode: null, sortOrder: 5, createdAt: now, updatedAt: now, deletedAt: null, version: 1 },
   ];
   await db.participationEventTypes.bulkAdd(eventTypes);
 
@@ -375,6 +384,8 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
       snapshottedName: 'Contributed an idea',
       snapshottedClassification: 'positive',
       snapshottedPoints: 1.0,
+      snapshottedRecordingMode: 'quick_tally',
+      achievementLevel: null,
       occurredAt: `${today}T10:25:00Z`,
       localSchoolDate: today,
       timezone: 'America/Toronto',
@@ -397,6 +408,8 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
       snapshottedName: 'Used evidence',
       snapshottedClassification: 'positive',
       snapshottedPoints: 1.5,
+      snapshottedRecordingMode: 'quick_tally',
+      achievementLevel: null,
       occurredAt: `${today}T10:32:00Z`,
       localSchoolDate: today,
       timezone: 'America/Toronto',
@@ -413,8 +426,8 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
   await db.participationEvents.bulkAdd(sampleEvents);
 
   const dailySummaries: ParticipationDailySummary[] = [
-    { id: 'pds-1', classEnrollmentId: enrollmentsEng[0].id, localSchoolDate: today, positiveCount: 1, needsFollowupCount: 0, totalPoints: 1.0, lastEventAt: `${today}T10:25:00Z` },
-    { id: 'pds-2', classEnrollmentId: enrollmentsEng[1].id, localSchoolDate: today, positiveCount: 1, needsFollowupCount: 0, totalPoints: 1.5, lastEventAt: `${today}T10:32:00Z` }
+    { id: 'pds-1', classEnrollmentId: enrollmentsEng[0].id, localSchoolDate: today, positiveCount: 1, needsFollowupCount: 0, neutralCount: 0, totalPoints: 1.0, lastEventAt: `${today}T10:25:00Z` },
+    { id: 'pds-2', classEnrollmentId: enrollmentsEng[1].id, localSchoolDate: today, positiveCount: 1, needsFollowupCount: 0, neutralCount: 0, totalPoints: 1.5, lastEventAt: `${today}T10:32:00Z` }
   ];
   await db.participationDailySummaries.bulkAdd(dailySummaries);
 
@@ -454,6 +467,7 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
       id: saEssayId,
       assessmentId: assessEssayId,
       classEnrollmentId: enr.id,
+      classSectionId: sectionEngId,
       workflowStatus: isMissing ? 'assigned' : 'assessed',
       completionStatus: isMissing ? 'missing' : isExcused ? 'excused' : 'complete',
       isLate: isLate,
@@ -496,6 +510,7 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
         id: saSemId,
         assessmentId: assessSeminarId,
         classEnrollmentId: enr.id,
+        classSectionId: sectionEngId,
         workflowStatus: 'assessed',
         completionStatus: 'complete',
         isLate: false,
@@ -521,5 +536,9 @@ export async function seedDatabase(db: OntarioTeacherDB): Promise<void> {
 
   await db.studentAssessments.bulkAdd(studentAssessments);
   await db.categoryResults.bulkAdd(categoryResults);
+  })();
+
+  seedingPromises.set(db, promise);
+  return promise;
 }
 

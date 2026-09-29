@@ -31,6 +31,16 @@ export function normalizeEnteredScore(
   maxScore: number,
   scaleEntries: MarkScaleEntry[]
 ): ScoreNormalizationResult {
+  // Validate maxScore
+  if (typeof maxScore !== 'number' || !Number.isFinite(maxScore) || maxScore <= 0) {
+    return {
+      normalizedPercentage: null,
+      pointsEarned: null,
+      pointsPossibleSnapshot: null,
+      error: 'Configured maxScore must be a positive finite number'
+    };
+  }
+
   const trimmed = rawScore.trim();
   if (!trimmed) {
     return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore };
@@ -59,12 +69,13 @@ export function normalizeEnteredScore(
   }
 
   if (format === 'percentage') {
-    const cleanStr = trimmed.replace('%', '');
-    const num = parseFloat(cleanStr);
-    if (isNaN(num)) {
+    // Exact match: optionally preceded/followed by whitespace, optional %, no alphanumeric trailing junk
+    const pctMatch = trimmed.match(/^(-?[0-9]+(?:\.[0-9]+)?)\s*%?$/);
+    if (!pctMatch) {
       return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Invalid percentage format' };
     }
-    if (num < 0 || num > 100) {
+    const num = Number(pctMatch[1]);
+    if (!Number.isFinite(num) || num < 0 || num > 100) {
       return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Percentage must be between 0 and 100' };
     }
     return {
@@ -76,14 +87,14 @@ export function normalizeEnteredScore(
 
   if (format === 'raw_points') {
     if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length !== 2) {
+      const partsMatch = trimmed.match(/^(-?[0-9]+(?:\.[0-9]+)?)\s*\/\s*(-?[0-9]+(?:\.[0-9]+)?)$/);
+      if (!partsMatch) {
         return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Invalid score format. Use "pts/max" or "pts"' };
       }
-      const num = parseFloat(parts[0].trim());
-      const den = parseFloat(parts[1].trim());
-      if (isNaN(num) || isNaN(den) || den <= 0) {
-        return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Points must be valid numbers' };
+      const num = Number(partsMatch[1]);
+      const den = Number(partsMatch[2]);
+      if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) {
+        return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Points must be valid positive numbers' };
       }
       if (Math.abs(den - maxScore) > 0.0001) {
         return {
@@ -103,11 +114,12 @@ export function normalizeEnteredScore(
       };
     }
 
-    const num = parseFloat(trimmed);
-    if (isNaN(num)) {
+    const singleMatch = trimmed.match(/^(-?[0-9]+(?:\.[0-9]+)?)$/);
+    if (!singleMatch) {
       return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: 'Invalid raw score' };
     }
-    if (num < 0 || num > maxScore) {
+    const num = Number(singleMatch[1]);
+    if (!Number.isFinite(num) || num < 0 || num > maxScore) {
       return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore, error: `Points earned must be between 0 and ${maxScore}` };
     }
     return {
@@ -152,14 +164,7 @@ export function calculateCategoryScore(
          o.deletedAt === null
   );
 
-  // Map category definitions by ID
-  const catDefMap = new Map<UUID, AssessmentCategory>();
-  for (const cat of categories) {
-    if (cat.categoryCode === categoryCode && cat.deletedAt === null) {
-      catDefMap.set(cat.id, cat);
-    }
-  }
-
+  // Map active assessments in reporting period
   const assessMap = new Map<UUID, Assessment>();
   for (const a of assessments) {
     if (a.deletedAt === null) {
@@ -169,10 +174,19 @@ export function calculateCategoryScore(
     }
   }
 
-  const saMap = new Map<UUID, StudentAssessment>();
+  // Student assessments for this enrollment (key: assessmentId -> StudentAssessment)
+  const saByAssessmentId = new Map<UUID, StudentAssessment>();
   for (const sa of studentAssessments) {
     if (sa.classEnrollmentId === classEnrollmentId && sa.deletedAt === null) {
-      saMap.set(sa.id, sa);
+      saByAssessmentId.set(sa.assessmentId, sa);
+    }
+  }
+
+  // Category results for this enrollment (key: `${studentAssessmentId}_${assessmentCategoryId}` -> CategoryResult)
+  const crMap = new Map<string, CategoryResult>();
+  for (const cr of categoryResults) {
+    if (cr.deletedAt === null) {
+      crMap.set(`${cr.studentAssessmentId}_${cr.assessmentCategoryId}`, cr);
     }
   }
 
@@ -180,19 +194,22 @@ export function calculateCategoryScore(
   let weightSum = 0;
   let validCount = 0;
 
-  for (const cr of categoryResults) {
-    if (cr.deletedAt !== null) continue;
-    const catDef = catDefMap.get(cr.assessmentCategoryId);
-    if (!catDef) continue;
+  // Iterate over all applicable category definitions for assessments in this reporting period
+  for (const catDef of categories) {
+    if (catDef.deletedAt !== null) continue;
+    if (catDef.categoryCode !== categoryCode) continue;
 
-    const sa = saMap.get(cr.studentAssessmentId);
-    if (!sa) continue;
-
-    const assessment = assessMap.get(sa.assessmentId);
+    const assessment = assessMap.get(catDef.assessmentId);
     if (!assessment) continue;
 
     // Filter formative if policy dictates
     if (assessment.assessmentType === 'formative' && policy.excludeFormative) {
+      continue;
+    }
+
+    const sa = saByAssessmentId.get(assessment.id);
+    // Explicit no-StudentAssessment case: Student was not assigned this assessment -> unassigned/unassessed.
+    if (!sa) {
       continue;
     }
 
@@ -201,16 +218,24 @@ export function calculateCategoryScore(
       continue;
     }
 
-    let pct = cr.normalizedPercentage;
+    let pct: number | null = null;
 
-    // Handle missing work according to policy
     if (sa.completionStatus === 'missing') {
       if (policy.missingWorkPolicy === 'exclude') {
         continue;
       } else if (policy.missingWorkPolicy === 'zero_with_warning') {
-        pct = 0;
+        pct = 0.0;
       } else if (policy.missingWorkPolicy === 'floor_r') {
         pct = 35.0; // Level R benchmark
+      }
+    } else {
+      // completionStatus is complete, incomplete, or not_assessed
+      const cr = crMap.get(`${sa.id}_${catDef.id}`);
+      if (cr && cr.normalizedPercentage !== null) {
+        pct = cr.normalizedPercentage;
+      } else {
+        // No result row yet for this criterion -> unassessed criterion
+        continue;
       }
     }
 
@@ -260,6 +285,11 @@ export function calculateOverallCourseGrade(
   const categoryCodes: AchievementCategoryCode[] = ['K', 'T', 'C', 'A'];
   const breakdown: Record<AchievementCategoryCode, CategoryScoreResult> = {} as any;
 
+  // Pre-filter student's relevant rows once rather than scanning class-wide arrays 4 times
+  const studentSAs = studentAssessments.filter(sa => sa.classEnrollmentId === classEnrollmentId && sa.deletedAt === null);
+  const studentSAIds = new Set(studentSAs.map(sa => sa.id));
+  const studentCRs = categoryResults.filter(cr => studentSAIds.has(cr.studentAssessmentId) && cr.deletedAt === null);
+
   for (const code of categoryCodes) {
     breakdown[code] = calculateCategoryScore(
       classEnrollmentId,
@@ -267,8 +297,8 @@ export function calculateOverallCourseGrade(
       code,
       assessments,
       categories,
-      studentAssessments,
-      categoryResults,
+      studentSAs,
+      studentCRs,
       policy,
       overrides
     );

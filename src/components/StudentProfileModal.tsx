@@ -7,8 +7,10 @@ import {
   FileText,
   Plus,
   AlertCircle,
-  Clock
+  Clock,
+  Settings
 } from 'lucide-react';
+import { ModalDialog } from './ModalDialog';
 import type {
   Student,
   ClassEnrollment,
@@ -26,6 +28,9 @@ import type {
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
+import { StudentDomainService } from '../services/studentService';
+import { getAppIdentity } from '../services/identityService';
+import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 
 interface StudentProfileModalProps {
@@ -41,6 +46,9 @@ interface StudentProfileModalProps {
   overrides: GradeOverride[];
   notes: StudentNote[];
   auditEntries: AuditEntry[];
+  userId?: UUID;
+  deviceId?: UUID;
+  onOpenSettings?: (student: Student) => void;
   onClose: () => void;
   onRefresh: () => void;
 }
@@ -58,6 +66,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   overrides,
   notes,
   auditEntries,
+  userId,
+  deviceId,
+  onOpenSettings,
   onClose,
   onRefresh
 }) => {
@@ -75,8 +86,52 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [overrideValue, setOverrideValue] = useState<number>(85);
   const [overrideRationale, setOverrideRationale] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const isNoteDirty = newNoteContent.trim() !== '';
+  const isCustomAssessmentDirty =
+    customTitle.trim() !== '' ||
+    customScore.trim() !== '' ||
+    customFeedback.trim() !== '' ||
+    customType !== 'summative' ||
+    customCategory !== 'K' ||
+    customMaxScore !== 100;
+  const isOverrideDirty =
+    showOverrideModal &&
+    (overrideCategory !== 'OVERALL' ||
+      overrideValue !== 85 ||
+      overrideRationale.trim() !== '');
+
+  const isProfileDirty = isNoteDirty || isCustomAssessmentDirty || isOverrideDirty;
+
+  const handleOpenSettingsGuarded = () => {
+    if (isProfileDirty) {
+      const confirmed = window.confirm(
+        'You have unsaved changes in this student profile. Navigating to settings will discard them. Are you sure you want to discard them?'
+      );
+      if (!confirmed) return;
+    }
+    onOpenSettings?.(student);
+  };
+
+  const handleToggleCustomAssessment = () => {
+    if (showAddCustomAssessment && isCustomAssessmentDirty) {
+      const confirmed = window.confirm(
+        'You have an unfinished custom assignment draft. Discard this draft?'
+      );
+      if (!confirmed) return;
+      setCustomTitle('');
+      setCustomType('summative');
+      setCustomCategory('K');
+      setCustomMaxScore(100);
+      setCustomScore('');
+      setCustomFeedback('');
+    }
+    setShowAddCustomAssessment(!showAddCustomAssessment);
+  };
 
   const markbookService = new MarkbookDomainService(db);
+  const studentService = new StudentDomainService(db);
 
   const gradeSummary = useMemo(() => {
     return calculateOverallCourseGrade(
@@ -131,6 +186,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const missingCount = studentAssessments.filter(
     s => s.classEnrollmentId === enrollmentId && s.completionStatus === 'missing' && s.deletedAt === null
   ).length;
+
   const handleCreateCustomAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
     const now = new Date().toISOString();
@@ -138,16 +194,33 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     const catId = crypto.randomUUID();
     const saId = crypto.randomUUID();
 
-    const unit = await db.units.where('classSectionId').equals(enrollment.classSectionId).first();
-
     await db.transaction(
       'rw',
-      [db.assessments, db.assessmentCategories, db.studentAssessments, db.categoryResults, db.auditEntries, db.syncMutations],
+      [db.units, db.assessments, db.assessmentCategories, db.studentAssessments, db.categoryResults, db.auditEntries, db.syncMutations],
       async () => {
+        let unit = await db.units.where('classSectionId').equals(enrollment.classSectionId).first();
+        if (!unit) {
+          const newUnit = {
+            id: `unit-${enrollment.classSectionId}-1`,
+            classSectionId: enrollment.classSectionId,
+            code: 'U1',
+            title: 'Unit 1: Course Foundations',
+            sortOrder: 1,
+            startsOn: null,
+            endsOn: null,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+            version: 1
+          };
+          await db.units.add(newUnit);
+          unit = newUnit;
+        }
+
         await db.assessments.add({
           id: assessId,
           classSectionId: enrollment.classSectionId,
-          unitId: unit ? unit.id : 'unit-default',
+          unitId: unit.id,
           reportingPeriodId: policy.reportingPeriodId || 'rp-midterm',
           code: `IND-${Date.now().toString().slice(-4)}`,
           title: customTitle.trim(),
@@ -178,6 +251,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           id: saId,
           assessmentId: assessId,
           classEnrollmentId: enrollmentId,
+          classSectionId: enrollment.classSectionId,
           workflowStatus: 'assessed',
           completionStatus: 'complete',
           isLate: false,
@@ -196,105 +270,179 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
       }
     );
 
-    if (customScore.trim() !== '') {
-      await markbookService.recordCategoryResult({
-        studentAssessmentId: saId,
-        assessmentCategoryId: catId,
-        rawScore: customScore.trim(),
-        inputFormat: 'percentage',
-        feedback: customFeedback.trim() || null,
-        userId: 'user-tyler',
-        deviceId: 'desktop-client'
-      });
-    }
+    try {
+      const currentIdentity = await getAppIdentity(db);
+      if (userId && userId !== currentIdentity.userId) {
+        throw new AuthorizationError('Acting teacher has changed since opening this profile. Please reopen the profile.');
+      }
 
-    setShowAddCustomAssessment(false);
-    setCustomTitle('');
-    setCustomScore('');
-    setCustomFeedback('');
-    onRefresh();
+      if (customScore.trim() !== '') {
+        await markbookService.recordCategoryResult({
+          studentAssessmentId: saId,
+          assessmentCategoryId: catId,
+          rawScore: customScore.trim(),
+          inputFormat: 'percentage',
+          feedback: customFeedback.trim() || null,
+          expectedStudentAssessmentVersion: 1,
+          userId: currentIdentity.userId,
+          deviceId: currentIdentity.deviceId
+        });
+      }
+
+      setShowAddCustomAssessment(false);
+      setCustomTitle('');
+      setCustomScore('');
+      setCustomFeedback('');
+      setActionError(null);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to record custom assessment.');
+    }
   };
 
   const handleSaveOverride = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString();
+    setActionError(null);
+    try {
+      const currentIdentity = await getAppIdentity(db);
+      if (userId && userId !== currentIdentity.userId) {
+        throw new AuthorizationError('Acting teacher has changed since opening this profile. Please reopen the profile.');
+      }
 
-    await db.gradeOverrides.put({
-      id: crypto.randomUUID(),
-      classEnrollmentId: enrollmentId,
-      reportingPeriodId: policy.reportingPeriodId || 'rp-midterm',
-      categoryCode: overrideCategory,
-      overridePercentage: overrideValue,
-      rationale: overrideRationale.trim(),
-      teacherUserId: 'user-tyler',
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-      version: 1
-    });
+      await markbookService.saveGradeOverride({
+        classEnrollmentId: enrollmentId,
+        reportingPeriodId: policy.reportingPeriodId || 'rp-midterm',
+        categoryCode: overrideCategory,
+        overridePercentage: overrideValue,
+        rationale: overrideRationale.trim(),
+        userId: currentIdentity.userId,
+        deviceId: currentIdentity.deviceId
+      });
 
-    setShowOverrideModal(false);
-    setOverrideRationale('');
-    onRefresh();
+      setShowOverrideModal(false);
+      setOverrideRationale('');
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to save grade override.');
+    }
   };
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNoteContent.trim()) return;
-    const now = new Date().toISOString();
+    setActionError(null);
+    try {
+      const currentIdentity = await getAppIdentity(db);
+      if (userId && userId !== currentIdentity.userId) {
+        throw new AuthorizationError('Acting teacher has changed since opening this profile. Please reopen the profile.');
+      }
 
-    await db.studentNotes.add({
-      id: crypto.randomUUID(),
-      classEnrollmentId: enrollmentId,
-      authorUserId: 'user-tyler',
-      content: newNoteContent.trim(),
-      isConfidential: true,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-      version: 1
-    });
+      await studentService.createStudentNote({
+        classEnrollmentId: enrollmentId,
+        content: newNoteContent.trim(),
+        isConfidential: true,
+        userId: currentIdentity.userId,
+        deviceId: currentIdentity.deviceId
+      });
 
-    setNewNoteContent('');
-    onRefresh();
+      setNewNoteContent('');
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to create student note.');
+    }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-4xl w-full h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
-        {/* Header Profile Bar */}
-        <div className="bg-slate-900 text-white p-6 flex items-start justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl font-extrabold shadow-md border-2 border-white/20">
-              {student.preferredName?.[0] || student.firstName[0]}
-              {student.lastName[0]}
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-extrabold tracking-tight">
-                  {student.preferredName ? `${student.preferredName} (${student.firstName})` : student.firstName} {student.lastName}
-                </h2>
-                {student.pronouns && (
-                  <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">
-                    {student.pronouns}
+    <ModalDialog
+      isOpen={true}
+      onClose={onClose}
+      isDirty={isProfileDirty}
+      confirmDiscardMessage="You have unsaved changes in this student profile. Are you sure you want to discard them?"
+      title={`Student Profile: ${student.preferredName || student.firstName} ${student.lastName}`}
+      hideHeader={true}
+      maxWidthClass="max-w-4xl"
+      contentClassName="!p-0 h-[90vh] !rounded-3xl"
+      testId="student-profile-modal"
+    >
+      {({ requestDismiss }) => (
+        <div className="bg-white rounded-3xl w-full h-full shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+          {/* Header Profile Bar */}
+          <div className="bg-slate-900 text-white p-6 flex items-start justify-between">
+            <div className="flex items-center space-x-4">
+              {student.photoUrl ? (
+                <img
+                  src={student.photoUrl}
+                  alt={`${student.firstName} ${student.lastName}`}
+                  className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-white/20"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl font-extrabold shadow-md border-2 border-white/20">
+                  {student.preferredName?.[0] || student.firstName[0]}
+                  {student.lastName[0]}
+                </div>
+              )}
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-xl font-extrabold tracking-tight">
+                    {student.preferredName ? `${student.preferredName} (${student.firstName})` : student.firstName} {student.lastName}
+                  </h2>
+                  {student.pronouns && (
+                    <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">
+                      {student.pronouns}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-3 text-xs text-slate-400 mt-1">
+                  <span>Student ID: <strong className="text-slate-200 font-mono">#{student.localStudentNumber}</strong></span>
+                  <span>&bull;</span>
+                  <span className="capitalize">Status: <strong className="text-emerald-400">{enrollment.enrollmentStatus}</strong></span>
+                  <span>&bull;</span>
+                  <span className="flex items-center space-x-1 text-slate-300">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    <span>Private Records</span>
                   </span>
-                )}
+                </div>
               </div>
-              <div className="flex items-center space-x-3 text-xs text-slate-400 mt-1">
-                <span>Student ID: <strong className="text-slate-200 font-mono">#{student.localStudentNumber}</strong></span>
-                <span>&bull;</span>
-                <span className="capitalize">Status: <strong className="text-emerald-400">{enrollment.enrollmentStatus}</strong></span>
-                <span>&bull;</span>
-                <span className="flex items-center space-x-1 text-slate-300">
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>Private Records</span>
-                </span>
-              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {onOpenSettings && (
+                <button
+                  type="button"
+                  data-testid="profile-settings-gear-btn"
+                  onClick={handleOpenSettingsGuarded}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
+                  title="Edit Student Settings"
+                  aria-label={`Edit ${student.firstName} ${student.lastName} settings`}
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={requestDismiss}
+                data-testid="profile-close-btn"
+                aria-label="Close profile"
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-xl">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+
+          {actionError && (
+            <div
+              role="alert"
+              className="bg-rose-50 border-b border-rose-200 px-6 py-2.5 text-xs text-rose-800 flex items-center justify-between"
+            >
+              <span><strong>Action Error:</strong> {actionError}</span>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                className="text-rose-500 hover:text-rose-800 font-bold ml-4"
+              >
+                &times;
+              </button>
+            </div>
+          )}
 
         {/* Tab Navigation */}
         <div className="bg-slate-100 border-b border-slate-200 px-6 flex items-center justify-between">
@@ -310,6 +458,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               return (
                 <button
                   key={tab.id}
+                  data-testid={`profile-tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
                     activeTab === tab.id
@@ -324,6 +473,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
             })}
           </div>
           <button
+            data-testid="open-grade-override-btn"
             onClick={() => setShowOverrideModal(true)}
             className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition"
           >
@@ -388,33 +538,34 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold text-slate-700">Assignments for {student.preferredName || student.firstName}</span>
                 <button
-                  onClick={() => setShowAddCustomAssessment(!showAddCustomAssessment)}
+                  onClick={handleToggleCustomAssessment}
+                  data-testid="profile-add-assignment-btn"
                   className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Individual Assignment</span>
+                  <span>{showAddCustomAssessment ? 'Hide Assignment Form' : 'Add Individual Assignment'}</span>
                 </button>
               </div>
 
               {showAddCustomAssessment && (
-                <form onSubmit={handleCreateCustomAssessment} className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md space-y-3 mb-4">
+                <form onSubmit={handleCreateCustomAssessment} data-testid="custom-assessment-form" className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md space-y-3 mb-4">
                   <h4 className="text-xs font-bold text-blue-900">Create Differentiated Assignment</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700">Title</label>
-                      <input type="text" required value={customTitle} onChange={e => setCustomTitle(e.target.value)} placeholder="Oral Defense Alternative" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
+                      <input type="text" required data-testid="custom-assessment-title-input" value={customTitle} onChange={e => setCustomTitle(e.target.value)} placeholder="Oral Defense Alternative" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700">Type</label>
-                        <select value={customType} onChange={e => setCustomType(e.target.value as any)} className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white">
+                        <select value={customType} data-testid="custom-assessment-type-select" onChange={e => setCustomType(e.target.value as any)} className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white">
                           <option value="summative">Summative</option>
                           <option value="formative">Formative</option>
                         </select>
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700">Category</label>
-                        <select value={customCategory} onChange={e => setCustomCategory(e.target.value as any)} className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white">
+                        <select value={customCategory} data-testid="custom-assessment-category-select" onChange={e => setCustomCategory(e.target.value as any)} className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white">
                           <option value="K">K</option><option value="T">T</option><option value="C">C</option><option value="A">A</option>
                         </select>
                       </div>
@@ -423,16 +574,16 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700">Score</label>
-                      <input type="text" value={customScore} onChange={e => setCustomScore(e.target.value)} placeholder="e.g. 88% or 4+" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
+                      <input type="text" data-testid="custom-assessment-score-input" value={customScore} onChange={e => setCustomScore(e.target.value)} placeholder="e.g. 88% or 4+" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700">Feedback</label>
-                      <input type="text" value={customFeedback} onChange={e => setCustomFeedback(e.target.value)} placeholder="Optional feedback..." className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
+                      <input type="text" data-testid="custom-assessment-feedback-input" value={customFeedback} onChange={e => setCustomFeedback(e.target.value)} placeholder="Optional feedback..." className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
                     </div>
                   </div>
                   <div className="flex justify-end space-x-2 pt-2 border-t">
-                    <button type="button" onClick={() => setShowAddCustomAssessment(false)} className="px-3 py-1 text-xs text-slate-600">Cancel</button>
-                    <button type="submit" className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg">Save</button>
+                    <button type="button" data-testid="cancel-custom-assessment-btn" onClick={handleToggleCustomAssessment} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" data-testid="save-custom-assessment-btn" className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg">Save</button>
                   </div>
                 </form>
               )}
@@ -493,9 +644,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           {activeTab === 'notes' && (
             <div className="space-y-4">
               <form onSubmit={handleAddNote} className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
-                <textarea rows={2} value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} placeholder="Record private observation..." className="w-full px-3 py-2 text-xs border rounded-xl" />
+                <textarea rows={2} data-testid="profile-note-textarea" value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} placeholder="Record private observation..." className="w-full px-3 py-2 text-xs border rounded-xl" />
                 <div className="flex justify-end">
-                  <button type="submit" className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-xl">Save Private Note</button>
+                  <button type="submit" data-testid="profile-save-note-btn" className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-xl">Save Private Note</button>
                 </div>
               </form>
               {studentNotes.map(n => (
@@ -524,13 +675,30 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
 
         {/* Override Modal */}
         {showOverrideModal && (
-          <div className="fixed inset-0 z-60 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
-              <h3 className="text-sm font-bold text-slate-900 mb-3">Teacher Manual Grade Override</h3>
+          <ModalDialog
+            isOpen={showOverrideModal}
+            onClose={() => {
+              setShowOverrideModal(false);
+              setOverrideRationale('');
+              setOverrideValue(85);
+              setOverrideCategory('OVERALL');
+            }}
+            title="Teacher Manual Grade Override"
+            maxWidthClass="max-w-sm"
+            isDirty={overrideRationale.trim() !== '' || overrideValue !== 85 || overrideCategory !== 'OVERALL'}
+            confirmDiscardMessage="You have unsaved grade override entries. Are you sure you want to discard them?"
+            testId="override-modal"
+          >
+            {({ requestDismiss: requestDismissOverride }) => (
               <form onSubmit={handleSaveOverride} className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700">Scope</label>
-                  <select value={overrideCategory} onChange={e => setOverrideCategory(e.target.value as any)} className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white">
+                  <select
+                    data-testid="override-category-select"
+                    value={overrideCategory}
+                    onChange={e => setOverrideCategory(e.target.value as any)}
+                    className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white"
+                  >
                     <option value="OVERALL">Overall Course Mark</option>
                     <option value="K">K (Knowledge)</option>
                     <option value="T">T (Thinking)</option>
@@ -540,21 +708,52 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700">Override %</label>
-                  <input type="number" min="0" max="100" step="0.5" value={overrideValue} onChange={e => setOverrideValue(parseFloat(e.target.value))} className="w-full px-2.5 py-1.5 text-xs border rounded-lg font-bold" />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    data-testid="override-percentage-input"
+                    value={overrideValue}
+                    onChange={e => setOverrideValue(parseFloat(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs border rounded-lg font-bold"
+                  />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700">Rationale</label>
-                  <textarea required rows={2} value={overrideRationale} onChange={e => setOverrideRationale(e.target.value)} placeholder="Mandatory rationale note..." className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
+                  <textarea
+                    required
+                    rows={2}
+                    data-testid="override-rationale-input"
+                    value={overrideRationale}
+                    onChange={e => setOverrideRationale(e.target.value)}
+                    placeholder="Mandatory rationale note..."
+                    className="w-full px-2.5 py-1.5 text-xs border rounded-lg"
+                  />
                 </div>
                 <div className="flex justify-end space-x-2 pt-2 border-t">
-                  <button type="button" onClick={() => setShowOverrideModal(false)} className="px-3 py-1 text-xs text-slate-600">Cancel</button>
-                  <button type="submit" className="px-3.5 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg">Apply</button>
+                  <button
+                    type="button"
+                    data-testid="cancel-override-btn"
+                    onClick={requestDismissOverride}
+                    className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    data-testid="save-override-btn"
+                    className="px-3.5 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                  >
+                    Apply
+                  </button>
                 </div>
               </form>
-            </div>
-          </div>
+            )}
+          </ModalDialog>
         )}
       </div>
-    </div>
+      )}
+    </ModalDialog>
   );
 };

@@ -12,7 +12,11 @@ import {
   ExternalLink,
   MessageSquare,
   Plus,
-  Minus
+  Minus,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Settings
 } from 'lucide-react';
 import type {
   SeatingLayout,
@@ -24,6 +28,10 @@ import type {
   UUID
 } from '../types/schema';
 import { SeatingDomainService } from '../services/seatingService';
+import { AttendanceService } from '../services/attendanceService';
+import { getAppIdentity } from '../services/identityService';
+import { AuthorizationError } from '../services/authHelper';
+import { getSchoolLocalDate, shiftSchoolDate, formatSchoolDateDisplay } from '../utils/dateUtils';
 import { db } from '../db/database';
 
 interface SeatingChartViewProps {
@@ -34,8 +42,13 @@ interface SeatingChartViewProps {
   attendanceRecords: AttendanceRecord[];
   dailySummaries: ParticipationDailySummary[];
   selectedEnrollmentIds: UUID[];
+  selectedSchoolDate: string;
+  userId?: UUID;
+  deviceId?: UUID;
+  onSelectDate: (date: string) => void;
   onToggleSelectStudent: (enrollmentId: UUID) => void;
   onOpenStudentProfile: (enrollmentId: UUID) => void;
+  onOpenStudentSettings?: (student: Student) => void;
   onRefresh: () => void;
 }
 
@@ -47,8 +60,13 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   attendanceRecords,
   dailySummaries,
   selectedEnrollmentIds,
+  selectedSchoolDate,
+  userId,
+  deviceId,
+  onSelectDate,
   onToggleSelectStudent,
   onOpenStudentProfile,
+  onOpenStudentSettings,
   onRefresh
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +74,10 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   const [draggedSeat, setDraggedSeat] = useState<SeatPosition | null>(null);
 
   const seatingService = new SeatingDomainService(db);
+  const attendanceService = new AttendanceService(db);
+
+  const today = getSchoolLocalDate();
+  const isHistorical = selectedSchoolDate !== today;
 
   const studentMap = new Map<UUID, Student>();
   students.forEach(s => studentMap.set(s.id, s));
@@ -64,10 +86,21 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   enrollments.forEach(e => enrollmentMap.set(e.id, e));
 
   const attendanceMap = new Map<UUID, AttendanceRecord>();
-  attendanceRecords.forEach(a => attendanceMap.set(a.classEnrollmentId, a));
+  attendanceRecords
+    .filter(a => a.localSchoolDate === selectedSchoolDate && a.deletedAt === null)
+    .forEach(a => attendanceMap.set(a.classEnrollmentId, a));
 
   const summaryMap = new Map<UUID, ParticipationDailySummary>();
-  dailySummaries.forEach(s => summaryMap.set(s.classEnrollmentId, s));
+  dailySummaries
+    .filter(s => s.localSchoolDate === selectedSchoolDate)
+    .forEach(s => summaryMap.set(s.classEnrollmentId, s));
+
+  const seatedEnrollmentIds = new Set(
+    seatPositions.filter(p => p.deletedAt === null).map(p => p.classEnrollmentId)
+  );
+  const unseatedEnrollments = enrollments.filter(
+    e => e.deletedAt === null && e.enrollmentStatus === 'active' && !seatedEnrollmentIds.has(e.id)
+  );
 
   // Build 2D grid matrix
   const grid: (SeatPosition | null)[][] = [];
@@ -130,44 +163,37 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     onRefresh();
   };
 
+  const getIdentity = async () => {
+    const currentIdentity = await getAppIdentity(db);
+    if (userId && userId !== currentIdentity.userId) {
+      throw new AuthorizationError('Acting teacher has changed. Please refresh.');
+    }
+    return currentIdentity;
+  };
+
   const handleArrangeAlphabetically = async () => {
-    await seatingService.arrangeAlphabetically(layout.id);
+    const id = await getIdentity();
+    await seatingService.arrangeAlphabetically(layout.id, id.userId, id.deviceId);
     onRefresh();
   };
 
   const handleConfirmRandomize = async () => {
-    await seatingService.randomizeSeats(layout.id);
+    const id = await getIdentity();
+    await seatingService.randomizeSeats(layout.id, id.userId, id.deviceId);
     setShowRandomConfirm(false);
     onRefresh();
   };
 
   const handleToggleAttendance = async (enrollmentId: UUID, e: React.MouseEvent) => {
     e.stopPropagation();
-    const existing = attendanceMap.get(enrollmentId);
-    const now = new Date().toISOString();
-    const today = now.slice(0, 10);
-    const session = await db.classSessions.where('classSectionId').equals(layout.classSectionId).first();
-
-    if (existing) {
-      const newStatus = existing.status === 'absent' ? 'present' : 'absent';
-      await db.attendanceRecords.update(existing.id, {
-        status: newStatus,
-        updatedAt: now
-      });
-    } else {
-      await db.attendanceRecords.add({
-        id: crypto.randomUUID(),
-        classEnrollmentId: enrollmentId,
-        classSessionId: session ? session.id : 'session-default',
-        localSchoolDate: today,
-        status: 'absent',
-        reason: 'Marked absent in Class View',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        version: 1
-      });
-    }
+    const id = await getIdentity();
+    await attendanceService.toggleAttendance(
+      layout.classSectionId,
+      enrollmentId,
+      selectedSchoolDate,
+      id.userId,
+      id.deviceId
+    );
     onRefresh();
   };
 
@@ -179,7 +205,8 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
 
   const handleDrop = async (targetRow: number, targetCol: number) => {
     if (!draggedSeat || layout.isLocked) return;
-    await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId);
+    const id = await getIdentity();
+    await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId, id.userId, id.deviceId);
     setDraggedSeat(null);
     onRefresh();
   };
@@ -189,7 +216,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
       {/* Controls Bar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         {/* Left: Search Student Highlighter */}
-        <div className="relative flex-1 min-w-[240px] max-w-sm">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
@@ -198,6 +225,71 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
             placeholder="Search student to highlight..."
             className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
           />
+        </div>
+
+        {/* Date Navigation Bar */}
+        <div className="flex items-center space-x-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold">
+          <button
+            data-testid="prev-day-btn"
+            onClick={() => onSelectDate(shiftSchoolDate(selectedSchoolDate, -1))}
+            className="p-1 hover:bg-slate-200 rounded transition text-slate-600"
+            title="Previous Day"
+            aria-label="Previous school day"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="flex items-center space-x-1 px-1">
+            <Calendar className={`w-3.5 h-3.5 ${isHistorical ? 'text-amber-600' : 'text-blue-600'}`} />
+            <input
+              type="date"
+              data-testid="school-date-picker"
+              aria-label="Select school date"
+              max={today}
+              value={selectedSchoolDate}
+              onChange={e => {
+                if (e.target.value && e.target.value <= today) {
+                  onSelectDate(e.target.value);
+                }
+              }}
+              className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono font-medium text-slate-800"
+            />
+          </div>
+
+          <button
+            data-testid="next-day-btn"
+            onClick={() => onSelectDate(shiftSchoolDate(selectedSchoolDate, 1))}
+            disabled={selectedSchoolDate >= today}
+            className="p-1 hover:bg-slate-200 rounded transition text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Next Day"
+            aria-label="Next school day"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+
+          <span className="text-slate-300">|</span>
+
+          <button
+            data-testid="today-btn"
+            onClick={() => onSelectDate(today)}
+            disabled={selectedSchoolDate === today}
+            className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+              selectedSchoolDate === today
+                ? 'bg-blue-100 text-blue-800 cursor-default'
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer'
+            }`}
+          >
+            Today
+          </button>
+
+          {isHistorical && (
+            <span
+              data-testid="historical-badge"
+              className="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px] uppercase tracking-wider"
+            >
+              Historical
+            </span>
+          )}
         </div>
 
         {/* Center: Grid Dimension Controls */}
@@ -351,11 +443,21 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
               return (
                 <div
                   key={seatPos.id}
+                  data-testid="student-seat-card"
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
                   draggable={!layout.isLocked}
                   onDragStart={() => handleDragStart(seatPos)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={() => handleDrop(r, c)}
                   onClick={() => onToggleSelectStudent(enr!.id)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onToggleSelectStudent(enr!.id);
+                    }
+                  }}
                   className={`relative rounded-2xl border transition-all cursor-pointer select-none p-3 flex flex-col justify-between ${
                     layout.cardSize === 'compact' ? 'h-20' : 'h-28'
                   } ${
@@ -368,34 +470,57 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                       : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                   }`}
                 >
-                  {/* Top Row: Name, Initials & Quick Actions */}
+                  {/* Top Row: Name, Photo/Initials & Quick Actions */}
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-2 truncate">
-                      {/* Initials Avatar */}
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isAbsent
-                            ? 'bg-slate-300 text-slate-600'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {student.preferredName?.[0] || student.firstName[0]}
-                        {student.lastName[0]}
-                      </div>
+                    <div className="flex items-center space-x-2.5 truncate">
+                      {/* Student Photo or Stylized Initials Avatar */}
+                      {student.photoUrl ? (
+                        <img
+                          src={student.photoUrl}
+                          alt={`${student.firstName} ${student.lastName}`}
+                          className={`${
+                            layout.cardSize === 'compact' ? 'w-7 h-7 rounded-lg' : 'w-11 h-11 rounded-xl'
+                          } object-cover border border-slate-200 shadow-xs shrink-0`}
+                        />
+                      ) : (
+                        <div
+                          className={`${
+                            layout.cardSize === 'compact'
+                              ? 'w-7 h-7 rounded-lg text-xs'
+                              : 'w-11 h-11 rounded-xl text-sm font-black'
+                          } flex items-center justify-center shrink-0 ${
+                            isAbsent
+                              ? 'bg-slate-300 text-slate-600'
+                              : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-xs'
+                          }`}
+                        >
+                          {student.preferredName?.[0] || student.firstName[0]}
+                          {student.lastName[0]}
+                        </div>
+                      )}
 
                       <div className="truncate">
-                        <div className="font-bold text-slate-900 text-xs truncate leading-tight">
+                        <div
+                          className={`font-extrabold text-slate-900 truncate leading-tight ${
+                            layout.cardSize === 'compact' ? 'text-xs' : 'text-sm'
+                          }`}
+                        >
                           {student.preferredName || student.firstName} {student.lastName}
                         </div>
-                        {student.pronouns && layout.cardSize === 'standard' && (
+                        {student.preferredName && layout.cardSize === 'standard' && (
                           <span className="text-[10px] text-slate-400 block leading-none mt-0.5">
+                            ({student.firstName})
+                          </span>
+                        )}
+                        {student.pronouns && layout.cardSize === 'standard' && (
+                          <span className="text-[10px] text-slate-500 block leading-none mt-0.5 font-medium">
                             {student.pronouns}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Attendance & Profile Quick Action */}
+                    {/* Attendance, Profile & Settings Quick Actions */}
                     <div className="flex items-center space-x-0.5">
                       <button
                         onClick={e => handleToggleAttendance(enr!.id, e)}
@@ -405,6 +530,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                             : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
                         }`}
                         title={isAbsent ? 'Mark Present' : 'Mark Absent'}
+                        aria-label={isAbsent ? `Mark ${student.firstName} ${student.lastName} present` : `Mark ${student.firstName} ${student.lastName} absent`}
                       >
                         {isAbsent ? (
                           <UserX className="w-3.5 h-3.5 text-red-500" />
@@ -413,13 +539,31 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                         )}
                       </button>
 
+                      {onOpenStudentSettings && (
+                        <button
+                          type="button"
+                          data-testid="student-settings-gear-btn"
+                          onClick={e => {
+                            e.stopPropagation();
+                            onOpenStudentSettings(student);
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition"
+                          title="Edit Student Settings"
+                          aria-label={`Edit ${student.firstName} ${student.lastName} settings`}
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       <button
                         onClick={e => {
                           e.stopPropagation();
                           onOpenStudentProfile(enr!.id);
                         }}
+                        data-testid="open-student-profile-btn"
                         className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
                         title="Open Full Profile"
+                        aria-label={`Open full profile for ${student.firstName} ${student.lastName}`}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>
@@ -436,17 +580,22 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                       ) : (
                         <>
                           {summary && summary.positiveCount > 0 && (
-                            <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                            <span data-testid="student-counter-badge" className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
                               +{summary.positiveCount}
                             </span>
                           )}
+                          {summary && summary.neutralCount > 0 && (
+                            <span data-testid="student-counter-badge" className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">
+                              ~{summary.neutralCount}
+                            </span>
+                          )}
                           {summary && summary.needsFollowupCount > 0 && (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                            <span data-testid="student-counter-badge" className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
                               !{summary.needsFollowupCount}
                             </span>
                           )}
-                          {(!summary || (summary.positiveCount === 0 && summary.needsFollowupCount === 0)) && (
-                            <span className="text-slate-600">No events</span>
+                          {(!summary || (summary.positiveCount === 0 && summary.needsFollowupCount === 0 && (summary.neutralCount || 0) === 0)) && (
+                            <span data-testid="student-counter-badge" className="text-slate-600">No events</span>
                           )}
                         </>
                       )}
@@ -461,6 +610,47 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
             })
           )}
         </div>
+
+        {/* Unseated Students Section */}
+        {unseatedEnrollments.length > 0 && (
+          <div className="mt-8 max-w-4xl mx-auto bg-amber-50/70 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                  Unassigned Students ({unseatedEnrollments.length})
+                </h3>
+              </div>
+              <button
+                onClick={handleArrangeAlphabetically}
+                disabled={layout.isLocked}
+                className="text-xs font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 px-3 py-1 rounded-lg transition disabled:opacity-50"
+              >
+                Auto-Assign to Empty Desks
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {unseatedEnrollments.map(enr => {
+                const student = studentMap.get(enr.studentId);
+                if (!student) return null;
+                const isSelected = selectedEnrollmentIds.includes(enr.id);
+                return (
+                  <button
+                    key={enr.id}
+                    onClick={() => onToggleSelectStudent(enr.id)}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>{student.firstName} {student.lastName}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Randomize Confirmation Modal */}

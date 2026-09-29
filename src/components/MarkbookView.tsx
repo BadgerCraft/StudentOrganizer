@@ -26,6 +26,8 @@ import type {
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
+import { getAppIdentity } from '../services/identityService';
+import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 
 interface MarkbookViewProps {
@@ -39,6 +41,8 @@ interface MarkbookViewProps {
   studentAssessments: StudentAssessment[];
   categoryResults: CategoryResult[];
   overrides: GradeOverride[];
+  userId?: UUID;
+  deviceId?: UUID;
   onOpenStudentProfile: (enrollmentId: UUID) => void;
   onRefresh: () => void;
 }
@@ -54,6 +58,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   studentAssessments,
   categoryResults,
   overrides,
+  userId,
+  deviceId,
   onOpenStudentProfile,
   onRefresh
 }) => {
@@ -214,60 +220,36 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     setSaveError(null);
 
     try {
-      const now = new Date().toISOString();
+      const currentIdentity = await getAppIdentity(db);
+      if (userId && userId !== currentIdentity.userId) {
+        throw new AuthorizationError('Acting teacher has changed. Please refresh and try again.');
+      }
 
-      // Find or create StudentAssessment junction
-      let sa = studentAssessments.find(
+      const existingSa = studentAssessments.find(
         s => s.classEnrollmentId === activeCell.enrollmentId &&
              s.assessmentId === activeCell.assessmentId &&
              s.deletedAt === null
       );
 
-      if (!sa) {
-        const newSaId = crypto.randomUUID();
-        const assess = assessments.find(a => a.id === activeCell.assessmentId);
-        sa = {
-          id: newSaId,
-          assessmentId: activeCell.assessmentId,
-          classEnrollmentId: activeCell.enrollmentId,
-          workflowStatus: 'assessed',
-          completionStatus: editCompletion,
-          isLate: editIsLate,
-          assignedAt: assess ? assess.assignedAt : now,
-          dueAt: assess ? assess.dueAt : now,
-          submittedAt: now,
-          assessedAt: now,
-          returnedAt: now,
-          overallFeedback: null,
-          privateNotes: null,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-          version: 1
-        };
-        await db.studentAssessments.add(sa);
-      } else {
-        // Update flags without overwriting mark!
-        await db.studentAssessments.update(sa.id, {
-          completionStatus: editCompletion,
-          isLate: editIsLate,
-          updatedAt: now,
-          version: sa.version + 1
-        });
-      }
+      const existingCr = existingSa ? categoryResults.find(
+        r => r.studentAssessmentId === existingSa.id && r.assessmentCategoryId === activeCell.categoryId && r.deletedAt === null
+      ) : undefined;
 
-      // Record Category Result via transactional service
-      if (editScore.trim() !== '') {
-        await markbookService.recordCategoryResult({
-          studentAssessmentId: sa.id,
-          assessmentCategoryId: activeCell.categoryId,
-          rawScore: editScore.trim(),
-          inputFormat: editFormat,
-          feedback: editFeedback.trim() || null,
-          userId: 'user-tyler',
-          deviceId: 'desktop-client'
-        });
-      }
+      await markbookService.saveMarkbookCell({
+        assessmentId: activeCell.assessmentId,
+        classEnrollmentId: activeCell.enrollmentId,
+        classSectionId,
+        completionStatus: editCompletion,
+        isLate: editIsLate,
+        assessmentCategoryId: activeCell.categoryId,
+        rawScore: editScore.trim(),
+        inputFormat: editFormat,
+        feedback: editFeedback.trim() || null,
+        expectedStudentAssessmentVersion: existingSa ? existingSa.version : undefined,
+        expectedCategoryResultVersion: existingCr ? existingCr.version : undefined,
+        userId: currentIdentity.userId,
+        deviceId: currentIdentity.deviceId
+      });
 
       setActiveCell(null);
       onRefresh();

@@ -1,56 +1,31 @@
-# Ontario Teacher Assessment & Real-Time Participation Platform
+# Ontario Teacher Assessment
 
-A desktop-first, local-first web application designed for Ontario secondary teachers using the Ministry Achievement Chart categories:
-- **Knowledge and Understanding (K)**
-- **Thinking and Inquiry (T)**
-- **Communication (C)**
-- **Application (A)**
+A local-first assessment and participation app for Ontario secondary teachers. The interface uses the Achievement Chart categories: Knowledge, Thinking, Communication, and Application. The current code uses React, TypeScript, Vite, Dexie (IndexedDB), and Electron for desktop packaging.
 
-Built with React 18, TypeScript, Vite, Tailwind CSS, Lucide icons, and Dexie.js (IndexedDB).
+## Work on the app
 
----
+Use Node.js 24 and npm. From the project folder:
 
-## Quick Start
-
-### Prerequisites
-- Node.js v18+ (tested on Node v24.15.0)
-- npm v9+
-
-### Installation
 ```bash
-npm install
-```
-
-### Development Server
-```bash
+npm ci
 npm run dev
 ```
-Starts the local development server at `http://localhost:3000`.
 
-### Production Build
-```bash
-npm run build
-```
-Type checks via `tsc` and bundles into `dist/`.
+The Vite development server runs at `http://localhost:3000`. Other useful commands:
 
-### Run Test Suite
-```bash
-npm run test
-```
-Executes all 13 Vitest unit tests covering the calculation engine, domain services, and data portability.
+| Command | Purpose |
+| --- | --- |
+| `npm test` | Run the Vitest suite |
+| `npm run build` | Type-check and build the web app into `dist/` |
+| `npm run electron:dev` | Run the desktop shell locally |
+| `npm run package:win` | Build Windows installer and portable packages |
+| `npm run benchmark:node` | Run the synthetic Node benchmark |
+| `npm run benchmark:browser` | Run the browser benchmark |
 
-### Run Scale & Load Benchmark
-```bash
-npm run benchmark
-```
-Executes the synthetic load test ingesting 2,000 students across 65 classes, 500 assessments, and 250,000 raw participation events, testing latency for 1-click entries, batch stamping, undo, and heavy markbook calculations (40 students x 100 assessments = 350 category columns).
+The V6.6 import passed 151 Vitest tests and a production build on September 28, 2026. This records code verification, not approval to use real student data.
 
----
+## Data and Git
 
-## Architectural Highlights
-- **Normalized Relational Schema**: 34 Dexie tables with compound unique constraints (`&` prefix).
-- **ClassEnrollment as Entity Hub**: Student identity is decoupled from class sections.
-- **Two-Stage Ontario Calculation**: Category scores evaluated via `evidenceWeight`; overall course marks evaluated via policy weights ($W_K, W_T, W_C, W_A$) with zero double-weighting.
-- **Append-Only Structured Audit Store**: Captures JSON deltas inside atomic Dexie transactions.
-- **Idempotent Sync Outbox**: Queues transactions with client-generated `mutationId` for cloud sync.
-- **Occupied-Only Seating Storage**: Enforces strict desk coordinates and atomic seat swaps.
+The app stores its working data locally in IndexedDB. Keep real student names, numbers, photos, exports, backups, and credentials out of Git. `.gitignore` excludes common local data and build paths, but review `git status` before every commit because ignore rules cannot protect a file already tracked or every possible filename.
+
+The V6.6 source is the current baseline. Earlier `main` uploads remain in Git history.

@@ -7,9 +7,10 @@ import {
   Settings,
   DownloadCloud,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  UserCheck
 } from 'lucide-react';
-import type { ClassSection, Course } from '../types/schema';
+import type { ClassSection, Course, User } from '../types/schema';
 
 interface HeaderProps {
   currentView: 'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability';
@@ -17,6 +18,8 @@ interface HeaderProps {
   activeClass: { section: ClassSection; course: Course } | null;
   allClasses: { section: ClassSection; course: Course }[];
   onSelectClass: (sectionId: string) => void;
+  currentUser?: User | null;
+  onOpenTeacherSelector?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,7 +27,9 @@ export const Header: React.FC<HeaderProps> = ({
   onViewChange,
   activeClass,
   allClasses,
-  onSelectClass
+  onSelectClass,
+  currentUser,
+  onOpenTeacherSelector
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
@@ -34,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-4">
             <button
               onClick={() => onViewChange('dashboard')}
+              data-testid="nav-dashboard-btn"
               className="flex items-center space-x-2.5 hover:opacity-80 transition"
             >
               <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
@@ -68,6 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </div>
                 <select
+                  data-testid="header-class-select"
                   aria-label="Select active class"
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                   value={activeClass.section.id}
@@ -88,6 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
               <button
                 onClick={() => onViewChange('seating')}
+                data-testid="nav-seating-btn"
                 className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
                   currentView === 'seating'
                     ? 'bg-white text-blue-700 shadow-sm'
@@ -145,6 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onViewChange('portability')}
+              data-testid="nav-portability-btn"
               className={`p-2 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition ${
                 currentView === 'portability'
                   ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -168,6 +177,40 @@ export const Header: React.FC<HeaderProps> = ({
               <Settings className="w-4 h-4" />
               <span className="hidden lg:inline">Settings</span>
             </button>
+
+            {/* Acting Teacher Attribution Badge */}
+            <div className="flex items-center pl-3 border-l border-slate-200">
+              {currentUser ? (
+                <button
+                  type="button"
+                  onClick={onOpenTeacherSelector}
+                  data-testid="header-teacher-btn"
+                  className="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs transition"
+                  title="Acting Teacher for this session (Click to switch)"
+                >
+                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                    {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="font-semibold text-slate-800 hidden sm:inline max-w-[120px] truncate">
+                    {currentUser.name}
+                  </span>
+                  <span className="text-[10px] text-blue-600 font-medium bg-blue-50 px-1 py-0.5 rounded">
+                    Switch
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenTeacherSelector}
+                  data-testid="header-select-teacher-btn"
+                  className="flex items-center space-x-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-xs font-semibold transition animate-pulse"
+                  title="No acting teacher selected. Click to select."
+                >
+                  <UserCheck className="w-4 h-4 text-amber-600" />
+                  <span>Select Teacher</span>
+                </button>
+              )}
+            </div>
 
             {/* Autosave Status Badge */}
             <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-200 text-emerald-600 text-xs font-medium">

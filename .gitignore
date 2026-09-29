@@ -1,0 +1,30 @@
+node_modules/
+dist/
+release/
+coverage/
+playwright-report/
+test-results/
+
+# Local configuration and teacher data must stay out of source control.
+.env
+.env.*
+!.env.example
+data/
+backups/
+exports/
+uploads/
+photos/
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.zip
+*backup*.json
+*.sqlite
+*.sqlite3
+
+# Local diagnostic artifacts.
+scratch/
+screenshots/
+*.log
+*.tsbuildinfo

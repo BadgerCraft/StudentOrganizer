@@ -3,13 +3,20 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "benchmark": "tsx src/benchmarks/scaleBenchmark.ts"
+    "benchmark": "tsx src/benchmarks/runBrowserBenchmark.ts",
+    "benchmark:node": "tsx src/benchmarks/nodeBenchmark.ts",
+    "benchmark:browser": "tsx src/benchmarks/runBrowserBenchmark.ts",
+    "test:workflow": "tsx src/benchmarks/visualTestWorkflow.ts",
+    "test:browser:ux": "tsx src/benchmarks/browserUxE2ETest.ts",
+    "electron:dev": "electron .",
+    "package:win": "npm run build && electron-builder --win nsis portable"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -26,12 +33,41 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.0.0",
+    "playwright": "^1.63.0",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.3",
     "vitest": "^2.0.5"
+  },
+  "build": {
+    "appId": "ca.on.teacher.assessment",
+    "productName": "Ontario Teacher Assessment",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "OntarioTeacherAssessment-Portable.exe"
+    }
   }
 }

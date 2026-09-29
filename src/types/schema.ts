@@ -68,6 +68,40 @@ export interface Device {
   lastSeenAt: ISOTimestampString;
 }
 
+export type ChicletTitleFormat = 'title_only' | 'code_only' | 'code_and_title';
+
+export interface ChicletDisplaySettings {
+  primaryTitleFormat: ChicletTitleFormat;
+  showTerm: boolean;
+  showPeriod: boolean;
+  showRoom: boolean;
+  showStudentCount: boolean;
+}
+
+export const DEFAULT_CHICLET_DISPLAY: ChicletDisplaySettings = {
+  primaryTitleFormat: 'title_only',
+  showTerm: true,
+  showPeriod: true,
+  showRoom: true,
+  showStudentCount: true,
+};
+
+export function formatChicletTitle(
+  course: { code: string; title: string },
+  section: { sectionNumber: string },
+  format?: ChicletTitleFormat
+): string {
+  switch (format) {
+    case 'code_only':
+      return `${course.code} - Sec ${section.sectionNumber}`;
+    case 'code_and_title':
+      return `${course.code} - Sec ${section.sectionNumber}: ${course.title}`;
+    case 'title_only':
+    default:
+      return course.title;
+  }
+}
+
 export interface UserPreference {
   id: UUID;
   userId: UUID;
@@ -75,10 +109,12 @@ export interface UserPreference {
   lastOpenedClassSectionId: UUID | null;
   markbookDensity: 'compact' | 'comfortable';
   seatingShowPhotos: boolean;
+  chicletDisplay?: ChicletDisplaySettings;
   createdAt: ISOTimestampString;
   updatedAt: ISOTimestampString;
   version: number;
 }
+
 
 // 2. Academic Calendar, Courses & Sessions
 export interface AcademicYear {
@@ -388,6 +424,7 @@ export interface StudentAssessment {
   id: UUID;
   assessmentId: UUID;
   classEnrollmentId: UUID;
+  classSectionId: UUID; // Denormalized for fast section query indexing
   workflowStatus: WorkflowStatus;
   completionStatus: CompletionStatus;
   isLate: boolean;
@@ -425,6 +462,8 @@ export interface CategoryResult {
 
 // 6. Real-Time Participation
 export type EventClassification = 'positive' | 'needs_followup' | 'neutral';
+export type ParticipationRecordingMode = 'quick_tally' | 'level_1_4';
+export type AchievementLevel = 1 | 2 | 3 | 4;
 
 export interface ParticipationEventType {
   id: UUID;
@@ -436,6 +475,9 @@ export interface ParticipationEventType {
   classification: EventClassification;
   defaultPoints: number;
   isArchived: boolean;
+  recordingMode: ParticipationRecordingMode;
+  defaultCategoryCode: AchievementCategoryCode | null;
+  sortOrder: number;
   createdAt: ISOTimestampString;
   updatedAt: ISOTimestampString;
   deletedAt: ISOTimestampString | null;
@@ -448,10 +490,12 @@ export interface ParticipationEvent {
   classSectionId: UUID; // Denormalized for high-performance class-wide indexing
   classSessionId: UUID | null;
   batchId: UUID; // For multi-student logging and atomic batch undo
-  eventTypeId: UUID | null;
+  eventTypeId: UUID | null; // Historical nulls remain null; required at new write boundary
   snapshottedName: string;
   snapshottedClassification: EventClassification;
   snapshottedPoints: number;
+  snapshottedRecordingMode: ParticipationRecordingMode;
+  achievementLevel: AchievementLevel | null;
   occurredAt: ISOTimestampString;
   localSchoolDate: ISODateString; // YYYY-MM-DD
   timezone: string; // "America/Toronto"
@@ -471,8 +515,9 @@ export interface ParticipationDailySummary {
   localSchoolDate: ISODateString;
   positiveCount: number;
   needsFollowupCount: number;
+  neutralCount: number;
   totalPoints: number;
-  lastEventAt: ISOTimestampString;
+  lastEventAt: ISOTimestampString | null;
 }
 
 // 7. Student Notes & Structured Audit Log
@@ -506,10 +551,12 @@ export interface AuditEntry {
 
 // 8. Sync Infrastructure
 export type SyncOperation = 'INSERT' | 'UPDATE' | 'DELETE';
+export type SyncMutationStatus = 'pending' | 'acknowledged' | 'failed';
 
 export interface SyncMutation {
   id: UUID;
   deviceId: UUID;
+  organizationId: UUID;
   mutationId: UUID; // Idempotent key
   transactionId: UUID;
   sequenceNumber: number;
@@ -519,6 +566,7 @@ export interface SyncMutation {
   operation: SyncOperation;
   payloadJson: string;
   baseVersion: number;
+  status: SyncMutationStatus;
   createdAt: ISOTimestampString;
   attemptCount: number;
   lastAttemptAt: ISOTimestampString | null;

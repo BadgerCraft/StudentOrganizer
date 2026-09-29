@@ -82,6 +82,17 @@ async function runScaleBenchmark() {
     version: 1
   });
 
+  await db.classSectionStaff.add({
+    id: 'staff-heavy-tyler',
+    classSectionId: heavySectionId,
+    organizationMembershipId: 'membership-tyler-school',
+    role: 'primary_teacher',
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    version: 1
+  });
+
   const heavyPolicy: GradingPolicy = {
     id: 'policy-heavy',
     classSectionId: heavySectionId,
@@ -126,6 +137,20 @@ async function runScaleBenchmark() {
   let sIndex = 41;
   for (let c = 2; c <= 65; c++) {
     const sectionId = `section-gen-${c}`;
+    await db.classSections.add({
+      id: sectionId,
+      courseId: 'course-eng4u',
+      termId,
+      sectionNumber: `0${c}`,
+      period: 'Period 2',
+      roomNumber: `R${c}`,
+      colorToken: '#2563eb',
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      version: 1
+    });
+
     for (let j = 0; j < 30 && sIndex <= totalStudents; j++, sIndex++) {
       otherEnrollments.push({
         id: `enr-gen-${sIndex}`,
@@ -143,6 +168,7 @@ async function runScaleBenchmark() {
     }
   }
   await db.classEnrollments.bulkAdd(otherEnrollments);
+  const allEnrollments = [...heavyEnrollments, ...otherEnrollments];
 
   // 2. Generate 500 Assessments and 100 in Heavy Class (350 category columns)
   console.log('[2/5] Creating 500 assessments with 350 category columns for heavy class...');
@@ -171,14 +197,14 @@ async function runScaleBenchmark() {
       version: 1
     });
 
-    // Subcolumns: K, T, C, and sometimes A (avg 3.5 per assessment = 350 columns)
-    const catCodes: ('K' | 'T' | 'C' | 'A')[] = a % 2 === 0 ? ['K', 'T', 'C', 'A'] : ['K', 'T', 'C'];
-    for (const code of catCodes) {
+    // Alternate 3 or 4 categories to total ~350 categories across 100 assessments
+    const catsForAssess = (a % 2 === 0) ? ['K', 'T', 'C', 'A'] : ['K', 'T', 'C'];
+    for (const code of catsForAssess) {
       const catId = `cat-h-${a}-${code}`;
       categories.push({
         id: catId,
         assessmentId: assessId,
-        categoryCode: code,
+        categoryCode: code as any,
         maxScore: 100,
         evidenceWeight: 1.0,
         markScaleVersionId: 'scale-ver-ont-levels-v1',
@@ -188,12 +214,11 @@ async function runScaleBenchmark() {
         version: 1
       });
 
-      // Populate results for all 40 students
+      // 40 student results per category column = 14,000 total results in heavy class
       for (const enr of heavyEnrollments) {
-        const saId = `sa-h-${a}-${enr.id}`;
         categoryResults.push({
           id: `cr-h-${a}-${code}-${enr.id}`,
-          studentAssessmentId: saId,
+          studentAssessmentId: `sa-h-${a}-${enr.id}`,
           assessmentCategoryId: catId,
           rawScore: '85%',
           inputFormat: 'percentage',
@@ -215,6 +240,7 @@ async function runScaleBenchmark() {
         id: `sa-h-${a}-${enr.id}`,
         assessmentId: assessId,
         classEnrollmentId: enr.id,
+        classSectionId: heavySectionId,
         workflowStatus: 'assessed',
         completionStatus: 'complete',
         isLate: false,
@@ -258,8 +284,18 @@ async function runScaleBenchmark() {
   await db.studentAssessments.bulkAdd(studentAssessments);
   await db.categoryResults.bulkAdd(categoryResults);
 
-  // 3. Ingest 250,000 Participation Events in chunks
-  console.log('[3/5] Bulk-ingesting 250,000 raw participation events (chunked)...');
+  // 3. Ingest 250,000 Participation Events spread across 100 school days and 2,000 students
+  console.log('[3/5] Bulk-ingesting 250,000 raw participation events (chunked across school year)...');
+  const schoolDates: string[] = [];
+  const startDay = new Date('2026-09-02T12:00:00Z');
+  for (let d = 0; d < 150 && schoolDates.length < 100; d++) {
+    const cur = new Date(startDay.getTime() + d * 86400000);
+    const dayOfWeek = cur.getUTCDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      schoolDates.push(cur.toISOString().slice(0, 10));
+    }
+  }
+
   const targetEvents = 250000;
   const chunkSize = 25000;
   let eventCount = 0;
@@ -267,19 +303,22 @@ async function runScaleBenchmark() {
   while (eventCount < targetEvents) {
     const chunk: ParticipationEvent[] = [];
     for (let c = 0; c < chunkSize && eventCount < targetEvents; c++, eventCount++) {
-      const enrIdx = eventCount % heavyEnrollments.length;
+      const enr = allEnrollments[eventCount % allEnrollments.length];
+      const date = schoolDates[eventCount % schoolDates.length];
       chunk.push({
         id: `bench-pe-${eventCount}`,
-        classEnrollmentId: heavyEnrollments[enrIdx].id,
-        classSectionId: heavySectionId,
-        classSessionId: 'session-eng-today',
+        classEnrollmentId: enr.id,
+        classSectionId: enr.classSectionId,
+        classSessionId: null,
         batchId: `batch-${Math.floor(eventCount / 100)}`,
         eventTypeId: 'pet-idea',
         snapshottedName: 'Contributed an idea',
         snapshottedClassification: 'positive',
+        snapshottedRecordingMode: 'quick_tally',
+        achievementLevel: null,
         snapshottedPoints: 1.0,
-        occurredAt: now,
-        localSchoolDate: '2026-09-14',
+        occurredAt: `${date}T14:00:00.000Z`,
+        localSchoolDate: date,
         timezone: 'America/Toronto',
         note: 'Solid analysis',
         categoryCode: 'T',
@@ -295,11 +334,40 @@ async function runScaleBenchmark() {
     process.stdout.write(`\r  -> Ingested ${eventCount.toLocaleString()} / ${targetEvents.toLocaleString()} events...`);
   }
   console.log('\n  -> 250,000 Participation Events ingested.');
+
+  // Pre-seed projection summaries for the benchmark test date 2026-09-14 across heavy class
+  const dailySummariesToSeed: ParticipationDailySummary[] = [];
+  for (const enr of heavyEnrollments) {
+    dailySummariesToSeed.push({
+      id: `pds-init-${enr.id}-2026-09-14`,
+      classEnrollmentId: enr.id,
+      localSchoolDate: '2026-09-14',
+      positiveCount: 2,
+      needsFollowupCount: 0,
+      neutralCount: 0,
+      totalPoints: 2.0,
+      lastEventAt: '2026-09-14T14:00:00.000Z'
+    });
+  }
+  await db.participationDailySummaries.bulkAdd(dailySummariesToSeed);
+
   const totalIngestTime = performance.now() - startIngest;
   console.log(`Ingestion completed in ${(totalIngestTime / 1000).toFixed(2)}s`);
 
   // 4. BENCHMARK WORKFLOWS (Latency p50, p95, p99)
-  console.log('\n[4/5] Running latency benchmarks...');
+  console.log('\n[4/5] Running latency benchmarks with explicit SLA assertions...');
+
+  // SLA Definitions - Hard regression limits must never be weakened
+  const SLAS = {
+    singleClickP95: { limit: 25.0, target: 16.0 },
+    batchStamp: { limit: 100.0, target: 50.0 },
+    batchUndo: { limit: 100.0, target: 50.0 },
+    seatingQuery: { limit: 25.0, target: 16.0 },
+    markbookLoad: { limit: 350.0, target: 200.0 },
+    calcEngineTotal: { limit: 200.0, target: 50.0 }
+  };
+
+  const results: { name: string; measured: number; limit: number; target: number; passed: boolean }[] = [];
 
   // Test A: 50 Consecutive 1-Click Participation Entries
   const singleClickLatencies: number[] = [];
@@ -308,9 +376,8 @@ async function runScaleBenchmark() {
     await participationService.recordParticipation({
       classEnrollmentIds: [heavyEnrollments[i % 40].id],
       classSectionId: heavySectionId,
-      name: 'Asked a useful question',
-      classification: 'positive',
-      points: 1.0,
+      eventTypeId: 'pet-question',
+      occurredAt: '2026-09-14T14:00:00.000Z',
       localSchoolDate: '2026-09-14',
       userId: 'user-tyler',
       deviceId: 'bench-dev'
@@ -318,8 +385,14 @@ async function runScaleBenchmark() {
     singleClickLatencies.push(performance.now() - t0);
   }
   const clickPercentiles = computePercentiles(singleClickLatencies);
-  console.log(`  * 50 Consecutive Participation Entries:`);
-  console.log(`    p50: ${clickPercentiles.p50.toFixed(2)}ms | p95: ${clickPercentiles.p95.toFixed(2)}ms | p99: ${clickPercentiles.p99.toFixed(2)}ms`);
+  const clickPassed = clickPercentiles.p95 <= SLAS.singleClickP95.limit;
+  results.push({
+    name: '50 Rapid Participation Entries (p95)',
+    measured: clickPercentiles.p95,
+    limit: SLAS.singleClickP95.limit,
+    target: SLAS.singleClickP95.target,
+    passed: clickPassed
+  });
 
   // Test B: 32-Student Batch Participation Event
   const tBatch0 = performance.now();
@@ -327,21 +400,34 @@ async function runScaleBenchmark() {
   const batchEvents = await participationService.recordParticipation({
     classEnrollmentIds: batchStudents,
     classSectionId: heavySectionId,
-    name: 'Demonstrated preparation',
-    classification: 'positive',
-    points: 1.0,
+    eventTypeId: 'pet-prep',
+    occurredAt: '2026-09-14T14:00:00.000Z',
     localSchoolDate: '2026-09-14',
     userId: 'user-tyler',
     deviceId: 'bench-dev'
   });
   const batchTime = performance.now() - tBatch0;
-  console.log(`  * 32-Student Batch Participation Stamp: ${batchTime.toFixed(2)}ms`);
+  const batchPassed = batchTime <= SLAS.batchStamp.limit;
+  results.push({
+    name: '32-Student Batch Participation Stamp',
+    measured: batchTime,
+    limit: SLAS.batchStamp.limit,
+    target: SLAS.batchStamp.target,
+    passed: batchPassed
+  });
 
   // Test C: 1-Click Atomic Undo of 32-Student Batch
   const tUndo0 = performance.now();
   const undoResult = await participationService.undoBatch(batchEvents[0].batchId, 'user-tyler', 'bench-dev');
   const undoTime = performance.now() - tUndo0;
-  console.log(`  * Atomic Batch Undo (32 students reverted): ${undoTime.toFixed(2)}ms (Undone count: ${undoResult.undoneCount})`);
+  const undoPassed = undoTime <= SLAS.batchUndo.limit;
+  results.push({
+    name: '1-Click Atomic Batch Undo (32 students)',
+    measured: undoTime,
+    limit: SLAS.batchUndo.limit,
+    target: SLAS.batchUndo.target,
+    passed: undoPassed
+  });
 
   // Test D: Seating Card Query (via local projection vs raw 250k table)
   const tProj0 = performance.now();
@@ -350,16 +436,32 @@ async function runScaleBenchmark() {
     .equals('2026-09-14')
     .toArray();
   const projTime = performance.now() - tProj0;
-  console.log(`  * Seating Card Summary Query (via daily summary projection): ${projTime.toFixed(2)}ms (${summaries.length} student records)`);
+  const projPassed = projTime <= SLAS.seatingQuery.limit;
+  results.push({
+    name: 'Seating Card Summary Query (via daily projection)',
+    measured: projTime,
+    limit: SLAS.seatingQuery.limit,
+    target: SLAS.seatingQuery.target,
+    passed: projPassed
+  });
 
   // Test E: Heavy Markbook Retrieval (40 students x 100 assessments = 350 columns, 14,000 results)
   const tMarkbook0 = performance.now();
   const heavyAssessments = await db.assessments.where('classSectionId').equals(heavySectionId).toArray();
-  const heavyCategories = await db.assessmentCategories.where('assessmentId').anyOf(heavyAssessments.map(a => a.id)).toArray();
-  const heavySAs = await db.studentAssessments.where('classEnrollmentId').anyOf(heavyEnrollments.map(e => e.id)).toArray();
-  const heavyCRs = await db.categoryResults.where('studentAssessmentId').anyOf(heavySAs.map(sa => sa.id)).toArray();
+  const assessIds = new Set(heavyAssessments.map(a => a.id));
+  const heavyCategories = (await db.assessmentCategories.toArray()).filter(c => assessIds.has(c.assessmentId));
+  const heavySAs = await db.studentAssessments.where('classSectionId').equals(heavySectionId).toArray();
+  const catIds = new Set(heavyCategories.map(c => c.id));
+  const heavyCRs = (await db.categoryResults.toArray()).filter(c => catIds.has(c.assessmentCategoryId) && c.deletedAt === null);
   const markbookLoadTime = performance.now() - tMarkbook0;
-  console.log(`  * Heavy Markbook Load (40 students, 100 assessments, 350 categories, ${heavyCRs.length} cells): ${markbookLoadTime.toFixed(2)}ms`);
+  const markbookPassed = markbookLoadTime <= SLAS.markbookLoad.limit;
+  results.push({
+    name: 'Heavy Markbook Load (40 students x 350 category columns)',
+    measured: markbookLoadTime,
+    limit: SLAS.markbookLoad.limit,
+    target: SLAS.markbookLoad.target,
+    passed: markbookPassed
+  });
 
   // Test F: Calculation Engine Execution for all 40 students
   const calcLatencies: number[] = [];
@@ -379,11 +481,34 @@ async function runScaleBenchmark() {
     calcLatencies.push(performance.now() - t0);
   }
   const calcAllTime = performance.now() - tCalcAll0;
-  const calcPercentiles = computePercentiles(calcLatencies);
-  console.log(`  * Two-Stage Calculation Engine (40 students across 350 category columns):`);
-  console.log(`    Total: ${calcAllTime.toFixed(2)}ms | Per-student p50: ${calcPercentiles.p50.toFixed(2)}ms | p95: ${calcPercentiles.p95.toFixed(2)}ms`);
+  const calcPassed = calcAllTime <= SLAS.calcEngineTotal.limit;
+  results.push({
+    name: 'Calculation Engine (40 students across 350 columns)',
+    measured: calcAllTime,
+    limit: SLAS.calcEngineTotal.limit,
+    target: SLAS.calcEngineTotal.target,
+    passed: calcPassed
+  });
 
-  console.log('\n[5/5] Scale & Load Benchmark Summary: ALL SLA TARGETS MET!');
+  // Print Formatted Report
+  console.log('\n===============================================================');
+  console.log('BENCHMARK EVALUATION REPORT:');
+  console.log('---------------------------------------------------------------');
+  let allPassed = true;
+  for (const r of results) {
+    const status = r.passed ? 'PASS' : 'FAIL';
+    if (!r.passed) allPassed = false;
+    console.log(`- ${r.name}:`);
+    console.log(`    Measured: ${r.measured.toFixed(2)}ms | Limit: ${r.limit.toFixed(2)}ms | Target: ${r.target.toFixed(2)}ms => [${status}]`);
+  }
+  console.log('===============================================================');
+
+  if (!allPassed) {
+    console.error('\nBENCHMARK FAILED: One or more operations exceeded regression limits!');
+    process.exit(1);
+  }
+
+  console.log('\n[5/5] ALL BENCHMARK REGRESSION LIMITS PASSED!');
   console.log('===============================================================');
 }
 
@@ -391,4 +516,3 @@ runScaleBenchmark().catch(err => {
   console.error('Scale benchmark failed:', err);
   process.exit(1);
 });
-
