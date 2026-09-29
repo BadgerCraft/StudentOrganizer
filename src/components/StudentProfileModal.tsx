@@ -602,8 +602,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                     {studentAssessmentList.map(({ assessment, sa, results }) => (
                       <tr key={assessment.id}>
                         <td className="py-3 px-3">
-                          <span className="font-bold text-slate-900 block">{assessment.code}</span>
-                          <span className="text-slate-500 text-[11px]">{assessment.title}</span>
+                          <span className="font-bold text-slate-900 block">{assessment.title}</span>
                         </td>
                         <td className="py-3 px-3 uppercase text-[10px] font-bold text-slate-600">{assessment.assessmentType}</td>
                         <td className="py-3 px-3 font-bold text-slate-800">{sa?.completionStatus || 'assigned'}</td>
