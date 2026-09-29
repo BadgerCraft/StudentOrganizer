@@ -1,14 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  Filter,
   ArrowUpDown,
-  Check,
   AlertCircle,
-  Clock,
-  HelpCircle,
   Eye,
-  Edit2,
   X
 } from 'lucide-react';
 import type {

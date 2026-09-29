@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Trash2, AlertCircle, Save, X } from 'lucide-react';
+import { Camera, Trash2, AlertCircle, Save } from 'lucide-react';
 import type { Student } from '../types/schema';
 import { ModalDialog } from './ModalDialog';
 import { StudentDomainService } from '../services/studentService';

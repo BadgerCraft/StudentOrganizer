@@ -8,7 +8,6 @@ import {
   Archive,
   FolderOpen,
   Calendar,
-  Layers,
   Sliders
 } from 'lucide-react';
 import type { ClassSection, Course, ClassEnrollment, Term, ChicletDisplaySettings } from '../types/schema';

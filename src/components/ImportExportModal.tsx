@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   DownloadCloud,
   Upload,
@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Edit3,
-  RotateCcw,
   Users
 } from 'lucide-react';
 import type { ClassSection, Course, UUID } from '../types/schema';

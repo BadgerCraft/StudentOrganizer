@@ -3,7 +3,6 @@ import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
 import type {
   UUID,
   ClassSection,
-  Course,
   GradingPolicy,
   SeatingLayout,
   ClassSectionStaff,

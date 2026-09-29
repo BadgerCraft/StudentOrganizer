@@ -1,9 +1,9 @@
 import type { OntarioTeacherDB } from '../db/database';
 import { calculateOverallCourseGrade } from './calculationEngine';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
-import type { UUID, Student, ClassEnrollment, AuditEntry, SyncMutation } from '../types/schema';
+import type { UUID, Student, ClassEnrollment } from '../types/schema';
 import { escapeCSVCell } from '../utils/csvUtils';
-import { parseRosterText, parseCSV, type ParsedStudentRow, type RosterParseResult } from './rosterParser';
+import { parseRosterText, parseCSV, type ParsedStudentRow } from './rosterParser';
 
 export { parseCSV };
 

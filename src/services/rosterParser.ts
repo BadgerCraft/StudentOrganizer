@@ -202,10 +202,6 @@ export function parseRosterText(rawInput: string): RosterParseResult {
 
   if (isThreeColumn) {
     // 3-column separate format
-    const h0 = firstRowCells[0].toLowerCase();
-    const h1 = firstRowCells[1].toLowerCase();
-    const h2 = firstRowCells[2].toLowerCase();
-
     // Check if row 0 has headers
     const findIndex = (kws: string[]) =>
       firstRowCells.findIndex(cell => kws.some(kw => cell.toLowerCase().includes(kw)));

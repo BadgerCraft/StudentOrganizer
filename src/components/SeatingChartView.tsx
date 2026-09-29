@@ -10,7 +10,6 @@ import {
   UserCheck,
   UserX,
   ExternalLink,
-  MessageSquare,
   Plus,
   Minus,
   Calendar,
@@ -31,7 +30,7 @@ import { SeatingDomainService } from '../services/seatingService';
 import { AttendanceService } from '../services/attendanceService';
 import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
-import { getSchoolLocalDate, shiftSchoolDate, formatSchoolDateDisplay } from '../utils/dateUtils';
+import { getSchoolLocalDate, shiftSchoolDate } from '../utils/dateUtils';
 import { db } from '../db/database';
 
 interface SeatingChartViewProps {
