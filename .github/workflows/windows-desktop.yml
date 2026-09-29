@@ -25,7 +25,7 @@ jobs:
       - name: Run tests
         run: npm test
       - name: Build Windows installer and portable app
-        run: npm run package:win
+        run: npm run package:win -- --publish never
       - name: Upload Windows executables
         uses: actions/upload-artifact@v4
         with:
