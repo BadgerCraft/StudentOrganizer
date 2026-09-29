@@ -66,10 +66,29 @@ describe('CSV Escaping and Portability Export Suite (RFC 4180)', () => {
       expect(header[1]).toBe('Last Name');
       expect(header[2]).toBe('First Name');
       expect(header[3]).toBe('Status');
+      expect(header).toContain('Rhetorical Analysis Essay - T (100 pts)');
+      expect(header.some(cell => cell.startsWith('U1-ESSAY - '))).toBe(false);
 
       // Verify that every student row has correct number of columns
       for (let i = 1; i < parsed.length; i++) {
         expect(parsed[i].length).toBe(header.length);
+      }
+    });
+
+    it('keeps columns distinct when two assessments share a title with CSV punctuation', async () => {
+      const essay = (await db.assessments.get('assess-eng-essay'))!;
+      const seminar = (await db.assessments.get('assess-eng-seminar'))!;
+      const repeatedTitle = 'Essay, "Identity"';
+      await db.assessments.update(essay.id, { title: repeatedTitle });
+      await db.assessments.update(seminar.id, { title: repeatedTitle });
+
+      const parsed = parseCSV(await portability.exportClassMarkbookCSV(essay.classSectionId, null), ',');
+      const header = parsed[0];
+      expect(header).toContain(`${repeatedTitle} [${essay.code}] - T (100 pts)`);
+      expect(header).toContain(`${repeatedTitle} [${seminar.code}] - C (100 pts)`);
+      expect(new Set(header).size).toBe(header.length);
+      for (const row of parsed.slice(1)) {
+        expect(row.length).toBe(header.length);
       }
     });
   });
