@@ -629,11 +629,18 @@ export class PortabilityService {
       headerLabel: string;
     }
     const columnDefs: ColDef[] = [];
+    const titleCounts = new Map<string, number>();
+    for (const assessment of assessments) {
+      const key = assessment.title.trim().toLowerCase();
+      titleCounts.set(key, (titleCounts.get(key) ?? 0) + 1);
+    }
 
     for (const a of assessments) {
+      const titleIsRepeated = (titleCounts.get(a.title.trim().toLowerCase()) ?? 0) > 1;
+      const assessmentLabel = titleIsRepeated ? `${a.title} [${a.code}]` : a.title;
       const catsForA = activeCategories.filter(c => c.assessmentId === a.id);
       for (const cat of catsForA) {
-        const headerLabel = `${a.code} - ${cat.categoryCode} (${cat.maxScore} pts)`;
+        const headerLabel = `${assessmentLabel} - ${cat.categoryCode} (${cat.maxScore} pts)`;
         columnDefs.push({
           assessmentId: a.id,
           categoryId: cat.id,
