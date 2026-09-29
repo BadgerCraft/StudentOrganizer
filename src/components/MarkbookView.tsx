@@ -403,14 +403,14 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold truncate text-slate-900 block" title={assessment.title}>
-                        {assessment.code}
+                        {assessment.title}
                       </span>
                       <span className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${getCategoryColor(category.categoryCode)}`}>
                         {category.categoryCode}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-600 mt-0.5">
-                      <span className="truncate max-w-[85px]">{assessment.title}</span>
+                      <span className="truncate max-w-[85px]">{assessment.assessmentType}</span>
                       <span className="text-slate-600 font-mono">/{category.maxScore}</span>
                     </div>
                   </th>
