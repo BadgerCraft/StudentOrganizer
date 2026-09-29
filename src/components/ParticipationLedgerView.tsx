@@ -3,14 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   History,
   Calendar,
-  Filter,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
   Trash2,
   Edit2,
-  X,
-  Clock
+  X
 } from 'lucide-react';
 import type {
   ClassSection,
@@ -22,7 +17,7 @@ import type {
   UUID
 } from '../types/schema';
 import { db } from '../db/database';
-import { ParticipationDomainService, ConcurrencyError } from '../services/participationService';
+import { ParticipationDomainService } from '../services/participationService';
 import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { getSchoolLocalDate, shiftSchoolDate, formatTorontoDateTime } from '../utils/dateUtils';

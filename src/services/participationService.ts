@@ -2,10 +2,8 @@ import type { OntarioTeacherDB } from '../db/database';
 import type {
   AchievementCategoryCode,
   AchievementLevel,
-  EventClassification,
   ParticipationEvent,
   ParticipationDailySummary,
-  ParticipationRecordingMode,
   SyncMutation,
   UUID
 } from '../types/schema';

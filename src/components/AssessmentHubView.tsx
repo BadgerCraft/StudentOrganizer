@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
 import {
   Plus,
-  BookOpen,
   Calendar,
-  Layers,
   Archive,
   Copy,
-  CheckCircle,
-  FileSpreadsheet,
-  X
+  CheckCircle
 } from 'lucide-react';
 import type {
   Assessment,
@@ -17,7 +13,6 @@ import type {
   Unit,
   ClassEnrollment,
   Student,
-  AchievementCategoryCode,
   UUID
 } from '../types/schema';
 import { db } from '../db/database';

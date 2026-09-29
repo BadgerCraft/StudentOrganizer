@@ -1,13 +1,11 @@
 import type { OntarioTeacherDB } from '../db/database';
 import type {
   AchievementCategoryCode,
-  AuditAction,
   AuditEntry,
   EventClassification,
   ParticipationEventType,
   ParticipationRecordingMode,
   SyncMutation,
-  SyncOperation,
   UUID
 } from '../types/schema';
 import { ValidationError } from './markbookService';
