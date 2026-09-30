@@ -10,6 +10,8 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - Keep a product request separate from an audit finding or a possible future feature. Do not silently expand the task to clear an entire technical backlog.
 - If a related defect must be fixed for the agreed outcome, fix it within that scope and explain it. Record independent defects for a later decision.
 
+- Direct communication preference (Tyler, 2026-09-30): end each substantive final response or review handoff with the specific question or actionable request needed for the next step. Put all explanation, caveats, and links before it; add nothing after it. Prefer a concrete next-step query over an open-ended offer to help. Do not manufacture routine permission gates or block independent approved work. Respect non-interactive run restrictions; when a question is disallowed, finish with the concrete next action instead. Progress updates follow the host's commentary rules.
+
 ## Data and safety boundaries
 
 - Use fictional students in development, automated tests, demonstrations, and colleague QA. Do not add real student names, numbers, photos, marks, notes, exports, backups, or credentials to Git or AI prompts. Real-student use needs a separate privacy and board/IT approval decision.
