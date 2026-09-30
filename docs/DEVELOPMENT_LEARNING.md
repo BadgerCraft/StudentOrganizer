@@ -27,6 +27,12 @@ Use the following initial schedule; adapt it if Tyler changes his preference.
 
 Use dates in America/Toronto for this project's review calendar. Review intervals are working defaults, not a promise that a concept is permanently mastered.
 
+## Scheduled review support
+
+A ChatGPT automation titled "Development learning review" was enabled on 2026-09-30. It checks daily at 15:00 America/Toronto, starting 2026-10-01, and asks at most two questions only when entries are due. This time is an agent-selected default and can be changed.
+
+It reads this record from `main`, or from PR #11's head while that initial proposal remains open and the record is absent on main. It does not merge changes or invent review answers. In-session learning checks continue independently of the reminder.
+
 ## Entry format
 
 For each entry, keep:
