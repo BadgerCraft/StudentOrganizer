@@ -94,6 +94,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Plan: shared compatibility baseline, Mac packaging and actual launch checks, chosen iPad delivery path/touch/offline/file handling, real-device verification, review handoff.
 - Decision DEC-002: delivery expectations and whether device-to-device synchronization belongs in first scope; current app has no live sync. Mac Electron and iPad Home Screen delivery are proposed candidates, not approved or verified.
 - Brief prepared September 30; complete brief not yet presented/assigned, next-day follow-up not set.
+- Optional documentation offered, 2026-09-30 afternoon: desktop packaging, iPad Home Screen delivery, and device synchronization for DEC-002; offer a brief explanation, original-source reading, or defer. No response, choice, implementation approval, successful recall, or new decision-homework due date is recorded.
 
 ### F-007 — Central bug reporting (priority 2)
 - Status: planning; draft implementation plan awaits approval.
