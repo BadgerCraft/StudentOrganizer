@@ -14,7 +14,7 @@ For each rough feature request, prepare a short plan with:
 
 Discuss plans together. Once approved, work through focused branches without repeating routine permission questions. Stop for a materially different product behaviour, consequential scope expansion, missing access, or the reserved merge/release decision. Record unrelated defects without silently turning them into the task.
 
-At handoff, explain behaviour, verification evidence, limits, and the decision needed. Introduce at most two useful concepts. Use the explain-back skill at coherent review points, respecting deferred checks and previous demonstrated understanding. Passing tests establish engineering evidence; they do not grant product approval.
+At handoff, explain behaviour, verification evidence, limits, and the decision needed. Introduce at most two useful concepts. Use the explain-back skill when available, or the equivalent explanation and understanding check at coherent review points, respecting deferred checks and previous demonstrated understanding. Passing tests establish engineering evidence; they do not grant product approval.
 
 ## Reusable cloud workspace setup
 

@@ -29,7 +29,7 @@ jobs:
       - name: Identify QA build
         run: node scripts/prepare-qa-build.cjs
       - name: Build Windows installer and portable app
-        run: npm run package:win -- --publish never -c.extraMetadata.version=$env:QA_VERSION
+        run: npm run package:win -- --publish never "--config.extraMetadata.version=$env:QA_VERSION"
       - name: Test actual portable and installed apps
         run: npx tsx src/benchmarks/windowsPackagesSmoke.ts
       - name: Record checksums and Windows publisher status
@@ -45,7 +45,7 @@ jobs:
               publisher = $signature.SignerCertificate.Subject
             }
           })
-          $report | ConvertTo-Json -Depth 4 | Set-Content release/windows-files.json
+          $report | ConvertTo-Json -Depth 4 | Tee-Object -FilePath release/windows-files.json
           $report | ForEach-Object { "$($_.sha256)  $($_.file)" } | Set-Content release/SHA256SUMS.txt
           Copy-Item docs/WINDOWS_QA.md release/QA-GUIDE.md
       - name: Upload Windows QA bundle
