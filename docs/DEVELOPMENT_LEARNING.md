@@ -133,6 +133,22 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Recall stage: 0. Last review: none. Next due: 2026-10-01.
 - Retrieval question: How does a checkout differ from reading a GitHub file, and where would CI run the checks?
 
+### DEV-011 — Platform support and device synchronization
+- Date/source: 2026-09-30; Tyler prioritized Mac/iPad support and the agent introduced the distinction while drafting the roadmap.
+- Explanation: A desktop package runs on a chosen computer platform. A Home Screen web app uses browser technology behind an app icon. Device synchronization transfers and reconciles records between devices; installing the app on two devices does not synchronize their data.
+- Project example: Current StudentOrganizer has local IndexedDB records and Windows packaging. F-006 proposes Mac packaging and an iPad delivery path; current sync infrastructure is a mock and does not keep class records synchronized.
+- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no recall answer recorded and no platform/sync option selected.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01; if this explanation has not actually been read/presented, introduce it before asking retrieval.
+- Retrieval question: If StudentOrganizer opens on both a Mac and an iPad, what extra capability would keep the same class records up to date on both?
+
+### DEV-012 — Local bug draft and central receipt
+- Date/source: 2026-09-30; Tyler prioritized easy reports into a central file; terminology introduced in the draft plan.
+- Explanation: A locally saved draft remains on the reporter's device. Central receipt means a shared collection point actually accepted the report. A build identifier identifies the exact app version to reproduce a problem.
+- Project example: F-007 must retain an offline report without claiming it has reached the proposed BUG_REPORTS ledger. A successful submission has a durable ID and a central record.
+- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no answer recorded. This reporting feature is not yet implemented or approved.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01; introduce the explanation before retrieval if not yet presented/read.
+- Retrieval question: What is the difference between a bug report saved on an offline iPad and one received in the central file?
+
 ## Review history
 
 2026-09-30 — DEV-007: Tyler's actual answer correctly described waiting on the blocked feature and completing approved work. Successful for that concept; next review 2026-10-03. Terminology questions remain separate.
