@@ -29,3 +29,9 @@ The V6.6 import passed 151 Vitest tests and a production build on September 28, 
 The app stores its working data locally in IndexedDB. Keep real student names, numbers, photos, exports, backups, and credentials out of Git. `.gitignore` excludes common local data and build paths, but review `git status` before every commit because ignore rules cannot protect a file already tracked or every possible filename.
 
 The V6.6 source is the current baseline. Earlier `main` uploads remain in Git history.
+
+## Windows QA handoff
+
+See [the Windows QA guide](docs/WINDOWS_QA.md) for exact-package checks, build identification, publisher status, colleague feedback, and lasting downloads. Regular builds prepare QA bundles; only an explicitly reviewed QA tag publishes a prerelease.
+
+See [our coding workflow](docs/CODING_WORKFLOW.md) for feature plans, review boundaries, and the reusable cloud workspace setup.

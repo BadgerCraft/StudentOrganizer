@@ -3,6 +3,7 @@ name: Windows desktop build
 on:
   push:
     branches: [main]
+    tags: ['qa-v*']
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +13,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -24,14 +26,69 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Identify QA build
+        run: node scripts/prepare-qa-build.cjs
       - name: Build Windows installer and portable app
-        run: npm run package:win -- --publish never
-      - name: Test assessment creation in packaged desktop app
-        run: npx tsx src/benchmarks/assessmentDesktopSmoke.ts
-      - name: Upload Windows executables
+        run: npm run package:win -- --publish never -c.extraMetadata.version=$env:QA_VERSION
+      - name: Test actual portable and installed apps
+        run: npx tsx src/benchmarks/windowsPackagesSmoke.ts
+      - name: Record checksums and Windows publisher status
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem release/*.exe
+          $report = @($files | ForEach-Object {
+            $signature = Get-AuthenticodeSignature $_.FullName
+            [ordered]@{
+              file = $_.Name
+              sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+              signatureStatus = $signature.Status.ToString()
+              publisher = $signature.SignerCertificate.Subject
+            }
+          })
+          $report | ConvertTo-Json -Depth 4 | Set-Content release/windows-files.json
+          $report | ForEach-Object { "$($_.sha256)  $($_.file)" } | Set-Content release/SHA256SUMS.txt
+          Copy-Item docs/WINDOWS_QA.md release/QA-GUIDE.md
+      - name: Upload Windows QA bundle
         uses: actions/upload-artifact@v4
         with:
-          name: OntarioTeacherAssessment-Windows
-          path: release/*.exe
+          name: OntarioTeacherAssessment-Windows-${{ env.QA_VERSION }}
+          path: |
+            release/*.exe
+            release/qa-build.json
+            release/windows-files.json
+            release/SHA256SUMS.txt
+            release/QA-GUIDE.md
+            release/package-smoke.json
+            release/qa-evidence/*.png
           if-no-files-found: error
+          retention-days: 90
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-QA-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/qa-evidence/
+          if-no-files-found: ignore
           retention-days: 14
+
+  # Publishing is explicit: only a reviewed QA tag creates a lasting prerelease.
+  release:
+    if: startsWith(github.ref, 'refs/tags/qa-v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified QA bundle
+        uses: actions/download-artifact@v4
+        with:
+          pattern: OntarioTeacherAssessment-Windows-*
+          path: qa-bundle
+          merge-multiple: true
+      - name: Publish reviewed QA prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          QA_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$QA_TAG" qa-bundle/*.exe qa-bundle/*.json qa-bundle/*.txt qa-bundle/*.md --verify-tag --prerelease --title "Windows fictional-data QA: $QA_TAG" --notes-file qa-bundle/QA-GUIDE.md

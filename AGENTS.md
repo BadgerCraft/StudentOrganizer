@@ -28,10 +28,10 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 ## Change and review loop
 
 1. Start from current `main`; check for uncommitted changes and identify the exact behaviour to change. Use a focused branch for a meaningful change.
-2. Inspect the affected code and callers. Make the smallest coherent change, with tests that exercise a real risk rather than duplicate the implementation.
+2. Reuse an approved feature plan. Approval authorizes implementation, verification, and routine repairs within that scope without repeated permission questions. Interrupt for materially different product behaviours, a consequential scope change, unavailable access, or a merge/release decision Tyler reserved. Inspect the affected code and callers. Make the smallest coherent change, with tests that exercise a real risk rather than duplicate the implementation.
 3. Run the checks relevant to the change. The usual baseline is `npm test` and `npm run build`. Use a real browser flow for UI behaviour, a backup round trip for recovery work, and packaged-app checks when Electron packaging or storage changes. Say when a check could not run.
-4. Present what changed, why, evidence from the checks, remaining risks, and the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
-5. Merge only after that review. Keep rollback straightforward and update the project reference when a verified change makes it stale.
+4. After a coherent batch is verified, use explain-back at the review handoff: explain the changed teacher experience, evidence, remaining risk, and at most two useful concepts needed for the decision. Defer any understanding check if Tyler is away and continue independent authorized work. Never claim background execution this environment cannot provide. Present the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
+5. Merge and publish releases only after explicit approval for those actions. A passing build or an understanding check is not approval. Keep rollback straightforward and update the project reference when a verified change makes it stale.
 
 ## Known follow-ups, not blanket gates
 
