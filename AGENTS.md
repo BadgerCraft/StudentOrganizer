@@ -43,6 +43,16 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - When Tyler is away, save learning checks and direction questions for his return and continue all independent authorized milestones. Only claim scheduled reminders or background work when a tool has actually established them.
 - After a completed step, ask what Tyler wants next, offering concrete options and a recommendation. Treat the answer as direction for the next plan, not implicit merge/release approval or permission to expand the existing scope. If already-approved milestones remain, finish them without waiting for a new direction answer.
 
+## Scheduled briefing and feature decisions
+
+- Use `docs/CODING_WORKFLOW.md` for the daily routine and `docs/FEATURE_QUEUE.md` for feature status, plans, approval evidence, research packets, consequential choices, and execution links.
+- All check-ins use America/Toronto: 08:15 approval/research briefing, 16:00 learning and optional documentation, and 20:15 conditional overnight-work check-in. Morning briefings are daily; afternoon/evening prompts require useful material. These times supersede routine hourly check-ins.
+- Morning: report actual approval items with evidence and exact consequences, follow up yesterday's assigned research, and inspect the next two or three plausible features. Prepare at most one new major decision packet by default, with viable options, project-specific tradeoffs, a recommendation, short authoritative reading, and a following-day follow-up date.
+- Record Tyler's actual choice and reasoning beside the feature when he responds. Do not invent a database problem from an example, treat silence as choosing an option, or ask Tyler to decide routine implementation details.
+- At 16:00, offer optional deeper documentation for active decisions alongside short due learning checks. Declining reading does not approve or reject a feature.
+- At 20:15, select only an approved, unblocked, worthwhile task. Prepare a complete work order and start it only through execution capability actually available. Record the returned task/run link and observed status. If launch is unavailable, save the order and report the exact blocker; a scheduled check-in alone is not an overnight coding task.
+- Planning/learning record commits are authorized administrative work; use the active planning or feature branch and keep merge/release approval separate. Scheduled briefings inspect main and open planning revisions, preserve newer answers, and avoid duplicate launches and repeated unchanged evening-blocker notifications.
+
 ## Known follow-ups, not blanket gates
 
 - The V6.6 browser fixture has a UTC/Toronto date mismatch and a mark-scale version ID mismatch; fix them in a focused test follow-up.
