@@ -10,7 +10,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - Keep a product request separate from an audit finding or a possible future feature. Do not silently expand the task to clear an entire technical backlog.
 - If a related defect must be fixed for the agreed outcome, fix it within that scope and explain it. Record independent defects for a later decision.
 
-- Direct communication preference (Tyler, 2026-09-30): end each substantive final response or review handoff with the specific question or actionable request needed for the next step. Put all explanation, caveats, and links before it; add nothing after it. Prefer a concrete next-step query over an open-ended offer to help. Do not manufacture routine permission gates or block independent approved work. Respect non-interactive run restrictions; when a question is disallowed, finish with the concrete next action instead. Progress updates follow the host's commentary rules.
+- Direct communication preference (Tyler, clarified 2026-09-30): preserve useful explanations, evidence, caveats, and links; reorder them so the actual next-step question or actionable request, when needed, is the final sentence with nothing after it. This is an information-order preference, not a requirement to invent a question, repeat approval requests, or pause independent approved work. Do not append an open-ended offer after the specific query. Respect non-interactive runs: when questions are disallowed, finish with the concrete next action. Progress updates follow the host's commentary rules.
 
 ## Data and safety boundaries
 
