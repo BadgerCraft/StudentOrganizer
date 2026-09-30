@@ -81,7 +81,7 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 - Potential Cloud dispatch bridge: official GitHub integration documentation says a non-review request in a Codex bot PR comment starts a legacy cloud task. This composition with nightly scheduling is untested, and the new published environment cannot be assumed to configure the legacy integration. Any external bot-message dispatch needs explicit communication authorization before posting.
 - Dots can coordinate Cloud tasks if available to the account; access and dispatch tools are not established in this chat. No plan upgrade is required to test the other paths.
 - Primary references: [Cloud tasks](https://learn.chatgpt.com/docs/environments/cloud-environments), [scheduled tasks](https://learn.chatgpt.com/docs/automations), [GitHub integration](https://learn.chatgpt.com/docs/third-party/github), [dot tasks](https://learn.chatgpt.com/docs/dots/tasks-and-memory).
-- Next proposed execution test: isolated documentation change through a scheduled agent, then observe the actual GitHub checks and persisted result. No application feature, merge, or release is implied.
+- Approved execution test, 2026-09-30: Tyler said "Go for it" to the harmless isolated documentation edit → draft PR → existing GitHub checks → persisted report. One-time task "Test GitHub coding path" was created successfully; execution and check results remain pending. [Work order](work-orders/F-005-GITHUB-AUTOMATION-2026-09-30.md). Worker alone owns the dedicated marker and result report. No application feature, merge, or release is implied.
 
 ## Execution readiness
 
