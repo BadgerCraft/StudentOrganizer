@@ -12,6 +12,12 @@ Tyler sets goals, teacher experience, constraints, priorities, and quality. The 
 
 The morning briefing is daily, including when nothing needs approval. Afternoon and evening notifications are conditional on useful material. These named times replace routine hourly progress polling; a task can still report a genuine blocker or required judgment when encountered. Use timezone-aware schedules so Toronto daylight-saving changes are respected.
 
+## Product planning and cross-reference
+
+Read `docs/PRODUCT_ROADMAP.md` alongside the queue. It holds Tyler's review plans and current source-backed features, in this product order: Mac/iPad support; centralized bug reporting; earlier marking-app integration. Produce/refine plans for review and record actual approval before implementation. Look ahead to the next two priorities, doing technical research yourself and preparing a short learning brief only for consequential judgment. Priority is not implementation approval; keep shared approval/status facts consistent with FEATURE_QUEUE.md. Preserve older proposed feature IDs without letting them override this order.
+
+The bounded September 30 test proved unattended documentation editing → draft PR → passing GitHub checks → saved report. It did not dispatch the published Cloud environment or implement a real feature. Use [the report](work-orders/GITHUB_AUTOMATION_TEST_2026-09-30.md) as evidence and validate the next approved real change separately.
+
 ## Morning briefing
 
 1. Read current repository/PR/check evidence and the feature queue, including open planning revisions not yet merged. State the source branch when using proposed administrative records.
