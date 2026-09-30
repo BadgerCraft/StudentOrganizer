@@ -1,6 +1,6 @@
 # Feature and decision queue
 
-Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Priority order below is proposed unless explicitly approved.
+Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. Priority approves planning, not feature implementation. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
 ## Queue discipline
 
@@ -81,13 +81,41 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 - Potential Cloud dispatch bridge: official GitHub integration documentation says a non-review request in a Codex bot PR comment starts a legacy cloud task. This composition with nightly scheduling is untested, and the new published environment cannot be assumed to configure the legacy integration. Any external bot-message dispatch needs explicit communication authorization before posting.
 - Dots can coordinate Cloud tasks if available to the account; access and dispatch tools are not established in this chat. No plan upgrade is required to test the other paths.
 - Primary references: [Cloud tasks](https://learn.chatgpt.com/docs/environments/cloud-environments), [scheduled tasks](https://learn.chatgpt.com/docs/automations), [GitHub integration](https://learn.chatgpt.com/docs/third-party/github), [dot tasks](https://learn.chatgpt.com/docs/dots/tasks-and-memory).
-- Approved execution test, 2026-09-30: Tyler said "Go for it" to the harmless isolated documentation edit → draft PR → existing GitHub checks → persisted report. One-time task "Test GitHub coding path" was created successfully; execution and check results remain pending. [Work order](work-orders/F-005-GITHUB-AUTOMATION-2026-09-30.md). Worker alone owns the dedicated marker and result report. No application feature, merge, or release is implied.
+- Approved execution test completed, 2026-09-30: actual unattended marker commit 65df51d143398126027d1aa81fad73c23870674c → [draft PR #12](https://github.com/BadgerCraft/StudentOrganizer/pull/12) → [successful Windows CI run 36747961539](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/36747961539) → [persisted report](work-orders/GITHUB_AUTOMATION_TEST_2026-09-30.md). 152 tests/19 files, production build/Windows packaging and unpacked desktop assessment/restart check passed. This proves the bounded documentation edit/check/report sequence; general unattended feature coding and Cloud dispatch remain unverified. No application feature, merge, or release was performed.
+
+## Tyler's product priorities — requested 2026-09-30
+
+Detailed review plans, decision lookahead and source-backed current-feature inventory: [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Read this file before asking Tyler to rank earlier proposals again.
+
+### F-006 — Mac and iPad support (priority 1)
+- Status: planning; proposed staged implementation, awaiting platform/data judgment and plan approval.
+- Teacher outcome: use the agreed classroom workflows on supported Mac/iPad devices with verified persistence and recovery.
+- Planning authorization: Tyler explicitly requested this first, September 30. Implementation/merge/release approval: none.
+- Plan: shared compatibility baseline, Mac packaging and actual launch checks, chosen iPad delivery path/touch/offline/file handling, real-device verification, review handoff.
+- Decision DEC-002: delivery expectations and whether device-to-device synchronization belongs in first scope; current app has no live sync. Mac Electron and iPad Home Screen delivery are proposed candidates, not approved or verified.
+- Brief prepared September 30; complete brief not yet presented/assigned, next-day follow-up not set.
+
+### F-007 — Central bug reporting (priority 2)
+- Status: planning; draft implementation plan awaits approval.
+- Teacher outcome: easy report from app, accurate saved/submitted state, stable central record and fix linkage.
+- Planning authorization: Tyler explicitly requested this second, September 30. Implementation/merge/release approval: none.
+- Plan: report entry/preview, safe build/platform context, reliable intake/offline handling, canonical docs/BUG_REPORTS.md ledger, triage and end-to-end arrival verification. The ledger/reporting feature is proposed, not yet implemented.
+- Decision DEC-003: reporter account requirements and public/private visibility. Agent owns service/transport research; no embedded privileged GitHub token or automatic student payload.
+- Lookahead after platform plan; no homework or next-day decision assigned yet.
+
+### F-008 — Earlier marking-app integration (priority 3)
+- Status: planning/discovery; latest standalone source not inspected.
+- Teacher outcome: reuse useful marking tools and deliberately link approved evidence to the right student/assessment.
+- Planning authorization: Tyler explicitly requested this third, September 30. Implementation/merge/release approval: none.
+- Plan: inspect latest source, verify reuse/features/storage formats, propose one linked marking workspace, preserve records/identity/calculations, explicit save-to-Markbook behaviour, fictional end-to-end/import/recovery verification.
+- Decision DEC-004: retained student-text scope and draft versus formal-evidence transfer after actual source inspection. Voice/AI marking not assumed included.
+- Access gap: latest accessible source/repository needed for a source-specific implementation plan. Do not publish private project locations.
 
 ## Execution readiness
 
 - Reusable cloud environment: user supplied a successful web-development verification report on 2026-09-30; published setup, 152 tests, build, and browser flow. This records the supplied report, not current task-launch access.
 - Current chat tools: connected GitHub reads/writes and scheduled check-ins are verified. No callable Codex Cloud task-launch control was found in the current tools or the relevant plugin search.
-- F-005 setup investigation is explicitly approved; F-003 and F-004 application plans remain unapproved. Preparing this queue does not approve them.
+- F-005 setup investigation is explicitly approved. F-006/F-007/F-008 have approved priority/planning, not implementation; F-003/F-004 remain proposed outside that order. Preparing this queue does not approve features.
 - Evening behaviour: select one approved, unblocked, worthwhile task only when one exists. Create a complete work order; start it only through actual available execution/launch capability, then record the task ID/link and observed status. Otherwise record launch-pending with the exact blocker.
 - Last evening report: none.
 
