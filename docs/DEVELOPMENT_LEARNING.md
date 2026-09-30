@@ -35,6 +35,8 @@ Tyler specified this routine on 2026-09-30, superseding the earlier 15:00 remind
 - 16:00 America/Toronto: due learning questions plus an optional deeper documentation session for active feature decisions.
 - 20:15 America/Toronto: conditional check-in for an approved, unblocked task suitable for overnight work.
 
+Schedule verification on 2026-09-30: "Morning development briefing", "Learning and documentation", and "Overnight work check-in" are enabled with exact daily schedules in America/Toronto. The old "Development learning review" at 15:00 is paused. Afternoon/evening checks begin today; the next morning briefing is 2026-10-01.
+
 The learning review still uses the 1/3/7/14/30-day progression. Daily checking does not mean every concept is reviewed daily. Questions and actual answers are recorded here; consequential product/technical choices are recorded next to the feature in `docs/FEATURE_QUEUE.md`.
 
 Scheduling and the detailed daily process are described in `docs/CODING_WORKFLOW.md`. Automatic dispatch of a Codex Cloud coding task has not been verified; a check-in can prepare an order without claiming it has launched.
