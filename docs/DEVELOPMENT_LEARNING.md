@@ -7,7 +7,7 @@ This file is the shared software-development learning record for Tyler and codin
 - Explain useful development concepts when introducing them, using this application's behaviour as the example.
 - Record both concepts introduced by an agent and software-development questions Tyler asks. Capture the explanation and follow-up questions rather than only a vocabulary list.
 - Tyler will ask when an explanation is unclear. When clarification questions stop, treat that as his signal to proceed. Do not require a quiz answer to continue authorized implementation.
-- Provide short learning checks during consequential explanations and after every completed agreed step or milestone. Ask about application, consequences, or a decision in Tyler's own words; usually one or two questions at a time.
+- Provide short learning checks during consequential explanations and after every completed agreed step or milestone. Ask about application, consequences, or a decision in Tyler's own words; usually one or two questions at a time. Tyler clarified on 2026-09-30 that unfamiliar terms and their meaning should be the main focus; avoid repeatedly checking an already-understood stop rule.
 - At the end of a completed step, also ask what Tyler wants next. Offer concrete options and explain the recommended next step. Keep this direction question separate from learning checks and merge/release approval.
 - If Tyler is away, save the explanation and unanswered questions for his return and continue independent work already authorized.
 - This repository is public. Record project learning only: no student information, credentials, private personal reflections, or unrelated chat history.
@@ -101,22 +101,48 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Recall stage: 0. Last review: none. Next due: 2026-10-01.
 - Retrieval question: If the evening check-in has prepared an approved work order but cannot start a coding task, what should it report?
 
-### DEV-007 — Research packet, feature plan, and recorded decision
-- Date/source: 2026-09-30; Tyler requested early research on major choices, a next-day prompt, and recording the choice beside the queued feature.
-- Explanation: A research packet prepares a consequential choice with options, consequences, sources, and a recommendation. The feature plan specifies the work. The decision record captures Tyler's actual choice and its effect on that plan.
-- Project example: F-002 / DEC-001 considers the sequence of a fictional-data Windows pilot and publisher signing. It is unresolved until Tyler chooses.
-- Clarification status: Process recorded; no retrieval answer recorded.
+### DEV-007 — Unresolved decisions and independent approved work
+- Date/source: 2026-09-30; the agent asked what should happen overnight when a feature's major decision is unanswered.
+- Explanation: The affected feature waits for the consequential choice; independent work already approved can continue. Follow up the blocked choice at the agreed review.
+- Actual response: Tyler said, "I know that it will stop, wait for me to intervene in the morning and then complete any approved tasks."
+- Feedback: Correct stop/continue meaning. This demonstrates the workflow rule, not terminology mastery or merge/release approval.
+- Recall stage: 1. Last review: 2026-09-30, successful for this stop/continue concept. Next due: 2026-10-03.
+- Retrieval question: When one feature awaits a major choice, which other work can continue?
+
+### DEV-008 — A personal research package
+- Date/source: 2026-09-30; Tyler asked whether the research package requires knowledge for his decision or technical facts the agent can figure out.
+- Explanation: The agent researches technical facts and resolves routine implementation details. A personal research package teaches Tyler unfamiliar terms and concepts needed to judge a genuine consequential choice, explains the project-specific tradeoffs, and gives a recommendation.
+- Project example: Signing eligibility, integration, and provider facts belong to the agent. A budget, public publisher-identity, or distribution-audience choice may require Tyler's judgment after an explanation.
+- Clarification status: The earlier signing homework was withdrawn and reclassified as agent investigation. No recall answer recorded for this distinction.
 - Recall stage: 0. Last review: none. Next due: 2026-10-01.
-- Retrieval question: If a major data-storage choice remains unanswered, how should that affect the blocked feature and other independent approved work?
+- Retrieval question: What would make a research package useful to your judgment rather than routine fact-finding assigned to you?
+
+### DEV-009 — Subagent and coordination
+- Date/source: 2026-09-30; Tyler asked why both investigations were not proceeding and whether subagents were available.
+- Explanation: A subagent is an AI worker assigned a bounded part of the work. The coordinating agent combines its findings, tracks dependencies, and prevents conflicting edits.
+- Project example: One agent investigated Windows signing/distribution while another checked overnight launch options. Root owned the shared planning files.
+- Clarification status: Explained and used. No retrieval answer recorded.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01.
+- Retrieval question: What is a subagent's role, and why does using one not by itself prove overnight execution?
+
+### DEV-010 — Checkout and CI
+- Date/source: 2026-09-30; the execution probe had GitHub access and commands but no source checkout, prompting a question about possible fixes.
+- Explanation: A checkout is a working copy of the repository on the computer doing the work. CI means automated checks that run when proposed code changes are submitted; GitHub Actions supplies that separate test computer in this project.
+- Project example: This probe could read/write files through the GitHub app but had no local checkout for npm test. The existing Windows workflow checks out source, installs dependencies, runs tests, and packages the app on GitHub's runner.
+- Clarification status: Explanation provided in the execution-options discussion. No retrieval answer recorded.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01.
+- Retrieval question: How does a checkout differ from reading a GitHub file, and where would CI run the checks?
 
 ## Review history
 
-No retrieval answers have been recorded yet. Append dated records with concept ID, the actual response (or a faithful short summary), feedback, outcome, and updated next due date. Never mark understanding or successful recall from silence.
+2026-09-30 — DEV-007: Tyler's actual answer correctly described waiting on the blocked feature and completing approved work. Successful for that concept; next review 2026-10-03. Terminology questions remain separate.
+
+Append dated records with concept ID, the actual response (or a faithful short summary), feedback, outcome, and updated next due date. Never mark understanding or successful recall from silence.
 
 ## Current step and direction
 
 - Current step: establish standing working rules and the learning process in PR #11.
 - Completed earlier: the reusable cloud environment passed the supplied web-development verification.
-- Current queue and research: see `docs/FEATURE_QUEUE.md`; F-002 / DEC-001 is due for a choice follow-up on 2026-10-01.
+- Current queue and research: see `docs/FEATURE_QUEUE.md`. The earlier F-002 / DEC-001 homework assignment was withdrawn; technical signing research belongs to the agent. F-005 tracks the overnight execution setup and actual probe.
 - Next application plan: select a feature and define its outcome, milestones, and completion checks. Proposed features are not automatically approved.
-- 2026-09-30 direction recorded: Tyler specified the three daily times and next-day decision follow-ups. No successful recall response has been received.
+- 2026-09-30 direction recorded: Tyler specified the three daily times and next-day decision follow-ups. A successful stop/continue response is now recorded under DEV-007; no other recall success is inferred.
