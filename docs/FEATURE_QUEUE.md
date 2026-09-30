@@ -35,17 +35,18 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 - Dependencies: review workflow overlaps with F-001. Real-student use and Mac packaging remain separate decisions.
 
 ### F-002 / DEC-001 — Pilot and publisher signing
-- Status: agent technical investigation; no option selected.
+- Status: technical investigation complete; user-facing learning brief available, no option selected.
 - Correction, 2026-09-30: the prior research homework and 2026-10-01 homework follow-up were withdrawn after Tyler clarified his intent. Technical facts, eligibility, costs, build integration, and warnings are the agent's work.
-- Current work: an independent subagent is investigating current Microsoft requirements and the actual PR #10 evidence. Root will integrate the findings here.
+- Agent findings, 2026-09-30: PR #10 remains open at d871359a220116a88aea3688f8ea3592db1f8eb0; Windows run 36723299899 is completed/successful. Both package signatures remain NotSigned. Current Microsoft onboarding supports Canadian individual developers, subject to paid Azure account and identity validation. Artifact Signing Basic is US$9.99/month with 5,000 signatures; currency conversion/tax not verified. Personal legal name and city/province/country appear in the certificate. Signing establishes publisher identity/integrity, while new-file download reputation and device policy remain separate.
 - Potential Tyler decision: intended tester/device context, acceptable installation friction, and whether a verified signing expense is worthwhile for the intended audience. Ask only after explaining the evidence and why that judgment is his.
 - Existing evidence: PR #10 reports both packages NotSigned and publisher null; actual colleague download prompts/device policy are untested.
 - Learning brief, if needed: explain code signing (publisher identity and tamper detection), publisher, and download reputation with a StudentOrganizer example. Signing does not by itself establish that a new file has sufficient download reputation.
 - Agent responsibilities: determine viable technical paths, verify service eligibility and current cost, propose a practical route, and handle implementation research. Do not ask Tyler to research provider facts or treat reading as a prerequisite to routine work.
-- Sources already checked: [Microsoft SmartScreen](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation) and [code-signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options), 2026-09-30. Further verification in progress.
+- Primary sources checked by the delegated technical investigation, 2026-09-30: [Microsoft onboarding](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart), [current pricing](https://azure.microsoft.com/en-ca/products/artifact-signing/), [SmartScreen](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation), and [signing integration](https://learn.microsoft.com/en-us/azure/artifact-signing/how-to-signing-integrations). Follow electron-builder v26 configuration used by the project, not the newer v27 signing API.
 - Tyler's actual choice/reasoning: none recorded.
 - Next-day follow-up: schedule only after a genuine decision learning brief has been presented and assigned; otherwise this belongs in the ordinary progress briefing.
-- Optional 16:00 documentation: offer explanation/source reading after the technical investigation has identified the relevant decision. Last offered: not yet.
+- Agent recommendation: a bounded fictional-data pilot on suitable personally controlled devices after the reserved review, with signing investigated in parallel. Do not ask testers to disable security or evade school policy. Before wider distribution, Tyler's real choices are acceptable cost, public publisher identity, intended audience, and device constraints; technical provider/integration research remains ours.
+- Optional 16:00 documentation: the relevant code-signing/publisher/reputation explanations and primary sources are available. Last offered: not yet.
 
 ## F-003 — Focused browser fixture corrections
 - Teacher/development outcome: browser checks represent the Toronto school day and the current mark-scale version accurately.
@@ -71,10 +72,16 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 - Approval evidence: Tyler, 2026-09-30: "Sure, let's figure out the overnight execution path." He then explicitly requested subagents so Windows research and this setup proceed together.
 - Current authorised work: test scheduled execution, inspect supported launch mechanisms, prepare a bounded validation order, and document actual outcomes. No paid infrastructure, application feature, merge, or release is approved by this setup request.
 - Parallel work: Windows signing/distribution research and overnight launch research run independently; root coordinates and owns shared planning records.
-- Execution probe: one-time scheduled job created, testing GitHub access, shell/runtime availability, source checkout, and durable reporting. Creation confirms scheduling, not completion.
+- Execution probe completed: GitHub reads/writes and shell commands passed (Node v24.19.0, npm 11.9.0, Git 2.51.1). No repository checkout existed in the scratch workspace; direct github.com access was outside permitted destinations, so cloning was not attempted. Application tests/build were NOT RUN. The published Cloud environment was not confirmed as this run's runtime.
 - Probe report target: `docs/work-orders/SCHEDULED_EXECUTION_PROBE_2026-09-30.md`.
 - Completion checks: a real task or scheduled run has observed execution evidence, uses a usable source workspace, can perform appropriate verification, persists a result, and returns to review without silently merging/releasing. Automatic dispatch must be proven separately from a manual launch.
-- Next required action: determine from actual probe and official launch research; avoid repeating the already completed environment setup.
+- Supported immediate route: manually start a task with Work in > Cloud > the already published StudentOrganizer environment. The earlier supplied verification already established that environment; do not repeat setup merely because a general Work run lacks a checkout.
+- Automatic route to test with current tools: scheduled agent makes scoped branch changes through the connected GitHub app, and GitHub Actions supplies the checkout/dependency/test/build computer. Both pieces have working evidence, but the combined unattended feature loop remains unproven. Existing main Windows workflow triggers on pull requests, checks out source, runs npm ci/npm test, and packages the app.
+- Additional automatic route: project-scoped desktop scheduling against the real repository; requires Tyler's Windows computer online and ChatGPT running.
+- Potential Cloud dispatch bridge: official GitHub integration documentation says a non-review request in a Codex bot PR comment starts a legacy cloud task. This composition with nightly scheduling is untested, and the new published environment cannot be assumed to configure the legacy integration. Any external bot-message dispatch needs explicit communication authorization before posting.
+- Dots can coordinate Cloud tasks if available to the account; access and dispatch tools are not established in this chat. No plan upgrade is required to test the other paths.
+- Primary references: [Cloud tasks](https://learn.chatgpt.com/docs/environments/cloud-environments), [scheduled tasks](https://learn.chatgpt.com/docs/automations), [GitHub integration](https://learn.chatgpt.com/docs/third-party/github), [dot tasks](https://learn.chatgpt.com/docs/dots/tasks-and-memory).
+- Next proposed execution test: isolated documentation change through a scheduled agent, then observe the actual GitHub checks and persisted result. No application feature, merge, or release is implied.
 
 ## Execution readiness
 
