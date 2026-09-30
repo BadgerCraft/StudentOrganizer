@@ -29,9 +29,15 @@ Use dates in America/Toronto for this project's review calendar. Review interval
 
 ## Scheduled review support
 
-A ChatGPT automation titled "Development learning review" was enabled on 2026-09-30. It checks daily at 15:00 America/Toronto, starting 2026-10-01, and asks at most two questions only when entries are due. This time is an agent-selected default and can be changed.
+Tyler specified this routine on 2026-09-30, superseding the earlier 15:00 reminder and suggested 4–6-hour work check-ins:
 
-It reads this record from `main`, or from PR #11's head while that initial proposal remains open and the record is absent on main. It does not merge changes or invent review answers. In-session learning checks continue independently of the reminder.
+- 08:15 America/Toronto: daily approval/research briefing; follow up yesterday's research and prepare an upcoming major decision when one is justified.
+- 16:00 America/Toronto: due learning questions plus an optional deeper documentation session for active feature decisions.
+- 20:15 America/Toronto: conditional check-in for an approved, unblocked task suitable for overnight work.
+
+The learning review still uses the 1/3/7/14/30-day progression. Daily checking does not mean every concept is reviewed daily. Questions and actual answers are recorded here; consequential product/technical choices are recorded next to the feature in `docs/FEATURE_QUEUE.md`.
+
+Scheduling and the detailed daily process are described in `docs/CODING_WORKFLOW.md`. Automatic dispatch of a Codex Cloud coding task has not been verified; a check-in can prepare an order without claiming it has launched.
 
 ## Entry format
 
@@ -85,6 +91,22 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Recall stage: 0. Last review: none. Next due: 2026-10-01.
 - Retrieval question: If you approve a feature plan and leave for several hours, what should the agent complete, and which decisions remain yours?
 
+### DEV-006 — Check-in cadence and actual execution
+- Date/source: 2026-09-30; Tyler asked whether to check in hourly, after 6 or 12 hours, or daily, then explicitly chose morning, afternoon, and evening times.
+- Explanation: Briefings organise review and decisions. Learning intervals determine when to revisit each concept. An actual execution mechanism runs approved coding work. A reminder itself does not establish that an overnight coding task has started.
+- Project example: The daily 20:15 check-in must report a saved work order separately from a returned task link and observed running status.
+- Clarification status: Tyler supplied his preferred schedule. This is direction, not a retrieval answer.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01.
+- Retrieval question: If the evening check-in has prepared an approved work order but cannot start a coding task, what should it report?
+
+### DEV-007 — Research packet, feature plan, and recorded decision
+- Date/source: 2026-09-30; Tyler requested early research on major choices, a next-day prompt, and recording the choice beside the queued feature.
+- Explanation: A research packet prepares a consequential choice with options, consequences, sources, and a recommendation. The feature plan specifies the work. The decision record captures Tyler's actual choice and its effect on that plan.
+- Project example: F-002 / DEC-001 considers the sequence of a fictional-data Windows pilot and publisher signing. It is unresolved until Tyler chooses.
+- Clarification status: Process recorded; no retrieval answer recorded.
+- Recall stage: 0. Last review: none. Next due: 2026-10-01.
+- Retrieval question: If a major data-storage choice remains unanswered, how should that affect the blocked feature and other independent approved work?
+
 ## Review history
 
 No retrieval answers have been recorded yet. Append dated records with concept ID, the actual response (or a faithful short summary), feedback, outcome, and updated next due date. Never mark understanding or successful recall from silence.
@@ -93,5 +115,6 @@ No retrieval answers have been recorded yet. Append dated records with concept I
 
 - Current step: establish standing working rules and the learning process in PR #11.
 - Completed earlier: the reusable cloud environment passed the supplied web-development verification.
-- Next proposed setup step: save reusable task plans with milestones, completion checks, and progress.
-- Awaiting Tyler's direction: which application goal should the first saved plan cover?
+- Current queue and research: see `docs/FEATURE_QUEUE.md`; F-002 / DEC-001 is due for a choice follow-up on 2026-10-01.
+- Next application plan: select a feature and define its outcome, milestones, and completion checks. Proposed features are not automatically approved.
+- 2026-09-30 direction recorded: Tyler specified the three daily times and next-day decision follow-ups. No successful recall response has been received.
