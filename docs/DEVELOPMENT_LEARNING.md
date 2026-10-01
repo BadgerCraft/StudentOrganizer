@@ -162,3 +162,12 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - Current queue and research: see `docs/FEATURE_QUEUE.md`. The earlier F-002 / DEC-001 homework assignment was withdrawn; technical signing research belongs to the agent. F-005 tracks the overnight execution setup and actual probe.
 - Next application plan: select a feature and define its outcome, milestones, and completion checks. Proposed features are not automatically approved.
 - 2026-09-30 direction recorded: Tyler specified the three daily times and next-day decision follow-ups. A successful stop/continue response is now recorded under DEV-007; no other recall success is inferred.
+
+### DEV-013 — Reusable lessons and applicability
+- Date/source: 2026-10-01, agent introduction during approved WF-001.
+- Explanation: A component is a part of a program, such as storage or imports. A verified lesson records a checked fix and its context. Applicability means checking whether that context fits the new task. A transaction groups related writes so an interrupted operation can roll back; duplicate-safe retry is a separate concern.
+- Project example: future StudentOrganizer import work can consult shared lessons, but the SQLite pilot does not verify its IndexedDB/Dexie storage. An agent must compare the technologies before applying the fix.
+- Clarification/recall: no user questions or recall answers received. WF-001 approval is implementation approval, not a retrieval answer.
+- Recall stage: 0; next due: 2026-10-02, America/Toronto.
+- Retrieval question: What does applicability mean when a future agent reuses a database lesson?
+- Next direction available: review the ready workflow/QA PRs, then clarify the already-prioritized Mac/iPad plan; no additional feature implementation approval inferred.
