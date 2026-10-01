@@ -12,7 +12,7 @@ Tyler requested these priorities on September 30, 2026:
 2. Easy bug reporting into a central file.
 3. Integration of the earlier marking application.
 
-This approves planning and technical investigation, not implementation of any of these three features. Each plan remains proposed until Tyler explicitly approves its outcome, scope, and completion checks. Capture the actual approval beside the plan; do not infer it from priority, reading, silence, or an unrelated approval. Implementation approval authorizes its milestones and routine verification/repairs; merge and release remain separate decisions.
+Original September 30 request approved planning and technical investigation. On October 1 at 09:18 America/Toronto, Tyler replied “Approved” to the recommended daily items 1–3: F-005 bounded daytime execution trial, F-006 Mac desktop + iPad Home Screen support with manual full-backup transfer initially, and F-007 bounded reporting UI/drafts plus private account-free intake investigation. Merge/release remain separate; new service/access/spending choices require review. F-008 remains source discovery/planning, not integration approval. Each plan remains proposed until Tyler explicitly approves its outcome, scope, and completion checks. Capture the actual approval beside the plan; do not infer it from priority, reading, silence, or an unrelated approval. Implementation approval authorizes its milestones and routine verification/repairs; merge and release remain separate decisions.
 
 Agent duties: inspect actual code, research technical facts, produce reviewable plans, and look ahead through the next two priorities. Resolve routine implementation choices. Teach Tyler only the unfamiliar concepts needed for a real product, budget, distribution, privacy, or data decision. Present at most one new short decision learning brief per morning, and record a next-day follow-up only after actually presenting it. Questions stay deferred while Tyler is away; no answer is invented. No paid account, new hosting, real student data transmission, or public release is authorized by this document.
 
@@ -20,8 +20,8 @@ Agent duties: inspect actual code, research technical facts, produce reviewable 
 
 | Order | Feature | State | What Tyler will review |
 | --- | --- | --- | --- |
-| 1 | F-006: Mac and iPad support | Draft plan; platform/data decisions unresolved; implementation not approved | Supported use, iPad delivery path, device-to-device data expectations, staged completion checks |
-| 2 | F-007: Central bug reporting | Draft plan; implementation not approved | Reporting experience, visibility/privacy, central record and submission route |
+| 1 | F-006: Mac and iPad support | Approved staged implementation October 1; Mac + Home Screen iPad, manual transfer initially | Supported use, iPad delivery path, device-to-device data expectations, staged completion checks |
+| 2 | F-007: Central bug reporting | Approved bounded reporting UI/drafts and private account-free intake investigation October 1 | Reporting experience, visibility/privacy, central record and submission route |
 | 3 | F-008: Earlier marking-app integration | Discovery plan; latest source not inspected; implementation not approved | Reused marking features, student/assessment linkage, explicit save-to-Markbook behaviour |
 
 Existing Windows handoff and workflow PRs remain separate review items. Earlier fixture and Assessment Hub/Markbook proposals keep their stable IDs but do not override Tyler's order. Independent approved setup work can complete without approving these product features.
@@ -34,7 +34,7 @@ A colleague can open StudentOrganizer on a supported Mac or iPad and carry out t
 
 The current app is React/TypeScript with Dexie/IndexedDB local storage and an Electron desktop shell. package.json defines Windows NSIS/portable packaging only; the only current build workflow targets Windows. electron/main.cjs already has Mac lifecycle handling, but that does not prove a Mac package works. Its minimum window width is 960 px. No PWA manifest/service worker or iOS project appears in the current source tree. Mac/iPad support is therefore not verified.
 
-### Proposed delivery and milestones — awaiting approval
+### Approved delivery and milestones — October 1
 
 1. **Shared compatibility baseline:** define supported Mac/iPad OS versions from the project's actual Electron/browser requirements, inspect layout and file APIs, and document a fictional-data test matrix. Preserve grading, Toronto dates, actor attribution, undo/audit, and local records. Do not call browser viewport emulation physical-device testing.
 2. **Mac desktop packaging:** reuse Electron and this project's electron-builder v26 settings; add explicit Mac build commands and a macOS verification job. Select arm64/x64 coverage against intended machines and available runners; package a clearly identifiable app with source/build information. Test actual package launch, assessment creation/restart, participation, mark entry, photo/file handling, and backup/restore. Build evidence must identify architecture. Investigate signing/notarization technical requirements and current cost/account obligations; do not create accounts, credentials, or distribution releases before the necessary decision.
@@ -62,8 +62,8 @@ The current app is React/TypeScript with Dexie/IndexedDB local storage and an El
 
 Agent proposal, pending Tyler's judgment: Mac desktop plus an iPad Home Screen app is a useful first candidate if app-store distribution or native-only capabilities are not required. This is a proposal based on the shared frontend, not a tested compatibility claim. If Tyler expects to use the same class continuously on Windows/Mac/iPad, the plan must explicitly include or defer data transfer/sync; do not quietly build that major architecture under the word “support.” A bounded first version could use existing manual full-backup transfer with clear replacement behaviour, if Tyler accepts that workflow.
 
-- Choice/reasoning: none recorded.
-- Implementation approval: none. Merge/release approval: none.
+- Choice: Mac desktop plus iPad Home Screen app, manual full-backup transfer initially; automatic sync deferred. Accepted by Tyler’s October 1 “Approved”; no additional reasoning supplied.
+- Implementation approval: October 1 daily scope. Merge/release approval: none.
 - Learning brief prepared: September 30. Presented as a complete decision brief: not yet. Follow-up due: not assigned.
 - Agent next investigation: target device/OS compatibility, complete delivery/recovery test matrix, and signing/distribution facts. Routine tooling selection remains the agent's work.
 
@@ -75,7 +75,7 @@ Authoritative sources checked September 30: [Electron platform scope](https://gi
 
 While using the app, a teacher can describe a problem with few steps and receive an understandable saved/submitted state. Tyler and the agent can inspect one central record, triage duplicates, and connect a confirmed bug to a fix and verification.
 
-### Proposed plan — awaiting approval
+### Bounded approved plan — October 1; intake access decision still required
 
 1. Add a clearly named Report a problem entry available from ordinary app navigation. Gather a short summary, expected/actual behaviour, and optional reproduction steps. Automatically include only safe app build/version, platform, and screen identifiers. Do not attach the database, student names/marks, raw page content, credentials, or a screenshot without explicit review.
 2. Let the reporter preview/edit the report and choose whether to submit. Handle failure/offline without losing their draft; distinguish saved locally from received centrally. A local file download alone is not central collection.
@@ -96,7 +96,7 @@ While using the app, a teacher can describe a problem with few steps and receive
 
 Tyler's consequential choice: should colleagues be able to report without a GitHub account, and should report details be private or publicly visible? Those affect the collection service and report-preview experience. The agent owns transport/library/service research and recommends the smallest route that meets that need. Prepare a short brief when F-006 is nearing completion; no provider research homework is assigned to Tyler.
 
-- Choice/reasoning: none. Implementation approval: none. Merge/release approval: none.
+- Choice: private, account-free colleague reporting; agent investigates transport. Tyler approved bounded UI/draft/preview/error-handling and safe-metadata work October 1. New service/access/spending adoption remains a concrete separate decision. No additional reasoning supplied. Merge/release approval: none.
 - Learning goal: local draft versus central receipt; public issue versus private intake; build identifier helps reproduce the exact problem.
 - Presented date/follow-up: not assigned.
 
