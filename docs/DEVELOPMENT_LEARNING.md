@@ -174,3 +174,11 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - Next direction available: review the ready workflow/QA PRs, then clarify the already-prioritized Mac/iPad plan; no additional feature implementation approval inferred.
 
 2026-10-01 — DEV-013: partial recall of reuse; explained context-fit distinction. Stage remains 0; next review 2026-10-02 America/Toronto. Follow-up example question offered; awaiting actual answer.
+
+### DEV-014 — Unique indexes and an atomic swap
+- Date/source: 2026-10-01; agent encountered the existing occupied-seat swap defect during approved platform verification.
+- Explanation prepared for return: A unique index enforces one record per chosen key, such as one occupant at a layout/row/column coordinate. A transaction groups related changes so failure rolls them back together. Updating one occupant into another's occupied coordinate can still fail immediately inside a transaction. This fix removes the old coordinate rows and inserts both new positions in the same transaction, retaining their identities and recording both changes.
+- Project evidence: source935ad143 local seatingSwap regression tests pass for successful swap, injected audit failure rollback and unauthorized rejection. Integrated162 tests/build passed. Exact browser completion is still pending; an unexecuted UI flow is not treated as proof.
+- Clarification/recall status: explanation saved for return; no question asked during the noninteractive continuation, no user response or successful recall inferred. Review stage0; set the first due date after the explanation is actually presented.
+- Prepared retrieval question: How do a unique index and a transaction each protect a two-student seat swap?
+- Shared component reference: Reuse Component Lessons database/index v3, DB-003. Saved and remotely verified October 1.
