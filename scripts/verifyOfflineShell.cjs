@@ -9,6 +9,8 @@ async function verify(base) {
   const handlers = {};
   const entries = new Map();
   const deleted = [];
+  const prefix = `ontario-app-shell-${encodeURIComponent(new URL(base).pathname)}-`;
+  const otherPathCache = `ontario-app-shell-${encodeURIComponent('/other-app/')}-old`;
   let fetched = 0;
   const cache = {
     async addAll(urls) {
@@ -31,8 +33,8 @@ async function verify(base) {
       clients: { claim() { throw new Error('Worker must not switch existing page versions.'); } }
     },
     caches: {
-      async open(name) { assert.match(name, /^ontario-app-shell-/); return cache; },
-      async keys() { return ['unrelated-app-cache', 'ontario-app-shell-old']; },
+      async open(name) { assert.ok(name.startsWith(prefix), 'Cache ownership must include app scope'); return cache; },
+      async keys() { return ['unrelated-app-cache', otherPathCache, `${prefix}old`]; },
       async delete(name) { deleted.push(name); return true; }
     },
     async fetch() { fetched++; throw new Error('Offline network unavailable'); }
@@ -59,8 +61,8 @@ async function verify(base) {
   assert.equal(await request('https://example.net/photo.jpg', 'cors'), undefined);
   handlers.activate({ waitUntil(promise) { pending = promise; } });
   await pending;
-  assert.deepEqual(deleted, ['ontario-app-shell-old'], 'Activation removes only old app-shell cache');
-  console.log(`PASS offline shell: ${base}; ${entries.size} exact assets, no network/record cache/forced activation`);
+  assert.deepEqual(deleted, [`${prefix}old`], 'Activation removes own old cache and preserves another same-origin app path');
+  console.log(`PASS offline shell: ${base}; ${entries.size} exact assets, no network/record cache/forced activation/cross-path eviction`);
 }
 
 (async () => {

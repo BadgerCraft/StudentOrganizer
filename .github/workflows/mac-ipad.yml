@@ -36,8 +36,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Require credential-free test signature
+        run: node -e "if (require('./package.json').build.mac.identity !== '-') throw new Error('This PR job only allows an ad-hoc test signature')"
       - name: Package Mac disk image and archive
         run: npm run package:mac -- --${{ matrix.arch }} --publish never
+        env:
+          # v26 otherwise skips even ad-hoc signatures on pull requests.
+          # No certificate, keychain secret, publishing token or notarization credential is supplied.
+          CSC_FOR_PULL_REQUEST: 'true'
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
       - uses: actions/upload-artifact@v4
@@ -69,10 +75,12 @@ jobs:
       - name: Check touch and offline classroom flows in Chromium
         run: node --import tsx scripts/ipadBrowserTest.ts
       - name: Check WebKit browser compatibility
+        if: ${{ !cancelled() }}
         run: node --import tsx scripts/ipadBrowserTest.ts
         env:
           IPAD_TEST_BROWSER: webkit
       - name: Check bug-report draft recovery and failures
+        if: ${{ !cancelled() }}
         run: node --import tsx src/benchmarks/bugReportSmokeTest.ts
       - uses: actions/upload-artifact@v4
         if: always()

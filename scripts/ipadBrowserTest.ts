@@ -1,6 +1,6 @@
 import { preview } from 'vite';
 import { chromium, webkit, type Page, type BrowserContext } from 'playwright';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -68,7 +68,10 @@ async function main() {
   const server = await preview({ preview: { host: '127.0.0.1', port: 4178, strictPort: true } });
   const url = 'http://127.0.0.1:4178/';
   const profile = mkdtempSync(join(tmpdir(), 'fictional-ipad-test-'));
+  const evidenceDir = join('screenshots', `ipad-${engine.name()}`);
+  mkdirSync(evidenceDir, { recursive: true });
   let context: BrowserContext | undefined;
+  let latestPage: Page | undefined;
   try {
     context = await engine.launchPersistentContext(profile, {
       headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
@@ -76,6 +79,7 @@ async function main() {
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && engine === chromium ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {})
     });
     let page = context.pages()[0] || await context.newPage();
+    latestPage = page;
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
@@ -87,6 +91,7 @@ async function main() {
     for (const viewport of [{ width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 512, height: 768 }]) {
       await page.setViewportSize(viewport);
       await noPageOverflow(page, `seating ${viewport.width}`);
+      await page.screenshot({ path: join(evidenceDir, `seating-${viewport.width}.png`), fullPage: true });
     }
     await page.setViewportSize({ width: 768, height: 1024 });
     // Tap-to-swap uses the same service as dragging and preserves both occupants.
@@ -95,6 +100,7 @@ async function main() {
     const beforeSeats = await records(page, 'seatPositions');
     await page.locator('[data-testid="tap-move-seats-btn"]').tap();
     await page.locator('[data-testid="student-seat-card"]').nth(0).tap();
+    assert.equal(await page.locator('[data-testid="student-profile-modal"]').count(), 0, 'Tap-move must not open profile');
     await page.locator('[data-testid="student-seat-card"]').nth(1).tap();
     const afterSeats = await waitForRecords(page, 'seatPositions', rows => JSON.stringify(rows) !== JSON.stringify(beforeSeats));
     assert.equal(afterSeats.length, beforeSeats.length);
@@ -104,7 +110,7 @@ async function main() {
     const attendanceBefore = await records(page, 'attendanceRecords');
     await page.locator('[data-testid="student-seat-card"]').first().locator('button').first().tap();
     await waitForRecords(page, 'attendanceRecords', rows => JSON.stringify(rows) !== JSON.stringify(attendanceBefore));
-    await page.locator('[data-testid="student-seat-card"]').first().tap();
+    await page.locator('[data-testid="student-seat-name"]').first().tap();
     await page.locator('[data-testid="toggle-note-btn"]').tap();
     await page.locator('[data-testid="observation-note-input"]').fill('Fictional iPad observation');
     await noPageOverflow(page, 'participation dock');
@@ -118,6 +124,24 @@ async function main() {
     await waitForRecords(page, 'students', rows => rows.some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl?.startsWith('data:image/')));
     const title = `Fictional iPad assessment ${Date.now()}`;
     await createAssessment(page, title);
+    // Locate the new assessment's K cell from its rendered header, not a guessed column.
+    await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).tap();
+    await page.locator('table tbody tr').first().waitFor();
+    const knowledgeColumn = await page.evaluate(assessmentTitle => {
+      const header = Array.from(document.querySelectorAll<HTMLTableCellElement>('th')).find(th =>
+        th.querySelector('span[title]')?.getAttribute('title') === assessmentTitle &&
+        th.querySelector('div > span:nth-child(2)')?.textContent?.trim() === 'K');
+      return header?.cellIndex ?? -1;
+    }, title);
+    assert.ok(knowledgeColumn >= 0, 'New assessment K header must be visible in markbook');
+    await page.locator('table tbody tr').first().locator('td').nth(knowledgeColumn).tap();
+    await page.getByPlaceholder('e.g. 4+, 88%, 18/20').fill('88%');
+    await page.getByPlaceholder('e.g. 4+, 88%, 18/20').locator('..').locator('..').locator('select').selectOption('percentage');
+    await page.getByPlaceholder('Optional constructive feedback for this category...').fill('Fictional iPad K feedback');
+    await page.getByRole('button', { name: 'Save Result', exact: true }).tap();
+    await waitForRecords(page, 'categoryResults', rows => rows.some(row => row.rawScore === '88%' && row.normalizedPercentage === 88 && row.feedback === 'Fictional iPad K feedback'));
+    await noPageOverflow(page, 'markbook horizontal scrolling');
+    await page.screenshot({ path: join(evidenceDir, 'markbook-result.png'), fullPage: true });
     await page.locator('[data-testid="nav-portability-btn"]').tap();
     await page.locator('[data-testid="roster-file-input"]').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('LastName,FirstName,StudentNumber\nTablet,Fictional,IPAD-9901\n') });
     await page.locator('[data-testid="preview-roster-btn"]').tap();
@@ -139,12 +163,14 @@ async function main() {
     await page.locator('[data-testid="nav-portability-btn"]').tap();
     await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.body });
     await page.locator('[data-testid="restore-confirm-dialog"]').waitFor();
+    await page.screenshot({ path: join(evidenceDir, 'restore-preview.png'), fullPage: true });
     // Preview does not mutate; only this teacher-confirmed UI click restores.
     assert.ok((await records(page, 'assessments')).some(row => row.title === afterBackupTitle));
     await page.locator('[data-testid="confirm-restore-btn"]').tap();
     await page.getByText(/Database successfully restored/).waitFor();
     assert.ok((await records(page, 'assessments')).some(row => row.title === title));
     assert.ok(!(await records(page, 'assessments')).some(row => row.title === afterBackupTitle));
+    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
     // Close the browser process, relaunch the same profile offline, reopen records.
     await context.close();
     context = await engine.launchPersistentContext(profile, {
@@ -153,6 +179,7 @@ async function main() {
     });
     await context.setOffline(true);
     page = context.pages()[0] || await context.newPage();
+    latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
     await selectTeacher(page);
@@ -160,6 +187,8 @@ async function main() {
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     assert.ok((await records(page, 'students')).some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl));
     assert.ok((await records(page, 'participationEvents')).some(row => row.note === 'Fictional iPad observation'));
+    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
+    await page.screenshot({ path: join(evidenceDir, 'offline-reopened.png'), fullPage: true });
     const cached = await page.evaluate(async () => {
       const keys = await caches.keys();
       const entries: string[] = [];
@@ -171,7 +200,10 @@ async function main() {
     assert.ok(cached.some(item => item.endsWith('/index.html')));
     assert.ok(cached.every(item => /\/(index\.html|manifest\.webmanifest|app-icon\.svg|icon-\d+\.png|assets\/[^/]+\.(js|css))$/.test(item)));
     assert.deepEqual(errors, []);
-    console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment, file roster/CSV/backup/replacement, offline process reopen and persisted records; not physical iPad verification.`);
+    console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, file roster/CSV/backup/replacement, offline process reopen and persisted records; not physical iPad verification.`);
+  } catch (error) {
+    if (latestPage && !latestPage.isClosed()) await latestPage.screenshot({ path: join(evidenceDir, 'failure.png'), fullPage: true }).catch(() => {});
+    throw error;
   } finally {
     await context?.close();
     await new Promise<void>((resolve, reject) => server.httpServer.close(error => error ? reject(error) : resolve()));

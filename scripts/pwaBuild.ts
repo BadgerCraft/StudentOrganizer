@@ -27,8 +27,9 @@ export function pwaBuild(): Plugin {
       const version = hash.digest('hex').slice(0, 20);
       const shell = [...new Set(['index.html', ...files, 'manifest.webmanifest', 'app-icon.svg', ...Object.keys(pwaIcons)])];
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: `
-const CACHE = 'ontario-app-shell-${version}';
 const BASE = new URL('./', self.location.href);
+const PREFIX = 'ontario-app-shell-' + encodeURIComponent(BASE.pathname) + '-';
+const CACHE = PREFIX + '${version}';
 const SHELL = ${JSON.stringify(shell)}.map(path => new URL(path, BASE).href);
 const HOME = new URL('index.html', BASE).href;
 self.addEventListener('install', event => {
@@ -36,7 +37,7 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys
-    .filter(key => key.startsWith('ontario-app-shell-') && key !== CACHE)
+    .filter(key => key.startsWith(PREFIX) && key !== CACHE)
     .map(key => caches.delete(key)))));
 });
 self.addEventListener('fetch', event => {

@@ -22,6 +22,10 @@ button, select, summary, [role="button"] {
   button[title], button[aria-label] { min-width: 44px; }
   input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: 16px; }
   [role="dialog"] { max-height: 90dvh; }
+  [data-testid="student-seat-card"] { height: auto; min-height: 160px; }
+  .seat-card-top { flex-wrap: wrap; row-gap: 0.375rem; }
+  .seat-card-top > :first-child { width: 100%; }
+  .seat-card-actions { margin-left: auto; }
   /* Gear/profile actions must not require hover on a touch screen. */
   .group button.opacity-0 { opacity: 1; }
 }

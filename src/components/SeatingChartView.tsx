@@ -526,7 +526,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   }`}
                 >
                   {/* Top Row: Name, Photo/Initials & Quick Actions */}
-                  <div className="flex items-start justify-between">
+                  <div className="seat-card-top flex items-start justify-between">
                     <div className="flex items-center space-x-2.5 truncate">
                       {/* Student Photo or Stylized Initials Avatar */}
                       {student.photoUrl ? (
@@ -556,6 +556,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
 
                       <div className="truncate">
                         <div
+                          data-testid="student-seat-name"
                           className={`font-extrabold text-slate-900 truncate leading-tight ${
                             layout.cardSize === 'compact' ? 'text-xs' : 'text-sm'
                           }`}
@@ -576,7 +577,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                     </div>
 
                     {/* Attendance, Profile & Settings Quick Actions */}
-                    <div className="flex items-center space-x-0.5">
+                    <div className={tapMoveMode ? 'hidden' : 'seat-card-actions flex items-center space-x-0.5'}>
                       <button
                         onClick={e => handleToggleAttendance(enr!.id, e)}
                         className={`p-1 rounded transition ${
