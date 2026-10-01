@@ -68,6 +68,14 @@ async function download(page: Page, buttonTestId: string) {
 async function main() {
   const engine = process.env.IPAD_TEST_BROWSER === 'webkit' ? webkit : chromium;
   const server = await preview({ preview: { host: '127.0.0.1', port: 4178, strictPort: true } });
+  async function stopServer() {
+    if (!server.httpServer.listening) return;
+    await new Promise<void>((resolve, reject) => {
+      server.httpServer.close(error => error ? reject(error) : resolve());
+      server.httpServer.closeAllConnections();
+    });
+    assert.equal(server.httpServer.listening, false, 'Origin server must be unavailable for the cache-reopen check');
+  }
   const url = 'http://127.0.0.1:4178/';
   const profile = mkdtempSync(join(tmpdir(), 'fictional-ipad-test-'));
   const evidenceDir = join('screenshots', `ipad-${engine.name()}`);
@@ -205,11 +213,16 @@ async function main() {
     assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
     // Close the browser process, relaunch the same profile offline, reopen records.
     await context.close();
+    await stopServer();
     context = await engine.launchPersistentContext(profile, {
       headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && engine === chromium ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {})
     });
-    await context.setOffline(true);
+    // Playwright 1.63 WebKit's offline emulation rejects even worker responses
+    // (microsoft/playwright#42775). Require a stopped origin for both engines;
+    // Chromium additionally exercises the network-offline flag. WebKit evidence
+    // is cached reopening with an unavailable origin, not device airplane mode.
+    if (engine === chromium) await context.setOffline(true);
     page = context.pages()[0] || await context.newPage();
     latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
@@ -232,13 +245,13 @@ async function main() {
     assert.ok(cached.some(item => item.endsWith('/index.html')));
     assert.ok(cached.every(item => /\/(index\.html|manifest\.webmanifest|app-icon\.svg|icon-\d+\.png|assets\/[^/]+\.(js|css))$/.test(item)));
     assert.deepEqual(errors, []);
-    console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, file roster/CSV/backup/replacement, offline process reopen and persisted records; not physical iPad verification.`);
+    console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, file roster/CSV/backup/replacement, cached process reopen with stopped origin and persisted records${engine === chromium ? ' plus network-offline emulation' : '; WebKit network-offline emulation is unverified (Playwright #42775)'}; not physical iPad verification.`);
   } catch (error) {
     if (latestPage && !latestPage.isClosed()) await latestPage.screenshot({ path: join(evidenceDir, 'failure.png'), fullPage: true }).catch(() => {});
     throw error;
   } finally {
     await context?.close();
-    await new Promise<void>((resolve, reject) => server.httpServer.close(error => error ? reject(error) : resolve()));
+    await stopServer();
     rmSync(profile, { recursive: true, force: true });
   }
 }

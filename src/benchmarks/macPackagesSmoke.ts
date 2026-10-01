@@ -150,7 +150,14 @@ async function checkApp(appPath: string, format: string) {
     await editor.form.getByRole('button', { name: 'Save Result', exact: true }).click();
     await editor.form.waitFor({ state: 'hidden' });
     await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '87');
-    assert.equal(await editor.cell.innerText(), '87');
+    // The transaction can commit before Dexie's live query refreshes the cell.
+    // Require the visible result too, waiting for rendering rather than treating
+    // the first read after the database assertion as a settled UI state.
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if ((await editor.cell.innerText()).trim() === '87') break;
+      await page.waitForTimeout(100);
+    }
+    assert.equal((await editor.cell.innerText()).trim(), '87');
     const reopened = await openMarkCell(page, title, studentLabel);
     assert.equal(await reopened.form.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }).inputValue(), '87');
     assert.equal(await reopened.form.getByPlaceholder('Optional constructive feedback for this category...').inputValue(), feedback);
