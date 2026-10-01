@@ -1,14 +1,26 @@
 # Daytime implementation evidence — October 1
 
-Approved scope: [work order](DAYTIME-2026-10-01.md). [Draft PR #13](https://github.com/BadgerCraft/StudentOrganizer/pull/13) currently uses source935ad143a0cfe2c83478a7824069c037f0d19d17, baseline main a608e019. Implementation and bounded repairs are published; merge/release remain reserved. No Cloud dispatch, new provider/account or physical device claim.
+Approved scope: [work order](DAYTIME-2026-10-01.md). [Draft PR #13](https://github.com/BadgerCraft/StudentOrganizer/pull/13) currently uses source90a06c139b0a67604b15d0d288c45f3e7fd63ee8, baseline main a608e019. Implementation and bounded repairs are published; merge/release remain reserved. No Cloud dispatch, new provider/account or physical device claim.
 
-## Observed execution and repairs
+## Current checkpoint — October 1
+
+Exact feature head: [90a06c139b0a67604b15d0d288c45f3e7fd63ee8](https://github.com/BadgerCraft/StudentOrganizer/commit/90a06c139b0a67604b15d0d288c45f3e7fd63ee8). [Mac/iPad run36893625121](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/36893625121) and [Windows run36893624890](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/36893624890) observed running. Current-head platform PASS is pending.
+
+Prior source830c4ce: Windows run36892338872 PASS; Intel Mac job110470775654 in run36892338859 PASS on actual DMG/ZIP recovery. Chromium completed touch portrait/landscape/split, swaps, attendance, notes, photo, K percentage/feedback, roster/CSV/full backup, invalid-restore preservation, confirmed restore and offline process reopen with retained records. Report-draft failure/reload/download checks PASS. WebKit completed classroom/recovery, then failed offline reopening at page.goto with an internal error. ARM Mac persisted the correct87 mark but an immediate UI read still saw '--'. These are observed failures, not current-source passes.
+
+Latest bounded harness repairs wait for the visible mark after database commit and stop the origin server before process reopening. Both engines must receive the reopened document from their service worker; Chromium also uses network-offline emulation. WebKit uses an unavailable origin instead, matching the scoped diagnosis in [Playwright issue42775](https://github.com/microsoft/playwright/issues/42775), opened September18, checked October1. This is cached reopening during an origin outage, not physical-device airplane-mode evidence. TypeScript and whitespace checks PASS. No production grading/storage change was needed for these harness failures.
+
+Immediate next action: inspect exact90a06c1 jobs/logs, fix only scoped failures and record the coherent-source outcome. Physical iPad Home Screen/Files/keyboard/airplane-mode checks, stable HTTPS delivery, downloaded-file Gatekeeper/managed-Mac acceptance and private report receipt remain separate unmet milestones. F-008 still needs current code-only source; integration unapproved. No merge/release/new provider/account/access/spending or external message.
+
+Relevant shared applicability check: index/database v4 DB-003 matches Dexie occupied-seat uniqueness and rollback; packaging v1 PKG-001/PKG-002 matches the unchanged builder/signature and Electron recovery harness. Existing measured fixes were retained, not re-probed. SQLite-only DB-001/002 remain insufficient Dexie proof. New WebKit observation is not promoted to physical-device support.
+
+## Earlier execution and repairs
 
 - Initial source466e5d0: Windows run36869731841 succeeded; Mac/iPad run36869731888 failed. A seat center tap reached a nested profile button; move mode now hides those actions. Electron-builder v26 skipped PR signatures; Mac workflow now requires explicit ad-hoc identity and enables credential-free PR test signing, with certificate discovery disabled and no credential provision.
 - Sourceee6545d: Windows run36871250607 succeeded. Mac/iPad run36871250635 failed. Both Mac architectures built and launched actual DMG-installed apps; fictional participation/photo/assessment/K mark+feedback/editor reopening progressed to backup export. Native save dialog blocked the browser download wait; the revised test observes Electron's real download and selects its fictional CI evidence destination. Native save-dialog interaction remains unverified.
 - Both browser engines exposed an existing occupied-seat swap unique-index ConstraintError. The repair preserves both row IDs/enrollments, deletes/reinserts their coordinates inside the same transaction, and records both audit/outbox changes. Three regressions verify successful swap, exact rollback on injected audit failure and no unauthorized writes. Bug-report smoke had a serialized tsx helper ReferenceError; literal self-contained browser expressions repair its test injection, with no production hook.
 
-## Current exact-source checks
+## Earlier exact-source checks — source935ad143
 
 - Source935ad143: local162 tests/21 files PASS; TypeScript/production build PASS; generated offline shell root and /teacher/ simulation PASS; git diff whitespace PASS. Existing >500KB bundle warning remains.
 - [Windows run36888480033](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/36888480033): observed in progress when this entry was written.
