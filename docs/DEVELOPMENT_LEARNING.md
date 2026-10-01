@@ -178,7 +178,15 @@ Append dated records with concept ID, the actual response (or a faithful short s
 ### DEV-014 — Unique indexes and an atomic swap
 - Date/source: 2026-10-01; agent encountered the existing occupied-seat swap defect during approved platform verification.
 - Explanation prepared for return: A unique index enforces one record per chosen key, such as one occupant at a layout/row/column coordinate. A transaction groups related changes so failure rolls them back together. Updating one occupant into another's occupied coordinate can still fail immediately inside a transaction. This fix removes the old coordinate rows and inserts both new positions in the same transaction, retaining their identities and recording both changes.
-- Project evidence: source935ad143 local seatingSwap regression tests pass for successful swap, injected audit failure rollback and unauthorized rejection. Integrated162 tests/build passed. Exact browser completion is still pending; an unexecuted UI flow is not treated as proof.
+- Project evidence: source935ad143 local seatingSwap regression tests pass for successful swap, injected audit failure rollback and unauthorized rejection. Integrated162 tests/build passed. Chromium source830c4ce/run36892338859 completed the entire touch/classroom/backup/offline-reopen scenario. WebKit completed classroom/recovery before an independent offline-emulation failure. Physical iPad remains unverified; current90a06c1 browser check is waiting for engine installation.
 - Clarification/recall status: explanation saved for return; no question asked during the noninteractive continuation, no user response or successful recall inferred. Review stage0; set the first due date after the explanation is actually presented.
 - Prepared retrieval question: How do a unique index and a transaction each protect a two-student seat swap?
-- Shared component reference: Reuse Component Lessons database/index v3, DB-003. Saved and remotely verified October 1.
+- Shared component reference: Reuse Component Lessons database/index v5, DB-003. Saved and remotely verified October 1.
+
+### DEV-015 — Cached reopening and an origin outage
+- Date/source: October1; agent explanation during platform verification, with review saved for Tyler's return.
+- Explanation provided briefly: a service worker is the browser component that serves cached application files. An origin outage means the server supplying those files is unavailable. Testing cached reopening with a stopped server differs from simulating an offline network or using physical iPad airplane mode.
+- Project example: the latest browser test stops its origin and requires the reopened document to come from the service worker. Chromium also uses the network-offline flag. WebKit's offline-emulation failure matches an upstream report; its stopped-origin check remains pending current execution.
+- Actual answers/recall: none; deferred, no successful understanding inferred. Stage0; first review due October2 after the brief explanation; do not repeat already asked questions.
+- Prepared retrieval question: Why would cached reopening with a stopped server still leave a physical iPad airplane-mode check to do?
+- Current direction: finish authorized exact-source checks; hosting/publication, private receipt and device access are concrete dependent milestones, not new implementation approval requests.
