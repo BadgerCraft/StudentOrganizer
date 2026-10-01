@@ -137,7 +137,7 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Date/source: 2026-09-30; Tyler prioritized Mac/iPad support and the agent introduced the distinction while drafting the roadmap.
 - Explanation: A desktop package runs on a chosen computer platform. A Home Screen web app uses browser technology behind an app icon. Device synchronization transfers and reconciles records between devices; installing the app on two devices does not synchronize their data.
 - Project example: Current StudentOrganizer has local IndexedDB records and Windows packaging. F-006 proposes Mac packaging and an iPad delivery path; current sync infrastructure is a mock and does not keep class records synchronized.
-- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no recall answer recorded and October1 approval selects Mac Electron/iPad Home Screen and manual full-backup transfer initially; live sync deferred. This product choice is not a recall answer.
+- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no recall answer recorded and October1 morning approval initially selected Mac Electron/iPad Home Screen and manual full-backup transfer. Superseding 13:59 privacy decision requires installed iPad delivery with bundled assets, local processing/storage and no operational website; Home Screen/PWA is no longer the intended product. Live sync remains deferred. This product choice is not a recall answer.
 - Recall stage: 0. Last review: none. Next due: 2026-10-01; if this explanation has not actually been read/presented, introduce it before asking retrieval.
 - Retrieval question: If StudentOrganizer opens on both a Mac and an iPad, what extra capability would keep the same class records up to date on both?
 
@@ -190,3 +190,10 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - Actual answers/recall: none; deferred, no successful understanding inferred. Stage0; first review due October2 after the brief explanation; do not repeat already asked questions.
 - Prepared retrieval question: Why would cached reopening with a stopped server still leave a physical iPad airplane-mode check to do?
 - Current direction: finish authorized exact-source checks; hosting/publication, private receipt and device access are concrete dependent milestones, not new implementation approval requests.
+
+## Afternoon review offered — October 1, 16:00 America/Toronto
+- Current source: open planning PR #11 / codex/approved-plan-workflow, including the superseding 13:59 installed-iPad privacy decision. PR13 exact ac44af3 Mac/browser/Windows checks freshly observed completed/success; browser evidence does not establish installed-iPad privacy.
+- Due term prompts selected: DEV-010 checkout versus CI (working source copy versus automatic checks); DEV-003 scope of verification, applied to passing browser checks and installed-iPad/offline privacy. Prompts offered for Tyler's next reply, without answer reveal. No answer received; stages and due dates remain unchanged.
+- DEV-007 not due until October3; DEV-013 applicability already discussed today, next due October2, not repeated. No implementation approvals repeated.
+- DEV-013 additional actual clarification October1: Tyler requested benefit/risk analysis of automatic reuse versus measured applicability checking, then selected “No, I think that measured approach makes sense - apply it”. Policy choice recorded and applied to shared skill; not a retrieval answer. Partial recall remains stage0/dueOctober2.
+- Useful new optional documentation: F-006/DEC-002 installed app, offline operation and student-data boundaries after today's superseding privacy requirement. Offer brief explanation, original-source reading, or defer; earlier unchanged Safari/Home Screen reading remains deferred. No documentation choice or product approval inferred.
