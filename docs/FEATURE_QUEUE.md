@@ -1,6 +1,6 @@
 # Feature and decision queue
 
-Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. Priority approves planning, not feature implementation. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
+Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. The original priority request approved planning; October 1's recorded daily approval authorizes the bounded implementation below. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
 ## Queue discipline
 
@@ -92,7 +92,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Teacher outcome: use the agreed classroom workflows on supported Mac/iPad devices with verified persistence and recovery.
 - Planning authorization: September 30. Implementation approval: Tyler replied “Approved” October 1, 09:18 America/Toronto to the recommended daily scope. Merge/release approval: none.
 - Plan: shared compatibility baseline, Mac packaging and actual launch checks, chosen iPad delivery path/touch/offline/file handling, real-device verification, review handoff.
-- Decision DEC-002: delivery expectations and whether device-to-device synchronization belongs in first scope; current app has no live sync. Mac Electron and iPad Home Screen delivery are proposed candidates, not approved or verified.
+- Decision DEC-002: delivery expectations and whether device-to-device synchronization belongs in first scope; current app has no live sync. Tyler approved Mac Electron and iPad Home Screen implementation October 1 with manual full-backup transfer; platform completion remains subject to observed verification.
 - Brief prepared September 30; complete brief not yet presented/assigned, next-day follow-up not set.
 - Optional documentation offered, 2026-09-30 afternoon: desktop packaging, iPad Home Screen delivery, and device synchronization for DEC-002. Tyler replied "Defer" at 16:47 America/Toronto on September 30; optional reading deferred. No replacement date requested. Do not repeat this unchanged offer at the next check-in; revisit when Tyler requests it or meaningful new decision material warrants it. This defers documentation only; no platform choice, implementation approval, or successful recall is inferred.
 
@@ -100,7 +100,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Status: bounded implementation approved: reporting draft/preview/error handling and safe metadata, plus private account-free intake investigation. Actual central submission requires an established route; new service/access/spending decisions remain separate.
 - Teacher outcome: easy report from app, accurate saved/submitted state, stable central record and fix linkage.
 - Planning authorization: September 30. Bounded implementation approval: Tyler’s October 1 “Approved” to the recommended daily scope. Merge/release approval: none.
-- Plan: report entry/preview, safe build/platform context, reliable intake/offline handling, canonical docs/BUG_REPORTS.md ledger, triage and end-to-end arrival verification. The ledger/reporting feature is proposed, not yet implemented.
+- Plan: report entry/preview, safe build/platform context, reliable intake/offline handling, canonical docs/BUG_REPORTS.md ledger, triage and end-to-end arrival verification. Local draft/reporting code and an empty canonical ledger are implemented in draft PR #13; private central receipt is not connected.
 - Decision DEC-003: reporter account requirements and public/private visibility. Agent owns service/transport research; no embedded privileged GitHub token or automatic student payload.
 - Lookahead after platform plan; no homework or next-day decision assigned yet.
 
@@ -116,7 +116,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 
 - Reusable cloud environment: user supplied a successful web-development verification report on 2026-09-30; published setup, 152 tests, build, and browser flow. This records the supplied report, not current task-launch access.
 - Current chat tools: connected GitHub reads/writes and scheduled check-ins are verified. No callable Codex Cloud task-launch control was found in the current tools or the relevant plugin search.
-- F-005 setup investigation is explicitly approved. F-006/F-007/F-008 have approved priority/planning, not implementation; F-003/F-004 remain proposed outside that order. Preparing this queue does not approve features.
+- F-005 setup investigation is explicitly approved. F-006 and bounded F-007 implementation are approved October 1; F-008 remains discovery/planning. F-003/F-004 remain proposed outside that order. Preparing this queue does not approve features.
 - Evening behaviour: select one approved, unblocked, worthwhile task only when one exists. Create a complete work order; start it only through actual available execution/launch capability, then record the task ID/link and observed status. Otherwise record launch-pending with the exact blocker.
 - Last evening eligibility check: 2026-09-30, America/Toronto. Source: open PR #11 / codex/approved-plan-workflow; main lacks the newer planning records. No eligible implementation task: F-001/F-002 await reserved review, bounded F-005 probe is complete, and F-003/F-004/F-006/F-007/F-008 have no recorded implementation approval. PR #10/#11/#12 checks were inspected; package checks succeeded (PR #10 release job skipped). No work order, new task, merge, release, or repeated probe launched. User notification suppressed because the evening eligibility condition was unmet. Recurring check remains enabled for future approved work.
 
@@ -163,3 +163,8 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Daytime continuation created successfully, enabled around noon and 15:00 Toronto today only; task 6abe5f041bd48191a319ac67b7dc9a08. This establishes future wake-up configuration; those runs have not yet been observed. Existing scheduled prompts updated with actual approval.
 - F-007 local draft/preview/error handling implemented with seven focused tests. Central transport NOT CONNECTED; docs/BUG_REPORTING_INTAKE.md contains concrete private account-free receiving-service proposal. No new service/account/data-access/spending approved.
 - F-008 discovery: historical Markinator 3000 summary/audit/walkthrough found; actual latest source unavailable in accessible repositories/files. Needs current code-only archive or repository before source-specific integration. Historical voice was explicitly unimplemented; do not claim shipped voice/presets/analytics. Private source locations stay out of public Git.
+
+### October 1 revised implementation check
+
+- Draft PR #13 now uses source ee6545df39e462fe1f2c6b4368640fec4379229c. Initial Windows run36869731841 succeeded; initial Mac/iPad run36869731888 failed, exposing seat-move tap interception and skipped PR code signing. Both scoped repairs are in the revised source, with full actual-package recovery/mark/photo checks added. New exact-source runs36871250635 (Mac/iPad) and36871250607 (Windows) are observed running; no passing new-head UI claim yet.
+- Local revised source:159 tests, production/typecheck build and exact generated worker checks at root/subfolder passed. Current implementation is on codex/mac-ipad-support. HTTPS delivery, physical devices and private central report receiving remain explicit unmet milestones, not reasons to repeat implementation approval.
