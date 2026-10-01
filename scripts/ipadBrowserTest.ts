@@ -164,7 +164,7 @@ async function main() {
       return header?.cellIndex ?? -1;
     }, title);
     assert.ok(knowledgeColumn >= 0, 'New assessment K header must be visible in markbook');
-    const studentRow = page.locator('table tbody tr').filter({ has: page.getByRole('button', { name: `${editedStudent.preferredName} ${editedStudent.lastName}`, exact: true }) });
+    const studentRow = page.locator('table tbody tr').filter({ has: page.getByRole('button', { name: `${editedStudent.lastName}, ${editedStudent.preferredName}`, exact: true }) });
     assert.equal(await studentRow.count(), 1, 'Mark must be entered for the edited fictional student');
     await studentRow.locator('td').nth(knowledgeColumn).tap();
     await page.getByPlaceholder('e.g. 4+, 88%, 18/20').fill('88%');
