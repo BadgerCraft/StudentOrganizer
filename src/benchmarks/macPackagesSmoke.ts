@@ -111,6 +111,13 @@ async function checkApp(appPath: string, format: string) {
     assert.ok(event);
 
     await page.locator('[data-testid="student-settings-gear-btn"]').first().click();
+    // The settings form initializes its controlled fields in a React effect.
+    // Wait for existing required names before changing the fictional draft.
+    await page.waitForFunction(() => {
+      const first = document.querySelector<HTMLInputElement>('[data-testid="student-first-name-input"]');
+      const last = document.querySelector<HTMLInputElement>('[data-testid="student-last-name-input"]');
+      return !!first?.value && !!last?.value;
+    });
     await page.locator('[data-testid="student-preferred-name-input"]').fill(preferredName);
     const removePhoto = page.locator('[data-testid="remove-photo-btn"]');
     if (await removePhoto.isVisible()) await removePhoto.click();
@@ -120,7 +127,9 @@ async function checkApp(appPath: string, format: string) {
     });
     // Wait for the asynchronous image resize before committing the settings.
     await removePhoto.waitFor();
+    assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), preferredName);
     await page.locator('[data-testid="save-student-settings-btn"]').click();
+    await page.locator('[data-testid="student-settings-modal"]').waitFor({ state: 'hidden' });
     const students = await waitForRecords(page, 'students', rows => rows.some(row => row.preferredName === preferredName && row.photoUrl?.startsWith('data:image/')));
     const student = students.find(row => row.preferredName === preferredName);
     const enrollment = (await records(page, 'classEnrollments')).find(row => row.id === event.classEnrollmentId);
@@ -238,6 +247,16 @@ async function checkApp(appPath: string, format: string) {
       categoryPercentageAndFeedbackRetained: true, localPhotoRetained: true,
       fullBackupAllStores: true, invalidRestoreRejected: true, confirmedRecoveryAndRestart: true,
       backupEvidence: path.basename(backupPath), nativeSaveDialog: 'CI selects evidence destination; unverified' };
+  } catch (error) {
+    if (app) {
+      const failedPage = await app.firstWindow().catch(() => undefined);
+      if (failedPage && !failedPage.isClosed()) {
+        await failedPage.screenshot({ path: path.join(evidence, `${format}-failure.png`) }).catch(() => {});
+        const dialogText = await failedPage.locator('[data-testid="student-settings-modal"]').innerText().catch(() => 'Settings dialog closed');
+        console.error('Fictional package flow UI at failure:', dialogText);
+      }
+    }
+    throw error;
   } finally {
     await app?.close();
   }

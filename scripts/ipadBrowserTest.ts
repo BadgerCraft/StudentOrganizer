@@ -132,6 +132,13 @@ async function main() {
     await waitForRecords(page, 'participationEvents', rows => rows.some(row => row.note === 'Fictional iPad observation'));
     // Student profile form and local photo selection.
     await page.locator('[data-testid="student-settings-gear-btn"]').first().tap();
+    // The settings form initializes its controlled fields in a React effect.
+    // Wait for existing required names before changing the fictional draft.
+    await page.waitForFunction(() => {
+      const first = document.querySelector<HTMLInputElement>('[data-testid="student-first-name-input"]');
+      const last = document.querySelector<HTMLInputElement>('[data-testid="student-last-name-input"]');
+      return !!first?.value && !!last?.value;
+    });
     await page.locator('[data-testid="student-preferred-name-input"]').fill('Fictional Tablet');
     const removePhoto = page.locator('[data-testid="remove-photo-btn"]');
     if (await removePhoto.isVisible()) await removePhoto.tap();
@@ -139,7 +146,9 @@ async function main() {
     await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({ name: 'fictional.png', mimeType: 'image/png', buffer: readFileSync('dist/icon-180.png') });
     // FileReader + image resizing complete asynchronously; wait before saving.
     await removePhoto.waitFor({ state: 'visible' });
+    assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), 'Fictional Tablet');
     await page.locator('[data-testid="save-student-settings-btn"]').tap();
+    await page.locator('[data-testid="student-settings-modal"]').waitFor({ state: 'hidden' });
     const photoStudents = await waitForRecords(page, 'students', rows => rows.some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl?.startsWith('data:image/')));
     const editedStudent = photoStudents.find(row => row.preferredName === 'Fictional Tablet');
     assert.ok(editedStudent);
