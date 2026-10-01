@@ -46,3 +46,9 @@ Today's scheduled continuation actually resumed, published these bounded fixes a
 Next immediate action: inspect exact7b771c4 jobs/logs, resolve scoped photo/touch failures and collect a passing coherent-source result or a concrete reproducible blocker. Stable HTTPS delivery and private receipt remain dependent service decisions; source discovery still needs the current standalone code.
 
 October1 shared reference update: index/database v5, packaging v2 and browser/touch v1 saved and remotely verified. DB-003 includes actual Chromium full-flow evidence; PKG-003 separates committed records from settled visible cells; BRW-001 covers actual touch-hit geometry; BRW-002 retains the WebKit observation and Proposed stopped-origin check while current browser installation is pending. No device or receiver evidence inferred.
+
+## Browser execution retry — October1
+
+Attempt1 browser job110475375440 at unchanged source90a06c1 timed out/cancelled during Ubuntu mirror package downloads, before browser installation or app UI checks. Logs show package retrieval continuing slowly through libflite1 at16:58, then cancellation at17:00:30 UTC; no test screenshots were generated. This is a runtime dependency timeout, not a passing or failed app browser scenario. Completed native Apple Silicon/Intel and Windows jobs remain PASS for this source.
+
+GitHub successfully accepted a failed/incomplete-job retry of run36893625121 at17:01 UTC. No source edit or duplicate PR, no new automation; leave the continuation enabled while this transient execution failure is being retried. Next: inspect the retry's actual jobs/logs, retain prior successful native evidence and collect the exact browser outcome. If installation repeats the failure, fix only the supported CI runtime route rather than weakening the classroom/cache/recovery assertions.
