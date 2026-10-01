@@ -68,7 +68,7 @@ Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS
 
 ## F-005 — Establish overnight execution
 - Outcome: approved work can run while Tyler is away and return a factual result for morning review.
-- Status: bounded scheduled GitHub edit/check/report probe completed; general feature execution awaits an approved real implementation plan. Automatic Cloud dispatch remains unverified.
+- Status: approved real implementation trial underway October 1. Existing bounded documentation probe complete; automatic Cloud dispatch remains unverified.
 - Approval evidence: Tyler, 2026-09-30: "Sure, let's figure out the overnight execution path." He then explicitly requested subagents so Windows research and this setup proceed together.
 - Current authorised work: test scheduled execution, inspect supported launch mechanisms, prepare a bounded validation order, and document actual outcomes. No paid infrastructure, application feature, merge, or release is approved by this setup request.
 - Parallel work: Windows signing/distribution research and overnight launch research run independently; root coordinates and owns shared planning records.
@@ -88,18 +88,18 @@ Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS
 Detailed review plans, decision lookahead and source-backed current-feature inventory: [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Read this file before asking Tyler to rank earlier proposals again.
 
 ### F-006 — Mac and iPad support (priority 1)
-- Status: planning; proposed staged implementation, awaiting platform/data judgment and plan approval.
+- Status: approved implementation; Mac desktop plus iPad Home Screen app with independent local data and manual full-backup transfer initially. No automatic synchronization.
 - Teacher outcome: use the agreed classroom workflows on supported Mac/iPad devices with verified persistence and recovery.
-- Planning authorization: Tyler explicitly requested this first, September 30. Implementation/merge/release approval: none.
+- Planning authorization: September 30. Implementation approval: Tyler replied “Approved” October 1, 09:18 America/Toronto to the recommended daily scope. Merge/release approval: none.
 - Plan: shared compatibility baseline, Mac packaging and actual launch checks, chosen iPad delivery path/touch/offline/file handling, real-device verification, review handoff.
 - Decision DEC-002: delivery expectations and whether device-to-device synchronization belongs in first scope; current app has no live sync. Mac Electron and iPad Home Screen delivery are proposed candidates, not approved or verified.
 - Brief prepared September 30; complete brief not yet presented/assigned, next-day follow-up not set.
 - Optional documentation offered, 2026-09-30 afternoon: desktop packaging, iPad Home Screen delivery, and device synchronization for DEC-002. Tyler replied "Defer" at 16:47 America/Toronto on September 30; optional reading deferred. No replacement date requested. Do not repeat this unchanged offer at the next check-in; revisit when Tyler requests it or meaningful new decision material warrants it. This defers documentation only; no platform choice, implementation approval, or successful recall is inferred.
 
 ### F-007 — Central bug reporting (priority 2)
-- Status: planning; draft implementation plan awaits approval.
+- Status: bounded implementation approved: reporting draft/preview/error handling and safe metadata, plus private account-free intake investigation. Actual central submission requires an established route; new service/access/spending decisions remain separate.
 - Teacher outcome: easy report from app, accurate saved/submitted state, stable central record and fix linkage.
-- Planning authorization: Tyler explicitly requested this second, September 30. Implementation/merge/release approval: none.
+- Planning authorization: September 30. Bounded implementation approval: Tyler’s October 1 “Approved” to the recommended daily scope. Merge/release approval: none.
 - Plan: report entry/preview, safe build/platform context, reliable intake/offline handling, canonical docs/BUG_REPORTS.md ledger, triage and end-to-end arrival verification. The ledger/reporting feature is proposed, not yet implemented.
 - Decision DEC-003: reporter account requirements and public/private visibility. Agent owns service/transport research; no embedded privileged GitHub token or automatic student payload.
 - Lookahead after platform plan; no homework or next-day decision assigned yet.
@@ -145,3 +145,12 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 ### WF-001 reuse policy — Tyler's choice, October 1
 - Actual instruction: “No, I think that measured approach makes sense - apply it”. Declined further example; selected proportional applicability checks.
 - Policy: quick comparison for familiar matching technology/assumptions; deeper investigation when mismatches, stored records or recovery make errors consequential. Agent owns comparison and verification without routine permission questions. Existing skill already requires context comparison; this refines depth, not new feature scope. No merge/release approval inferred.
+
+
+## Daily authorization — October 1, 09:18 America/Toronto
+- Actual reply: Tyler: “Approved”, in response to recommended items 1–3 in DAILY_TASKS_2026-10-01.md.
+- Authorized: F-005 one bounded daytime implementation trial using existing access; F-006 Mac desktop plus iPad Home Screen app with manual full-backup transfer initially, live sync deferred; F-007 private account-free reporting experience, local drafts/preview/error handling/safe metadata, and central transport research.
+- New hosting/account/data-access/spending choices require a concrete review. Real platform support needs actual Mac/iPad evidence; physical iPad and HTTPS delivery are not established.
+- F-008 source discovery remains authorized; integration not approved. Merge/release remain reserved. No need to repeat implementation approval.
+- Active implementation branch: codex/mac-ipad-support, based on main a608e01913b7c8ec211fcbac18f9bf325d05402f. Coordinator owns shared planning writes; parallel iPad/bug-report workers have separate files. Actual session implementation started; background schedule/task evidence recorded after tool confirmation.
+- Work order: docs/work-orders/DAYTIME-2026-10-01.md on this planning branch. Daily agenda saved separately as DAILY_TASKS_2026-10-01.md; repository queue is execution authorization source for scheduled runs.
