@@ -151,22 +151,23 @@ async function checkApp(appPath: string, format: string) {
     const backupPath = path.join(evidence, `${format}-fictional-backup.json`);
     // Observe the actual Electron download. CI chooses only the save destination;
     // it does not exercise the native save dialog or fabricate backup bytes.
-    // Literal JS also avoids tsx's function-name helpers crossing process boundaries.
-    await app.evaluate(`({ BrowserWindow }, savePath) => {
-      globalThis.__fictionalBackupDownload = { state: 'pending' };
+    // Keep callbacks inline so tsx's name helpers do not cross process boundaries.
+    await app.evaluate(({ BrowserWindow }, savePath) => {
+      (globalThis as any).__fictionalBackupDownload = { state: 'pending' };
       BrowserWindow.getAllWindows()[0].webContents.session.once('will-download', (_event, item) => {
         item.setSavePath(savePath);
         item.once('done', (_doneEvent, state) => {
-          globalThis.__fictionalBackupDownload = {
+          (globalThis as any).__fictionalBackupDownload = {
             state, filename: item.getFilename(), savedPath: item.getSavePath(), bytes: item.getReceivedBytes()
           };
         });
       });
-    }`, backupPath);
+    }, backupPath);
+    assert.equal((await app.evaluate(() => (globalThis as any).__fictionalBackupDownload)).state, 'pending', 'Real session download listener must be registered');
     await page.locator('[data-testid="create-backup-btn"]').click();
     let downloaded: { state: string; filename?: string; savedPath?: string; bytes?: number } = { state: 'pending' };
     for (let attempt = 0; attempt < 300; attempt++) {
-      downloaded = await app.evaluate('() => globalThis.__fictionalBackupDownload');
+      downloaded = await app.evaluate(() => (globalThis as any).__fictionalBackupDownload);
       if (downloaded.state !== 'pending') break;
       await page.waitForTimeout(100);
     }

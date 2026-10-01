@@ -50,7 +50,7 @@ The physical device QA owner must record iPad model, iPadOS/Safari version and e
 
 ## Component learning applicability
 
-Consulted Reuse Component Lessons index v2 (October 1) and workflow backlog v1. Its only current DB-001/DB-002 lessons come from a Python SQLite pilot, with no StudentOrganizer finding. Their engine-specific transaction conclusions do not establish WebKit/Dexie/cache durability. No matching PWA lesson exists; retained the app's existing Dexie restore validation/transaction and used complete-build cache and offline/backup checks here. New reusable PWA observations can be proposed after real browser evidence; none is promoted to Verified from an unexecuted browser script.
+Consulted Reuse Component Lessons index v2 (October 1) and workflow backlog v1. Its only current DB-001/DB-002 lessons come from a Python SQLite pilot, with no StudentOrganizer finding. Their engine-specific transaction conclusions do not establish WebKit/Dexie/cache durability. No matching PWA lesson exists; retained the app's existing Dexie restore validation/transaction and used complete-build cache and offline/backup checks here. New reusable PWA observations can be proposed after real browser evidence; none is promoted to Verified from an unexecuted browser script. After the occupied-seat defect was reproduced and repaired, database/index v3 added DB-003 for the three locally verified Dexie swap regressions. That directly applies to this shared seating service; complete browser flow still needs CI evidence.
 
 ## Primary sources checked October 1, 2026
 
