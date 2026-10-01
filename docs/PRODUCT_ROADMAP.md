@@ -134,6 +134,18 @@ Agent research first: actual source/data format and compatible import/reuse path
 - Presented date/follow-up: not assigned.
 
 
+## October 1 delivery proposal — decision prepared, no hosting enabled
+
+Recommend GitHub Pages for the first **fictional-data iPad QA** delivery if Tyler accepts a publicly accessible application address. It can use the existing public StudentOrganizer repository and GitHub account; no new provider account or paid plan is proposed. GitHub documents Pages availability for public repositories on GitHub Free, static HTML/CSS/JS hosting, and HTTPS. Proposed project address, not a live/verified deployment: `https://badgercraft.github.io/StudentOrganizer/`.
+
+Why Tyler decides: publishing makes the application website publicly reachable; local classroom storage remains on the device under the current code, and reports still need their own private receiver. GitHub logs visitors' IP addresses for security. This proposal includes fictional QA only and does not authorize real-student use. A stable origin matters: another site's address has a separate local database, so changing hosts later needs deliberate full-backup transfer. Paths on one origin do not isolate this application's named IndexedDB.
+
+After separate hosting/publication approval: confirm repository Pages settings through an authorized administrator; build the reviewed commit at the project path; publish only built application assets, never classroom files; verify HTTPS, manifest/icon paths, complete cache, update waiting and recovery at that actual address; then perform physical Home Screen/Files/keyboard/airplane-mode QA. The current connector has not established Pages administration/deployment capability. Do not claim this proposed address works or automatically deploy on every PR.
+
+Alternative: an explicitly approved Netlify account/site could combine static hosting and its private Forms intake, but current account/plan/access and form detection must be established first. The separate researched Formspree proposal remains in PR13's BUG_REPORTING_INTAKE.md. No option is adopted by this brief.
+
+Official sources checked October1: [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages), [HTTPS/public visibility](https://docs.github.com/en/pages/getting-started-with-github-pages/securing-your-github-pages-site-with-https). This brief is saved for Tyler's return; no answer, assigned homework, recall or new approval is inferred.
+
 ## Current feature cross-reference
 
 Evidence: source inspection at the pinned main commit above on September 30, 2026. “Present” means an implemented UI/service path was found; it does not mean every row received a fresh end-to-end run. The scheduled probe separately passed 152 tests, production build/Windows packaging and the unpacked Electron assessment/restart check. Proposed PR #10 improvements are not counted as main features.
