@@ -141,3 +141,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Explicit approval: Tyler: “Yes, approved WF001”. Bounded implementation complete; [pilot report](work-orders/WF-001-2026-10-01.md).
 - Reuse Component Lessons installed with authoritative shared references outside application repositories. Independent fictional SQLite pilot passed and coordinating agent reran checks; context mismatch, uncertain comment, supersession and two-proposal integration recorded with limits.
 - Project agent pointer prepared on PR #11; merge pending, release not requested. Product F-006/F-007/F-008 implementation remains unapproved. No new automation or paid infrastructure.
+
+### WF-001 reuse policy — Tyler's choice, October 1
+- Actual instruction: “No, I think that measured approach makes sense - apply it”. Declined further example; selected proportional applicability checks.
+- Policy: quick comparison for familiar matching technology/assumptions; deeper investigation when mismatches, stored records or recovery make errors consequential. Agent owns comparison and verification without routine permission questions. Existing skill already requires context comparison; this refines depth, not new feature scope. No merge/release approval inferred.
