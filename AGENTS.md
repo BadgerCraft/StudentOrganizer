@@ -65,3 +65,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - The V6.6 browser fixture has a UTC/Toronto date mismatch and a mark-scale version ID mismatch; fix them in a focused test follow-up.
 - Existing V6.5 databases may still hold Chen/MCV4U test seeds. Decide whether any particular installation needs a backed-up cleanup.
 - Remaining direct UI writes and the Assessment Hub/Markbook UX need prioritization by concrete workflow risk. They are not automatically blockers to fictional-data QA.
+
+## Shared component lessons
+
+For component planning, implementation and meaningful fixes, use the installed `reuse-component-lessons` skill. Locate it by name in the skill catalog/personal collection, read its component index and relevant lessons, and record IDs/version/applicability plus concrete design or verification effects in the work order. Record evidence-backed fixes and attributed comments through its update procedure. This shared collection lives outside StudentOrganizer; do not duplicate authoritative documents here. If unavailable, disclose the access gap and use only a clearly dated snapshot when provided. Lessons do not authorize extra product scope. WF-001 bounded pilot approved by Tyler October 1; see docs/work-orders/WF-001-2026-10-01.md for evidence. Merge/release remain separate.
