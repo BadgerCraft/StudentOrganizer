@@ -226,7 +226,8 @@ async function main() {
     page = context.pages()[0] || await context.newPage();
     latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(url);
+    const reopenedResponse = await page.goto(url);
+    assert.equal(reopenedResponse?.fromServiceWorker(), true, 'Reopened shell must come from its service worker, not an HTTP cache');
     await selectTeacher(page);
     await openAssessmentHub(page);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
