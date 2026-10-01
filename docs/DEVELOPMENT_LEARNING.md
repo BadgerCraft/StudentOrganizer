@@ -137,7 +137,7 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Date/source: 2026-09-30; Tyler prioritized Mac/iPad support and the agent introduced the distinction while drafting the roadmap.
 - Explanation: A desktop package runs on a chosen computer platform. A Home Screen web app uses browser technology behind an app icon. Device synchronization transfers and reconciles records between devices; installing the app on two devices does not synchronize their data.
 - Project example: Current StudentOrganizer has local IndexedDB records and Windows packaging. F-006 proposes Mac packaging and an iPad delivery path; current sync infrastructure is a mock and does not keep class records synchronized.
-- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no recall answer recorded and no platform/sync option selected.
+- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no recall answer recorded and October1 approval selects Mac Electron/iPad Home Screen and manual full-backup transfer initially; live sync deferred. This product choice is not a recall answer.
 - Recall stage: 0. Last review: none. Next due: 2026-10-01; if this explanation has not actually been read/presented, introduce it before asking retrieval.
 - Retrieval question: If StudentOrganizer opens on both a Mac and an iPad, what extra capability would keep the same class records up to date on both?
 
@@ -145,7 +145,7 @@ When a new question revisits an existing concept, append it to that entry. Creat
 - Date/source: 2026-09-30; Tyler prioritized easy reports into a central file; terminology introduced in the draft plan.
 - Explanation: A locally saved draft remains on the reporter's device. Central receipt means a shared collection point actually accepted the report. A build identifier identifies the exact app version to reproduce a problem.
 - Project example: F-007 must retain an offline report without claiming it has reached the proposed BUG_REPORTS ledger. A successful submission has a durable ID and a central record.
-- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no answer recorded. This reporting feature is not yet implemented or approved.
+- Clarification status: Explanation prepared in PRODUCT_ROADMAP.md; no answer recorded. That was the September30 planning state. October1 bounded implementation is approved and verified: drafts remain local/unsent; central receipt is not connected.
 - Recall stage: 0. Last review: none. Next due: 2026-10-01; introduce the explanation before retrieval if not yet presented/read.
 - Retrieval question: What is the difference between a bug report saved on an offline iPad and one received in the central file?
 
@@ -157,10 +157,10 @@ Append dated records with concept ID, the actual response (or a faithful short s
 
 ## Current step and direction
 
-- Current step: establish standing working rules and the learning process in PR #11.
+- Current step: bounded approved Mac/iPad and local-report code/checks are ready for review in PR13 at ac44af3; workflow rules remain proposed for merge in PR11.
 - Completed earlier: the reusable cloud environment passed the supplied web-development verification.
 - Current queue and research: see `docs/FEATURE_QUEUE.md`. The earlier F-002 / DEC-001 homework assignment was withdrawn; technical signing research belongs to the agent. F-005 tracks the overnight execution setup and actual probe.
-- Next application plan: select a feature and define its outcome, milestones, and completion checks. Proposed features are not automatically approved.
+- Next application milestone: review the prepared HTTPS delivery/private-receiver choices and arrange physical device validation. F-006 and bounded F-007 implementation were approved October1; F-008 integration remains unapproved. Learning questions await Tyler's return; no new answers/recall inferred.
 - 2026-09-30 direction recorded: Tyler specified the three daily times and next-day decision follow-ups. A successful stop/continue response is now recorded under DEV-007; no other recall success is inferred.
 
 ### DEV-013 — Reusable lessons and applicability
@@ -178,7 +178,7 @@ Append dated records with concept ID, the actual response (or a faithful short s
 ### DEV-014 — Unique indexes and an atomic swap
 - Date/source: 2026-10-01; agent encountered the existing occupied-seat swap defect during approved platform verification.
 - Explanation prepared for return: A unique index enforces one record per chosen key, such as one occupant at a layout/row/column coordinate. A transaction groups related changes so failure rolls them back together. Updating one occupant into another's occupied coordinate can still fail immediately inside a transaction. This fix removes the old coordinate rows and inserts both new positions in the same transaction, retaining their identities and recording both changes.
-- Project evidence: source935ad143 local seatingSwap regression tests pass for successful swap, injected audit failure rollback and unauthorized rejection. Integrated162 tests/build passed. Chromium source830c4ce/run36892338859 completed the entire touch/classroom/backup/offline-reopen scenario. WebKit completed classroom/recovery before an independent offline-emulation failure. Physical iPad remains unverified; current90a06c1 browser check is waiting for engine installation.
+- Project evidence: source935ad143 local seatingSwap regression tests pass for successful swap, injected audit failure rollback and unauthorized rejection. Integrated162 tests/build passed. Chromium source830c4ce/run36892338859 completed the entire touch/classroom/backup/offline-reopen scenario. WebKit completed classroom/recovery before an independent offline-emulation failure. Current sourceac44af3/run36898900839 passes the full Chromium and WebKit classroom/recovery/cached-reopen flows. Physical iPad remains unverified.
 - Clarification/recall status: explanation saved for return; no question asked during the noninteractive continuation, no user response or successful recall inferred. Review stage0; set the first due date after the explanation is actually presented.
 - Prepared retrieval question: How do a unique index and a transaction each protect a two-student seat swap?
 - Shared component reference: Reuse Component Lessons database/index v5, DB-003. Saved and remotely verified October 1.
@@ -186,7 +186,7 @@ Append dated records with concept ID, the actual response (or a faithful short s
 ### DEV-015 — Cached reopening and an origin outage
 - Date/source: October1; agent explanation during platform verification, with review saved for Tyler's return.
 - Explanation provided briefly: a service worker is the browser component that serves cached application files. An origin outage means the server supplying those files is unavailable. Testing cached reopening with a stopped server differs from simulating an offline network or using physical iPad airplane mode.
-- Project example: the latest browser test stops its origin and requires the reopened document to come from the service worker. Chromium also uses the network-offline flag. WebKit's offline-emulation failure matches an upstream report; its stopped-origin check remains pending current execution.
+- Project example: the latest browser test stops its origin and requires the reopened document to come from the service worker. Chromium also uses the network-offline flag. WebKit's offline-emulation failure matches an upstream report; sourceac44af3/run36898900839 now passes stopped-origin reopening in both engines, with service-worker provenance and retained records; Chromium additionally uses network-offline emulation. This does not establish physical-device airplane mode.
 - Actual answers/recall: none; deferred, no successful understanding inferred. Stage0; first review due October2 after the brief explanation; do not repeat already asked questions.
 - Prepared retrieval question: Why would cached reopening with a stopped server still leave a physical iPad airplane-mode check to do?
 - Current direction: finish authorized exact-source checks; hosting/publication, private receipt and device access are concrete dependent milestones, not new implementation approval requests.
