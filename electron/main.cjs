@@ -22,7 +22,14 @@ function createWindow() {
 
   // Remove default menu bar for clean teacher desktop experience
   if (process.env.NODE_ENV !== 'development') {
-    Menu.setApplicationMenu(null);
+    if (process.platform === 'darwin') {
+      // Native edit roles keep Command-C/V and standard Mac window actions available.
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        { role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }
+      ]));
+    } else {
+      Menu.setApplicationMenu(null);
+    }
   }
 
   // Load packaged local Vite build

@@ -23,6 +23,7 @@ import { parseRosterText } from '../services/rosterParser';
 import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
+import { downloadFile } from '../utils/downloadFile';
 
 interface ImportExportModalProps {
   classSection: ClassSection | null;
@@ -130,6 +131,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         setRosterText(text);
       }
     };
+    reader.onerror = () => alert('The selected file could not be read. Try a local copy in Files.');
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -140,12 +142,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const csv = await portability.exportClassMarkbookCSV(classSection.id, null);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Markbook-${classSection.sectionNumber}-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, `Markbook-${classSection.sectionNumber}-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
       alert(err.message);
     }
@@ -156,12 +153,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const csv = await portability.exportParticipationEventsCSV(classSection.id);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
       alert(err.message);
     }
@@ -172,13 +164,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const json = await portability.createFullBackupJSON();
       const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setBackupDownloadStatus('Application backup downloaded successfully!');
+      downloadFile(blob, `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`);
+      setBackupDownloadStatus('Backup download requested. Check Downloads or Files before leaving this device.');
       setTimeout(() => setBackupDownloadStatus(null), 5000);
     } catch (err: any) {
       alert(err.message);
@@ -210,6 +197,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         setRestoreError(err.message || 'Invalid backup file.');
       }
     };
+    reader.onerror = () => setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -663,7 +651,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Download Full Application Backup</h3>
               <p className="text-xs text-slate-600 mt-1">
-                Generates a secure offline snapshot of all your classes, students, marks, and settings.
+                Generates an offline JSON snapshot of all your classes, students, marks, and settings. The file is not encrypted.
               </p>
             </div>
             <div>
@@ -689,7 +677,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Restore from Backup File</h3>
               <p className="text-xs text-slate-600 mt-1">
-                Select a previously saved backup file from your computer.
+                Select a previously saved backup file from this device or Files. Restoring replaces this device’s records; changes from different devices are not combined.
               </p>
             </div>
 

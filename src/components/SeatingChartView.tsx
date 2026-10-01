@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   Unlock,
@@ -71,6 +71,16 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showRandomConfirm, setShowRandomConfirm] = useState(false);
   const [draggedSeat, setDraggedSeat] = useState<SeatPosition | null>(null);
+  const [tapMoveMode, setTapMoveMode] = useState(false);
+  const [tapMoveSource, setTapMoveSource] = useState<SeatPosition | null>(null);
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTapMoveMode(false);
+    setTapMoveSource(null);
+    setMoveError(null);
+  }, [layout.id, layout.isLocked]);
 
   const seatingService = new SeatingDomainService(db);
   const attendanceService = new AttendanceService(db);
@@ -208,6 +218,34 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId, id.userId, id.deviceId);
     setDraggedSeat(null);
     onRefresh();
+  };
+
+  const handleTapSeat = async (row: number, col: number, seat: SeatPosition | null) => {
+    if (!tapMoveMode) {
+      if (seat) onToggleSelectStudent(seat.classEnrollmentId);
+      return;
+    }
+    if (layout.isLocked || moveBusy) return;
+    if (!tapMoveSource) {
+      if (seat) setTapMoveSource(seat);
+      return;
+    }
+    if (tapMoveSource.id === seat?.id) {
+      setTapMoveSource(null);
+      return;
+    }
+    setMoveBusy(true);
+    setMoveError(null);
+    try {
+      const identity = await getIdentity();
+      await seatingService.assignSeat(layout.id, row, col, tapMoveSource.classEnrollmentId, identity.userId, identity.deviceId);
+      setTapMoveSource(null);
+      onRefresh();
+    } catch (error) {
+      setMoveError(error instanceof Error ? error.message : 'Seat move failed. Try again.');
+    } finally {
+      setMoveBusy(false);
+    }
   };
 
   return (
@@ -399,6 +437,18 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
       </div>
 
       {/* Seating Grid */}
+      {!layout.isLocked && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+          <button type="button" data-testid="tap-move-seats-btn" aria-pressed={tapMoveMode}
+            disabled={moveBusy}
+            className="rounded-xl border border-blue-200 bg-white px-4 py-2 font-semibold text-blue-800"
+            onClick={() => { setTapMoveMode(!tapMoveMode); setTapMoveSource(null); setMoveError(null); }}>
+            {tapMoveMode ? 'Done moving seats' : 'Move seats by tapping'}
+          </button>
+          {tapMoveMode && <p role="status">{moveBusy ? 'Saving seat move…' : tapMoveSource ? 'Tap the destination seat to move or swap. Tap the same student to cancel.' : 'Tap a student, then tap a destination seat. Occupied seats swap.'}</p>}
+          {moveError && <p role="alert" className="text-rose-700">{moveError}</p>}
+        </div>
+      )}
       <div className="overflow-x-auto pb-24">
         <div
           className="grid gap-3 mx-auto justify-center"
@@ -413,6 +463,12 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                 return (
                   <div
                     key={`empty-${r}-${c}`}
+                    data-testid="empty-seat-card"
+                    role={tapMoveMode ? 'button' : undefined}
+                    tabIndex={tapMoveMode ? 0 : undefined}
+                    aria-label={`Empty seat row ${r + 1} column ${c + 1}`}
+                    onClick={() => handleTapSeat(r, c, null)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void handleTapSeat(r, c, null); } }}
                     onDragOver={e => e.preventDefault()}
                     onDrop={() => handleDrop(r, c)}
                     className={`rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 text-xs font-medium hover:border-blue-300 transition ${
@@ -445,22 +501,22 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   data-testid="student-seat-card"
                   role="button"
                   tabIndex={0}
-                  aria-pressed={isSelected}
-                  draggable={!layout.isLocked}
+                  aria-pressed={tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected}
+                  draggable={!layout.isLocked && !tapMoveMode}
                   onDragStart={() => handleDragStart(seatPos)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={() => handleDrop(r, c)}
-                  onClick={() => onToggleSelectStudent(enr!.id)}
+                  onClick={() => handleTapSeat(r, c, seatPos)}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      onToggleSelectStudent(enr!.id);
+                      void handleTapSeat(r, c, seatPos);
                     }
                   }}
                   className={`relative rounded-2xl border transition-all cursor-pointer select-none p-3 flex flex-col justify-between ${
                     layout.cardSize === 'compact' ? 'h-20' : 'h-28'
                   } ${
-                    isSelected
+                    (tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected)
                       ? 'ring-2 ring-blue-600 border-blue-600 bg-blue-50/60 shadow-md scale-[1.02]'
                       : isAbsent
                       ? 'bg-slate-100 border-slate-300 opacity-60'

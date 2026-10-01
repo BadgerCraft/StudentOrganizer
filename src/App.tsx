@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { seedDatabase } from './db/seeds';
 import { Header } from './components/Header';
+import { BugReportModal } from './components/BugReportModal';
 import { DashboardView } from './components/DashboardView';
 import { SeatingChartView } from './components/SeatingChartView';
 import { MarkbookView } from './components/MarkbookView';
@@ -55,6 +56,7 @@ export function App() {
   const switchingFromTeacherIdRef = useRef<UUID | null>(null);
   const isSelectionCommittedRef = useRef<boolean>(false);
   const [isTeacherSelectorOpen, setIsTeacherSelectorOpen] = useState(false);
+  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
   const handleOpenStudentSettings = (student: Student) => {
@@ -425,7 +427,10 @@ export function App() {
         onSelectClass={handleSelectClass}
         currentUser={currentUser}
         onOpenTeacherSelector={handleStartSwitchTeacher}
+        onReportProblem={() => setIsBugReportOpen(true)}
       />
+
+      <BugReportModal isOpen={isBugReportOpen} onClose={() => setIsBugReportOpen(false)} currentView={currentView} />
 
       {/* Identity Error Banner */}
       {identityError && (

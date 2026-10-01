@@ -1,0 +1,83 @@
+name: Mac packages and iPad browser checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-ipad-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      QA_ARCH: ${{ matrix.arch }}
+      VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Package Mac disk image and archive
+        run: npm run package:mac -- --${{ matrix.arch }} --publish never
+      - name: Launch actual disk-image and archive apps; check restart persistence
+        run: npm run test:mac:packages
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OntarioTeacherAssessment-Mac-${{ matrix.arch }}-${{ github.run_number }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/mac-smoke/**
+          if-no-files-found: error
+          retention-days: 90
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Check complete offline shell and update behaviour
+        run: node scripts/verifyOfflineShell.cjs
+      - name: Check touch and offline classroom flows in Chromium
+        run: node --import tsx scripts/ipadBrowserTest.ts
+      - name: Check WebKit browser compatibility
+        run: node --import tsx scripts/ipadBrowserTest.ts
+        env:
+          IPAD_TEST_BROWSER: webkit
+      - name: Check bug-report draft recovery and failures
+        run: node --import tsx src/benchmarks/bugReportSmokeTest.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPad-browser-evidence-${{ github.run_number }}
+          path: screenshots/**
+          if-no-files-found: warn
+          retention-days: 90
