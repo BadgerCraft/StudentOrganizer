@@ -68,7 +68,7 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 
 ## F-005 — Establish overnight execution
 - Outcome: approved work can run while Tyler is away and return a factual result for morning review.
-- Status: running investigation; automatic Cloud dispatch not yet proven.
+- Status: bounded scheduled GitHub edit/check/report probe completed; general feature execution awaits an approved real implementation plan. Automatic Cloud dispatch remains unverified.
 - Approval evidence: Tyler, 2026-09-30: "Sure, let's figure out the overnight execution path." He then explicitly requested subagents so Windows research and this setup proceed together.
 - Current authorised work: test scheduled execution, inspect supported launch mechanisms, prepare a bounded validation order, and document actual outcomes. No paid infrastructure, application feature, merge, or release is approved by this setup request.
 - Parallel work: Windows signing/distribution research and overnight launch research run independently; root coordinates and owns shared planning records.
@@ -118,7 +118,7 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - Current chat tools: connected GitHub reads/writes and scheduled check-ins are verified. No callable Codex Cloud task-launch control was found in the current tools or the relevant plugin search.
 - F-005 setup investigation is explicitly approved. F-006/F-007/F-008 have approved priority/planning, not implementation; F-003/F-004 remain proposed outside that order. Preparing this queue does not approve features.
 - Evening behaviour: select one approved, unblocked, worthwhile task only when one exists. Create a complete work order; start it only through actual available execution/launch capability, then record the task ID/link and observed status. Otherwise record launch-pending with the exact blocker.
-- Last evening report: none.
+- Last evening eligibility check: 2026-09-30, America/Toronto. Source: open PR #11 / codex/approved-plan-workflow; main lacks the newer planning records. No eligible implementation task: F-001/F-002 await reserved review, bounded F-005 probe is complete, and F-003/F-004/F-006/F-007/F-008 have no recorded implementation approval. PR #10/#11/#12 checks were inspected; package checks succeeded (PR #10 release job skipped). No work order, new task, merge, release, or repeated probe launched. User notification suppressed because the evening eligibility condition was unmet. Recurring check remains enabled for future approved work.
 
 ## Decision history
 
