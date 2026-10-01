@@ -68,7 +68,7 @@ Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS
 
 ## F-005 — Establish overnight execution
 - Outcome: approved work can run while Tyler is away and return a factual result for morning review.
-- Status: approved real implementation trial underway October 1. Existing bounded documentation probe complete; automatic Cloud dispatch remains unverified.
+- Status: bounded daytime continuation edit/check/report iteration established October1; current platform verification continues. Existing documentation probe complete; automatic Cloud dispatch remains unverified.
 - Approval evidence: Tyler, 2026-09-30: "Sure, let's figure out the overnight execution path." He then explicitly requested subagents so Windows research and this setup proceed together.
 - Current authorised work: test scheduled execution, inspect supported launch mechanisms, prepare a bounded validation order, and document actual outcomes. No paid infrastructure, application feature, merge, or release is approved by this setup request.
 - Parallel work: Windows signing/distribution research and overnight launch research run independently; root coordinates and owns shared planning records.
@@ -168,3 +168,10 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 
 - Draft PR #13 now uses source ee6545df39e462fe1f2c6b4368640fec4379229c. Initial Windows run36869731841 succeeded; initial Mac/iPad run36869731888 failed, exposing seat-move tap interception and skipped PR code signing. Both scoped repairs are in the revised source, with full actual-package recovery/mark/photo checks added. New exact-source runs36871250635 (Mac/iPad) and36871250607 (Windows) are observed running; no passing new-head UI claim yet.
 - Local revised source:159 tests, production/typecheck build and exact generated worker checks at root/subfolder passed. Current implementation is on codex/mac-ipad-support. HTTPS delivery, physical devices and private central report receiving remain explicit unmet milestones, not reasons to repeat implementation approval.
+
+### Latest continuation handoff — October1
+
+- PR13 current source7b771c4ab23d855c4753f29e9dd017d2409cff5d. Source93a639c passed actual native arm64/x64 DMG/ZIP signature, marks/photo/notes/full recovery/restart and bug-report draft browser checks, plus Windows CI. A subsequent narrow-grid UI repair atc73692c has not yet passed Mac photo validation; do not call current head platform-complete from older results.
+- Latest Mac/iPad run36891506058 pending and Windows run36891506078 running at entry.162 integrated tests and production build have passed on the repaired app; current harness typecheck passed. The report records exact failures, repairs and next milestone.
+- Shared component index/database v4 + packaging v1 saved and remotely verified. DB-003, PKG-001 and PKG-002 have bounded actual evidence; physical iPad, Gatekeeper/native dialogs and receiving service remain unverified.
+- October1 12:16 “Approved” reaffirms continuing scope; no extra provider/access/spending/merge/release authorization specified. Continue bounded verification without repeated implementation questions.
