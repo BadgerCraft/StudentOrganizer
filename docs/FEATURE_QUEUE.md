@@ -1,6 +1,6 @@
 # Feature and decision queue
 
-Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. Priority approves planning, not feature implementation. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
+Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. Priority approves planning, not feature implementation. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
 ## Queue discipline
 
@@ -22,12 +22,12 @@ Updated: 2026-09-30. This is the shared queue for StudentOrganizer. Read `AGENTS
 - Branch/PR: `codex/approved-plan-workflow`, [PR #11](https://github.com/BadgerCraft/StudentOrganizer/pull/11).
 - Completion checks: documentation references resolve; schedules confirmed enabled; GitHub access tested; actual overnight launch capability distinguished from a prepared order.
 - Merge approval: pending. Release approval: none requested.
-- Dependency: reconcile shared AGENTS/workflow changes with PR #10 during the merge sequence; the agent owns routine conflict resolution.
+- Dependency: shared AGENTS/workflow files reconciled October 1 to identical content on PR #10 and #11. Recommended reserved merge sequence: #11 first to supply referenced planning records, then recheck #10's integration/checks before merging. Root owns any remaining routine conflicts.
 - Next decision: review and approve merging the final workflow changes.
 
 ## F-002 — Windows colleague QA handoff
 - Teacher outcome: colleagues can identify the exact fictional-data QA build, launch it, and retain an assessment after restart.
-- Status: ready-for-review; based on PR #10's report, recheck current PR/checks at briefing time.
+- Status: review prepared; refreshed exact-head checks pending after October 1 instruction reconciliation. Earlier application verification remains successful; do not call the new head merge-ready until its checks complete.
 - Plan/evidence: [PR #10](https://github.com/BadgerCraft/StudentOrganizer/pull/10), branch `codex/windows-qa-handoff`. PR reports 152 passing tests, production build, actual portable and installed-app launches/restarts on Windows, and identifiable QA artifacts.
 - Current measured package status: both files NotSigned, publisher null. A colleague's downloaded-file prompts and device policy have not been tested.
 - Completion checks still distinct: colleague download/launch feedback; explicit approval before publishing any prerelease/tag.
@@ -125,3 +125,14 @@ Detailed review plans, decision lookahead and source-backed current-feature inve
 - 2026-09-30: Tyler explicitly requested daily 08:15 approval/research briefing, 16:00 learning plus optional documentation, and conditional 20:15 overnight-work check-in, all America/Toronto. These times supersede the earlier suggested 4–6-hour progress-check cadence and 15:00 learning reminder.
 - 2026-09-30: Tyler clarified that personal research packages should build his knowledge for consequential choices; technical fact-finding belongs to the agent. He requested terminology-focused learning checks and parallel subagents for overnight setup and Windows QA research.
 - Research decisions about application features remain pending until Tyler actually chooses.
+
+
+## Morning briefing — 2026-10-01, America/Toronto
+
+- Planning source: open PR #11, `codex/approved-plan-workflow`; current main remains a608e01913b7c8ec211fcbac18f9bf325d05402f and lacks the newer queue/roadmap/learning records.
+- Completed: bounded F-005 test remains successful at exact PR #12 source 65df51d143398126027d1aa81fad73c23870674c and run 36747961539. No eligible feature implementation was authorized overnight, and none was launched. No repeated probe, merge, or release.
+- Reserved approvals: F-001/#11 workflow-document merge; F-002/#10 Windows QA merge after refreshed checks and #11 integration; WF-001 separate workflow-improvement implementation plan. No new approval inferred from priority, silence, or documentation deferral.
+- Shared-file overlap handled: PR #10 AGENTS.md and docs/CODING_WORKFLOW.md now match #11. Documentation-only commits 1b677e446bc24d53e2ad719d30b4351882df8d5e and cabe98d8280503b5dd954b7f6a2621a1e488358a; no application/CI configuration edited. New-head automatic checks must be observed before claiming success. Earlier run 36723299899 verified 152 tests, build and actual portable/installed app restart; colleague-device prompts and publication remain unverified.
+- Lookahead: F-006 remains first; initial Mac/iPad scope still needs delivery/data-transfer judgment before implementation approval. F-007 requires account/visibility judgment when its plan is reviewed. F-008 requires accessible latest marking-app source before source-specific integration planning. No invented database issue.
+- Research assigned today: none. No genuine decision-learning brief has been assigned for next-day follow-up. Signing homework remains withdrawn. Optional DEC-002 reading remains deferred per Tyler's September 30 reply; no replacement date or feature decision inferred. Term recall belongs to the afternoon check-in.
+- WF-001 (separate workflow backlog): Tyler requested an implementation plan for shared component lessons and future-agent reuse, for October 1 review. Existing WORKFLOW_IMPROVEMENTS_IMPLEMENTATION_PLAN.md is DRAFT, awaiting actual implementation approval. Proposed bounded scope: minimal versioned lesson documents, evidence/status rules, relevant retrieval/update instructions, one fictional-data pilot, and review package. No service provisioning, spending, application database redesign, merge, or release. Planning completed; implementation not started. Review recommendation: approve this bounded scope if it matches Tyler's intent; preserve the separate product priority order.
