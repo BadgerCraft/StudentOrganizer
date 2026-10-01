@@ -82,6 +82,8 @@ async function main() {
   mkdirSync(evidenceDir, { recursive: true });
   let context: BrowserContext | undefined;
   let latestPage: Page | undefined;
+  const errors: string[] = [];
+  const failedLoads: string[] = [];
   try {
     context = await engine.launchPersistentContext(profile, {
       headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
@@ -90,8 +92,8 @@ async function main() {
     });
     let page = context.pages()[0] || await context.newPage();
     latestPage = page;
-    const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
+    page.on('requestfailed', request => failedLoads.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
     await page.goto(url);
     await selectTeacher(page);
     await page.waitForFunction(() => document.querySelector('[data-testid="offline-app-status"]')?.textContent?.includes('Ready for offline'));
@@ -226,6 +228,7 @@ async function main() {
     page = context.pages()[0] || await context.newPage();
     latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
+    page.on('requestfailed', request => failedLoads.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
     const reopenedResponse = await page.goto(url);
     assert.equal(reopenedResponse?.fromServiceWorker(), true, 'Reopened shell must come from its service worker, not an HTTP cache');
     await selectTeacher(page);
@@ -248,6 +251,10 @@ async function main() {
     assert.deepEqual(errors, []);
     console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, file roster/CSV/backup/replacement, cached process reopen with stopped origin and persisted records${engine === chromium ? ' plus network-offline emulation' : '; WebKit network-offline emulation is unverified (Playwright #42775)'}; not physical iPad verification.`);
   } catch (error) {
+    console.error('Fictional browser failure diagnostics:', JSON.stringify({
+      pageErrors: errors, failedLoads,
+      body: latestPage && !latestPage.isClosed() ? await latestPage.locator('body').innerText({ timeout: 1000 }).catch(() => 'Body unavailable') : 'Page closed'
+    }));
     if (latestPage && !latestPage.isClosed()) await latestPage.screenshot({ path: join(evidenceDir, 'failure.png'), fullPage: true }).catch(() => {});
     throw error;
   } finally {
