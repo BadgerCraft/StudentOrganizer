@@ -22,7 +22,12 @@ async function verify(base) {
         entries.set(url, { cached: relative, body: fs.readFileSync(filename) });
       }
     },
-    async match(request) { return entries.get(typeof request === 'string' ? request : request.url); }
+    async match(request) {
+      // Vite's preview adds Vary: Origin. Precache URL requests have no Origin;
+      // Chromium's subsequent module/style requests can carry the page origin.
+      if (typeof request !== 'string' && request.headers?.get('Origin')) return undefined;
+      return entries.get(typeof request === 'string' ? request : request.url);
+    }
   };
   const context = {
     URL,
@@ -48,7 +53,8 @@ async function verify(base) {
   assert.ok([...entries.keys()].some(url => url.endsWith('.css')), 'Bundled CSS must be precached');
   async function request(url, mode = 'navigate', method = 'GET') {
     let response;
-    handlers.fetch({ request: { url, method, mode }, respondWith(promise) { response = promise; } });
+    const headers = new Headers(mode === 'cors' ? { Origin: new URL(base).origin } : {});
+    handlers.fetch({ request: { url, method, mode, headers }, respondWith(promise) { response = promise; } });
     return response ? await response : undefined;
   }
   assert.equal((await request(base)).cached, 'index.html', 'Offline root reopens complete cached build');

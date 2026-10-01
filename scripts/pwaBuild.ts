@@ -48,7 +48,10 @@ self.addEventListener('fetch', event => {
   // Only bundled assets and the app document. No downloads, reports, or student records.
   if (!shellNavigation && !SHELL.includes(url.href)) return;
   event.respondWith(caches.open(CACHE).then(async cache => {
-    const cached = await cache.match(shellNavigation ? HOME : request);
+    // Look up the same canonical URL used by addAll. Static bundled bytes do
+    // not vary by Origin; incoming module headers can differ from precaching.
+    // The exact same-origin SHELL allowlist above excludes dynamic/user data.
+    const cached = await cache.match(shellNavigation ? HOME : url.href);
     return cached || fetch(request);
   }));
 });
