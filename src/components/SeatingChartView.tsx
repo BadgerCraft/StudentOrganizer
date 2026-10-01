@@ -449,10 +449,14 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
           {moveError && <p role="alert" className="text-rose-700">{moveError}</p>}
         </div>
       )}
-      <div className="overflow-x-auto pb-24">
+      <div className="overflow-x-auto pb-24" data-testid="seating-scroll">
         <div
-          className="grid gap-3 mx-auto justify-center"
+          className="grid gap-3 mx-auto w-full"
+          data-testid="seating-grid"
           style={{
+            // Keep the first column within the scrollable origin. Centering tracks
+            // wider than their container placed touch actions beyond its left edge.
+            minWidth: `calc(${layout.cols} * ${layout.cardSize === 'compact' ? '140px' : '190px'} + ${Math.max(0, layout.cols - 1)} * 0.75rem)`,
             gridTemplateColumns: `repeat(${layout.cols}, minmax(${layout.cardSize === 'compact' ? '140px' : '190px'}, 1fr))`
           }}
         >

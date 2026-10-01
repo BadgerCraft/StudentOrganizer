@@ -93,6 +93,17 @@ async function main() {
     for (const viewport of [{ width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 512, height: 768 }]) {
       await page.setViewportSize(viewport);
       await noPageOverflow(page, `seating ${viewport.width}`);
+      const firstAttendance = page.locator('[data-testid="student-seat-card"]').first().locator('button').first();
+      await firstAttendance.scrollIntoViewIfNeeded();
+      const reachable = await firstAttendance.evaluate(el => {
+        const bounds = el.getBoundingClientRect();
+        const x = bounds.left + bounds.width / 2;
+        const y = bounds.top + bounds.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return { reachable: x >= 0 && x < innerWidth && y >= 0 && y < innerHeight && !!hit && el.contains(hit),
+          left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height };
+      });
+      assert.ok(reachable.reachable, `Attendance touch target must be reachable at ${viewport.width}px: ${JSON.stringify(reachable)}`);
       await page.screenshot({ path: join(evidenceDir, `seating-${viewport.width}.png`), fullPage: true });
     }
     await page.setViewportSize({ width: 768, height: 1024 });
