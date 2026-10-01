@@ -1,5 +1,16 @@
 # Working rules for Ontario Teacher Assessment
 
+## Superseding privacy and platform decision — October 1, 13:59 America/Toronto
+
+Tyler explicitly confirmed that the iPad version must be an installed app that keeps all student data and processing on the device and needs no website to operate. His stated reason: “Student privacy is the most important condition that we need to abide by. Creating a hypothetical version doesn't make sense when we will have to change to it a closed loop at some point.”
+
+This supersedes the earlier Safari/Home Screen delivery choice and the GitHub Pages fictional-data hosting proposal. Do not publish that site, provision hosting, or treat the PWA as the intended iPad product. Target an installed iPad app with bundled operational assets, local processing/storage, offline classroom operation, and deliberate user-controlled backup/transfer. Do not add automatic student-data uploads, telemetry, cloud sync, or remote AI processing. Development browser checks remain useful evidence for shared UI only.
+
+F-006 next work: inspect a viable installed iPad packaging/storage/file-access path and produce a revised concrete plan, including signing/distribution/access requirements and physical-device checks. Do not infer approval for paid accounts, credentials, services, merges or releases. Existing Windows/Mac packages and reusable touch/report-draft work remain available for review; passing packaging/browser tests do not establish closed-loop operation. Audit actual external connections before making that claim.
+
+F-007 central reporting requires its own explicit, optional boundary: no automatic record/page/screenshot attachments or background sending. Existing private-service proposals remain unadopted; reassess them against this requirement before asking for service approval.
+
+
 This repository is the working source for the Ontario Teacher Assessment app. Read `README.md` for setup. Use the current code and test results to establish implementation status; a walkthrough or older project note records claims and decisions, but may be stale.
 
 ## Product and people
