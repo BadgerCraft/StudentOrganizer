@@ -167,7 +167,10 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - Date/source: 2026-10-01, agent introduction during approved WF-001.
 - Explanation: A component is a part of a program, such as storage or imports. A verified lesson records a checked fix and its context. Applicability means checking whether that context fits the new task. A transaction groups related writes so an interrupted operation can roll back; duplicate-safe retry is a separate concern.
 - Project example: future StudentOrganizer import work can consult shared lessons, but the SQLite pilot does not verify its IndexedDB/Dexie storage. An agent must compare the technologies before applying the fix.
-- Clarification/recall: no user questions or recall answers received. WF-001 approval is implementation approval, not a retrieval answer.
+- Actual response, October 1: Tyler asked, “Does applicability mean that it uses past data for current projects?”
+- Feedback: partial recall; correctly identifies reuse of past knowledge. Applicability specifically checks whether the lesson's technology, assumptions and circumstances fit the current project. Explained with SQLite versus StudentOrganizer storage. No complete recall inferred; WF-001 approval remains separate.
 - Recall stage: 0; next due: 2026-10-02, America/Toronto.
 - Retrieval question: What does applicability mean when a future agent reuses a database lesson?
 - Next direction available: review the ready workflow/QA PRs, then clarify the already-prioritized Mac/iPad plan; no additional feature implementation approval inferred.
+
+2026-10-01 — DEV-013: partial recall of reuse; explained context-fit distinction. Stage remains 0; next review 2026-10-02 America/Toronto. Follow-up example question offered; awaiting actual answer.
