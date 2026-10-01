@@ -38,7 +38,9 @@ async function waitForRecords(page: Page, table: string, matches: (rows: any[]) 
     if (matches(result)) return result;
     await page.waitForTimeout(100);
   }
-  throw new Error(`Expected record change was not observed in ${table}`);
+  const alerts = await page.getByRole('alert').allTextContents();
+  const moveState = await page.locator('[data-testid="tap-move-seats-btn"]').getAttribute('aria-pressed').catch(() => null);
+  throw new Error(`Expected record change was not observed in ${table}; UI alerts=${JSON.stringify(alerts)}; tap move enabled=${moveState}`);
 }
 async function openAssessmentHub(page: Page) {
   await page.locator('button[title="Manage Assessments & Rubrics"]').tap();
@@ -100,6 +102,7 @@ async function main() {
     const beforeSeats = await records(page, 'seatPositions');
     await page.locator('[data-testid="tap-move-seats-btn"]').tap();
     await page.locator('[data-testid="student-seat-card"]').nth(0).tap();
+    await page.waitForFunction(() => document.querySelector('[data-testid="student-seat-card"]')?.getAttribute('aria-pressed') === 'true');
     assert.equal(await page.locator('[data-testid="student-profile-modal"]').count(), 0, 'Tap-move must not open profile');
     await page.locator('[data-testid="student-seat-card"]').nth(1).tap();
     const afterSeats = await waitForRecords(page, 'seatPositions', rows => JSON.stringify(rows) !== JSON.stringify(beforeSeats));
@@ -119,9 +122,16 @@ async function main() {
     // Student profile form and local photo selection.
     await page.locator('[data-testid="student-settings-gear-btn"]').first().tap();
     await page.locator('[data-testid="student-preferred-name-input"]').fill('Fictional Tablet');
+    const removePhoto = page.locator('[data-testid="remove-photo-btn"]');
+    if (await removePhoto.isVisible()) await removePhoto.tap();
+    await removePhoto.waitFor({ state: 'hidden' });
     await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({ name: 'fictional.png', mimeType: 'image/png', buffer: readFileSync('dist/icon-180.png') });
+    // FileReader + image resizing complete asynchronously; wait before saving.
+    await removePhoto.waitFor({ state: 'visible' });
     await page.locator('[data-testid="save-student-settings-btn"]').tap();
-    await waitForRecords(page, 'students', rows => rows.some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl?.startsWith('data:image/')));
+    const photoStudents = await waitForRecords(page, 'students', rows => rows.some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl?.startsWith('data:image/')));
+    const editedStudent = photoStudents.find(row => row.preferredName === 'Fictional Tablet');
+    assert.ok(editedStudent);
     const title = `Fictional iPad assessment ${Date.now()}`;
     await createAssessment(page, title);
     // Locate the new assessment's K cell from its rendered header, not a guessed column.
@@ -134,7 +144,9 @@ async function main() {
       return header?.cellIndex ?? -1;
     }, title);
     assert.ok(knowledgeColumn >= 0, 'New assessment K header must be visible in markbook');
-    await page.locator('table tbody tr').first().locator('td').nth(knowledgeColumn).tap();
+    const studentRow = page.locator('table tbody tr').filter({ has: page.getByRole('button', { name: `${editedStudent.preferredName} ${editedStudent.lastName}`, exact: true }) });
+    assert.equal(await studentRow.count(), 1, 'Mark must be entered for the edited fictional student');
+    await studentRow.locator('td').nth(knowledgeColumn).tap();
     await page.getByPlaceholder('e.g. 4+, 88%, 18/20').fill('88%');
     await page.getByPlaceholder('e.g. 4+, 88%, 18/20').locator('..').locator('..').locator('select').selectOption('percentage');
     await page.getByPlaceholder('Optional constructive feedback for this category...').fill('Fictional iPad K feedback');

@@ -148,12 +148,32 @@ async function checkApp(appPath: string, format: string) {
     await reopened.form.getByRole('button', { name: 'Cancel', exact: true }).click();
 
     await page.locator('[data-testid="nav-portability-btn"]').click();
-    const downloadPromise = page.waitForEvent('download');
-    await page.locator('[data-testid="create-backup-btn"]').click();
-    const download = await downloadPromise;
-    assert.equal(await download.failure(), null);
     const backupPath = path.join(evidence, `${format}-fictional-backup.json`);
-    await download.saveAs(backupPath);
+    // Observe the actual Electron download. CI chooses only the save destination;
+    // it does not exercise the native save dialog or fabricate backup bytes.
+    // Literal JS also avoids tsx's function-name helpers crossing process boundaries.
+    await app.evaluate(`({ BrowserWindow }, savePath) => {
+      globalThis.__fictionalBackupDownload = { state: 'pending' };
+      BrowserWindow.getAllWindows()[0].webContents.session.once('will-download', (_event, item) => {
+        item.setSavePath(savePath);
+        item.once('done', (_doneEvent, state) => {
+          globalThis.__fictionalBackupDownload = {
+            state, filename: item.getFilename(), savedPath: item.getSavePath(), bytes: item.getReceivedBytes()
+          };
+        });
+      });
+    }`, backupPath);
+    await page.locator('[data-testid="create-backup-btn"]').click();
+    let downloaded: { state: string; filename?: string; savedPath?: string; bytes?: number } = { state: 'pending' };
+    for (let attempt = 0; attempt < 300; attempt++) {
+      downloaded = await app.evaluate('() => globalThis.__fictionalBackupDownload');
+      if (downloaded.state !== 'pending') break;
+      await page.waitForTimeout(100);
+    }
+    assert.equal(downloaded.state, 'completed', 'Actual Electron backup download must finish');
+    assert.match(downloaded.filename || '', /\.json$/);
+    assert.equal(downloaded.savedPath, backupPath);
+    assert.ok(downloaded.bytes && downloaded.bytes > 0);
     const body = fs.readFileSync(backupPath);
     const backup = JSON.parse(body.toString());
     assert.equal(backup.version, 2);
@@ -216,7 +236,7 @@ async function checkApp(appPath: string, format: string) {
       assessmentCreatedAndRetained: true, noteParticipationRetained: true,
       categoryPercentageAndFeedbackRetained: true, localPhotoRetained: true,
       fullBackupAllStores: true, invalidRestoreRejected: true, confirmedRecoveryAndRestart: true,
-      backupEvidence: path.basename(backupPath) };
+      backupEvidence: path.basename(backupPath), nativeSaveDialog: 'CI selects evidence destination; unverified' };
   } finally {
     await app?.close();
   }
@@ -264,7 +284,7 @@ async function main() {
       checksums: Object.fromEntries([dmg, zip].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(release, file))).digest('hex')])),
       signature: 'Ad-hoc test signature; no verified publisher identity or Apple notarization',
       packageInspection,
-      limits: ['Ephemeral CI has no downloaded-file quarantine; colleague Gatekeeper/device policy not tested.', 'UI automation selects a local photo and backup file programmatically; Finder picker interaction and physical school-managed Macs are not tested.', 'Fictional full recovery writes are restricted to ephemeral GitHub Actions Mac runners; this is not a classroom-data migration test.']
+      limits: ['Ephemeral CI has no downloaded-file quarantine; colleague Gatekeeper/device policy not tested.', 'UI automation selects a local photo and backup file programmatically; Finder picker and native save-dialog interaction and physical school-managed Macs are not tested.', 'Fictional full recovery writes are restricted to ephemeral GitHub Actions Mac runners; this is not a classroom-data migration test.']
     };
     fs.writeFileSync(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2));
     console.log('PASS: exact Mac disk-image and archive apps preserved assessment, participation, percentage/feedback and photo through full backup/recovery and restart.');

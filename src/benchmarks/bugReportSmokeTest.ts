@@ -44,25 +44,28 @@ try {
   const downloadPath = await download.path();
   assert.ok(downloadPath);
   assert.equal(await fs.readFile(downloadPath, 'utf8'), edited);
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Clipboard unavailable for test'); } } });
-  });
+  // A literal JavaScript expression stays self-contained when tsx serializes it;
+  // nested TypeScript callbacks can otherwise retain an unavailable __name helper.
+  await page.evaluate(`Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async function () { throw new Error('Clipboard unavailable for test'); } }
+  })`);
   await modal.getByRole('button', { name: 'Copy report', exact: true }).click();
   assert.ok(await modal.getByText('Copy was unavailable.', { exact: false }).isVisible());
-  await page.evaluate(() => {
+  await page.evaluate(`(function () {
     const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) {
+    Storage.prototype.setItem = function (key, value) {
       if (key === 'ota.bug-report-draft.v1') throw new DOMException('Test quota', 'QuotaExceededError');
       return original.call(this, key, value);
     };
-  });
+  })()`);
   await preview.fill('Unsaved details remain available to copy.');
   assert.ok(await modal.getByRole('alert').isVisible());
   page.once('dialog', dialog => dialog.dismiss());
   await modal.getByTestId('modal-close-x-btn').click();
   assert.ok(await modal.isVisible());
   assert.equal(await preview.inputValue(), 'Unsaved details remain available to copy.');
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ota.bug-report-draft.v1')!).previewText), edited);
+  assert.equal(await page.evaluate(`JSON.parse(localStorage.getItem('ota.bug-report-draft.v1')).previewText`), edited);
   assert.deepEqual(externalRequests, []);
   console.log('PASS: draft/reload, editable exact download, clipboard failure, quota preservation, guarded dismissal, no external report requests.');
 } finally {
