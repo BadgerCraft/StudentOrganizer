@@ -222,3 +222,9 @@ F-006 / DEC-002: new optional explanation/source reading on installed-app delive
 
 ### October 2 exact-head verification correction
 The morning briefing administrative commits advanced PR #11 beyond the previously cited passing head. Treat the current documentation-only head's package check as pending until observed complete; do not call it merge-ready from the older passing run. PR #10 was also advanced by instruction reconciliation to b300aee33de18ef760deea47868d28a4e6e4a1f4 and its refreshed package check is in progress. PR #13 remains ac44af3 with all four exact-head checks successful, but its superseded PWA scope and pairwise integration remain unresolved. This correction preserves the recommended #11 → #10 → rebase/reconcile #13 sequence and separate approval gates.
+
+## October 2 — DEC-005 resolved by Tyler
+
+Tyler chose A — Ad Hoc on October 2, 2026, America/Toronto. His goal is a small, stable pilot rather than a scalable service; future plans are uncertain. He considers Ad Hoc sufficient for getting the installed app onto the intended devices.
+
+The October 3 decision follow-up is satisfied early; do not ask for this choice again. Revised F-006 planning proceeds with an installed, bundled, local-only Ad Hoc pilot and physical-device acceptance checks. The agent owns packaging/storage investigation and the concrete signing/access checklist. No new fee/account/credential/distribution/merge/release approval is inferred. Next action: prepare the revised implementation plan and report only actual prerequisites needing Tyler's action.
