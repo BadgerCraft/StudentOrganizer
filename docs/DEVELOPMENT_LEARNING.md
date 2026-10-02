@@ -206,3 +206,7 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - Actual response/recall: none. Decision brief presented October2; choosing an option is not automatically successful term recall.
 - Recall stage: 0. First review due 2026-10-03, America/Toronto.
 - Retrieval question: What does a provisioning profile control, and why does it not prove that student data stays on the iPad?
+
+### October 2 — DEV-016 decision response
+
+Tyler selected Ad Hoc for a stable, small pilot with uncertain future plans, rather than a scalable service. He described TestFlight as potentially more useful if it became a key product feature. Feedback: TestFlight's advantage concerns beta distribution and update convenience; Ad Hoc keeps the pilot limited to registered devices, with more manual installation/update work. Neither route establishes application stability or local-only data handling. This is an actual distribution judgment and reasoning, not an answer to the signing/provisioning retrieval question. DEV-016 remains stage 0, due October 3. Existing unanswered checkout/CI questions remain unanswered; no duplicate prompt added.
