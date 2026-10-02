@@ -228,3 +228,9 @@ The morning briefing administrative commits advanced PR #11 beyond the previousl
 Tyler chose A — Ad Hoc on October 2, 2026, America/Toronto. His goal is a small, stable pilot rather than a scalable service; future plans are uncertain. He considers Ad Hoc sufficient for getting the installed app onto the intended devices.
 
 The October 3 decision follow-up is satisfied early; do not ask for this choice again. Revised F-006 planning proceeds with an installed, bundled, local-only Ad Hoc pilot and physical-device acceptance checks. The agent owns packaging/storage investigation and the concrete signing/access checklist. No new fee/account/credential/distribution/merge/release approval is inferred. Next action: prepare the revised implementation plan and report only actual prerequisites needing Tyler's action.
+
+## October 2 afternoon — pilot clarification and optional documentation
+
+Tyler clarified at 10:21 America/Toronto: easy updates can wait; selling the product is a future goal. His words: “Cumbersome to everyone except myself is a feature.” Interpret this as intentionally restricted pilot access and acceptable manual distribution/update friction for other testers, while Tyler's own classroom use should remain straightforward. Do not design deliberate classroom UX obstacles, treat Ad Hoc as a security/license system, or infer approval for commercialization, payment, distribution, merge or release. This refines the morning “not a scalable service” rationale: small controlled pilot now, future commercial product possible. DEC-005 remains resolved as Ad Hoc; no decision follow-up is needed tomorrow.
+
+Optional F-006/DEC-005 depth offered October 2: how signing/provisioning controls installation on registered devices, how manual updates preserve local records, and why pilot distribution and eventual commercial distribution are separate plans. Choices remain brief explanation, original Apple sources, or defer; no answer/defer is inferred.
