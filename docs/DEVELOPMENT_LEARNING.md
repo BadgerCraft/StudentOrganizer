@@ -197,3 +197,12 @@ Append dated records with concept ID, the actual response (or a faithful short s
 - DEV-007 not due until October3; DEV-013 applicability already discussed today, next due October2, not repeated. No implementation approvals repeated.
 - DEV-013 additional actual clarification October1: Tyler requested benefit/risk analysis of automatic reuse versus measured applicability checking, then selected “No, I think that measured approach makes sense - apply it”. Policy choice recorded and applied to shared skill; not a retrieval answer. Partial recall remains stage0/dueOctober2.
 - Useful new optional documentation: F-006/DEC-002 installed app, offline operation and student-data boundaries after today's superseding privacy requirement. Offer brief explanation, original-source reading, or defer; earlier unchanged Safari/Home Screen reading remains deferred. No documentation choice or product approval inferred.
+
+### DEV-016 — Signing, provisioning and distribution
+- Date/source: 2026-10-02; terms introduced for F-006/DEC-005 installed-iPad pilot decision.
+- Explanation: signing verifies an identified developer and unchanged app; a provisioning profile connects app ID, certificate and permitted devices/distribution. Ad Hoc names registered devices; TestFlight distributes time-limited beta builds through Apple; Custom Apps use a school/organization's Apple School Manager and MDM.
+- Relationship to privacy: distribution controls installation and updates. Closed-loop privacy is an application/data-flow property that must be tested separately; no distribution option alone proves local-only records.
+- StudentOrganizer example: an Ad Hoc build can be installed on Tyler's registered iPad, then tested with fictional data, network denial, local storage, Files backup/restore and no telemetry/remote APIs.
+- Actual response/recall: none. Decision brief presented October2; choosing an option is not automatically successful term recall.
+- Recall stage: 0. First review due 2026-10-03, America/Toronto.
+- Retrieval question: What does a provisioning profile control, and why does it not prove that student data stays on the iPad?
