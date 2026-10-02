@@ -1,8 +1,8 @@
 # F-006 / DEC-005 — Installed iPad pilot distribution
 
 Assigned: 2026-10-02, America/Toronto  
-Follow-up due: 2026-10-03 morning briefing  
-Status: awaiting Tyler's choice and reasoning  
+Follow-up: resolved October 2; do not re-request this choice on October 3  
+Status: resolved — A, Ad Hoc registered-device pilot  
 Feature: F-006 Mac and iPad support
 
 ## Why this decision is now required
@@ -41,7 +41,15 @@ Choose the pilot posture and explain the reason:
 - **B — TestFlight** for easier temporary testing and updates.
 - **Defer** until school-managed distribution requirements are known.
 
-Actual choice/reasoning: pending.
+Tyler chose A — Ad Hoc on October 2, 2026, America/Toronto. His goal is a small, stable pilot rather than a scalable service; future plans are uncertain. He considers Ad Hoc sufficient for getting the installed app onto the intended devices.
+
+Tyler's actual words: “Ad hoc to make the process easier. I'm not trying to make this a scalable service, I just want to get it out there in a stable environment.” He also explained that he is only testing, future plans are unknown, and Ad Hoc accomplishes what he wants.
+
+Clarification: Ad Hoc simplifies the distribution footprint for a small named-device pilot; it does not make installing updates easier than TestFlight or establish application stability. TestFlight's advantage is convenient beta invitations/updates, not whether testing is a key product feature. No successful term retrieval is inferred.
+
+### Plan consequence and next work
+
+Prepare the revised installed-iPad implementation plan using Ad Hoc as the selected distribution route. Bundle operational assets, retain on-device records/processing, audit external connections, and define restart/offline/network-denial and Files backup/restore checks on an actual iPad. Inspect packaging/storage feasibility and signing prerequisites before selecting implementation details. Preserve useful Mac/touch/recovery/report-draft work in PR #13. Identify the precise Apple membership, Mac/Xcode signing access and named-device registration requirements without placing credentials or device identifiers in this public repository. Present the concrete revised implementation scope and any actual access/spending gap for review. This choice resolves distribution posture; it does not authorize payment, enrollment, credentials, distribution, real-student use, merge or release.
 
 ## Official sources checked October 2, 2026
 
