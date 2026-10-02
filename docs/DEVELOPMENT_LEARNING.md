@@ -210,3 +210,15 @@ Append dated records with concept ID, the actual response (or a faithful short s
 ### October 2 — DEV-016 decision response
 
 Tyler selected Ad Hoc for a stable, small pilot with uncertain future plans, rather than a scalable service. He described TestFlight as potentially more useful if it became a key product feature. Feedback: TestFlight's advantage concerns beta distribution and update convenience; Ad Hoc keeps the pilot limited to registered devices, with more manual installation/update work. Neither route establishes application stability or local-only data handling. This is an actual distribution judgment and reasoning, not an answer to the signing/provisioning retrieval question. DEV-016 remains stage 0, due October 3. Existing unanswered checkout/CI questions remain unanswered; no duplicate prompt added.
+
+## October 2 afternoon — pilot clarification and optional documentation
+
+Tyler clarified at 10:21 America/Toronto: easy updates can wait; selling the product is a future goal. His words: “Cumbersome to everyone except myself is a feature.” Interpret this as intentionally restricted pilot access and acceptable manual distribution/update friction for other testers, while Tyler's own classroom use should remain straightforward. Do not design deliberate classroom UX obstacles, treat Ad Hoc as a security/license system, or infer approval for commercialization, payment, distribution, merge or release. This refines the morning “not a scalable service” rationale: small controlled pilot now, future commercial product possible. DEC-005 remains resolved as Ad Hoc; no decision follow-up is needed tomorrow.
+
+Optional F-006/DEC-005 depth offered October 2: how signing/provisioning controls installation on registered devices, how manual updates preserve local records, and why pilot distribution and eventual commercial distribution are separate plans. Choices remain brief explanation, original Apple sources, or defer; no answer/defer is inferred.
+
+### Afternoon learning review — October 2, America/Toronto
+
+Source: open PR #11, codex/approved-plan-workflow. Main lacks the four planning/learning records; no missing state is invented. Fresh exact-head checks observed: PR11 855447d package success; PR10 b300aee package success/release skipped; PR13 ac44af3 four checks success; new draft PR14 b07651b four checks success. Checks establish exercised scope, not merge/release or installed-iPad approval. Subsequent administrative commits need their own fresh checks.
+
+Rotate due terms DEV-001 (branch versus commit) and DEV-004 (standing repository instructions versus specific feature plan). Prompt for next reply: explain branch and commit with a StudentOrganizer example; explain how AGENTS.md differs from an individual feature implementation plan. No answers shown or received; stages/due dates remain unchanged. DEV-010/DEV-003 unanswered checkout/CI and browser-scope prompts are not repeated. DEV-013 unanswered applicability prompt is not repeated. DEV-007 and DEV-016 remain due October3. No successful recall inferred from Ad Hoc choice or its clarification.
