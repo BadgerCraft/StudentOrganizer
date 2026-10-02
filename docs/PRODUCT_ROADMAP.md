@@ -206,3 +206,10 @@ Useful learning questions saved for review, not used as approval gates: what dis
 - On completed work, update the inventory below from the tested source commit and state what was verified; do not count an open PR as shipped.
 - Keep the 08:15 lookahead focused on the next two priorities, 16:00 learning optional and brief, and 20:15 execution limited to approved plans with an actual available path.
 - Current next step: verify approved F-006 and bounded F-007 in draft PR #13, finish scoped repairs and record source-specific evidence. HTTPS delivery and a private receiver require concrete account/service choices; physical-device validation remains explicit. Historical marking documents were found, but current code is unavailable and a code-only archive/repository is needed for F-008 planning.
+
+## F-006 / DEC-005 — Installed iPad pilot distribution
+Assigned: 2026-10-02. Follow-up due: 2026-10-03. [Decision learning brief](decisions/F-006-DEC-005-IPAD-DISTRIBUTION-2026-10-02.md).
+
+Tyler's closed-loop requirement supersedes the earlier Home Screen/PWA delivery plan. The real product judgment is the first installed pilot's distribution posture: Ad Hoc registered devices (recommended, smallest/manual footprint), TestFlight (easier temporary updates, 90-day builds and Apple-hosted beta distribution), or later school-managed Custom App/MDM. Distribution does not establish local-only data handling; separate network-denial, local-storage, export/recovery and physical-device tests remain required.
+
+Tyler's actual choice/reasoning: pending. No Apple Developer Program fee, account enrollment, credentials, app distribution, merge, release or real-student use is authorized by the packet.
