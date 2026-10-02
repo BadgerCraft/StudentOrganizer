@@ -1,3 +1,4 @@
+import { safePhotoSource } from '../utils/localPhoto';
 import React, { useState, useMemo } from 'react';
 import {
   X,
@@ -368,9 +369,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           {/* Header Profile Bar */}
           <div className="bg-slate-900 text-white p-6 flex items-start justify-between">
             <div className="flex items-center space-x-4">
-              {student.photoUrl ? (
+              {safePhotoSource(student.photoUrl) ? (
                 <img
-                  src={student.photoUrl}
+                  src={safePhotoSource(student.photoUrl)}
                   alt={`${student.firstName} ${student.lastName}`}
                   className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-white/20"
                 />

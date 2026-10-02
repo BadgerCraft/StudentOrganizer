@@ -1,3 +1,4 @@
+import { safePhotoSource } from '../utils/localPhoto';
 import React, { useState, useEffect } from 'react';
 import {
   Lock,
@@ -533,9 +534,9 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   <div className="seat-card-top flex items-start justify-between">
                     <div className="flex items-center space-x-2.5 truncate">
                       {/* Student Photo or Stylized Initials Avatar */}
-                      {student.photoUrl ? (
+                      {safePhotoSource(student.photoUrl) ? (
                         <img
-                          src={student.photoUrl}
+                          src={safePhotoSource(student.photoUrl)}
                           alt={`${student.firstName} ${student.lastName}`}
                           className={`${
                             layout.cardSize === 'compact' ? 'w-7 h-7 rounded-lg' : 'w-11 h-11 rounded-xl'

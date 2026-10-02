@@ -1,3 +1,6 @@
+import { ClassSettingsService } from '../services/classSettingsService';
+import { getAppIdentity } from '../services/identityService';
+import { AuthorizationError } from '../services/authHelper';
 import React, { useState } from 'react';
 import {
   Plus,
@@ -24,6 +27,7 @@ interface AssessmentHubViewProps {
   units: Unit[];
   enrollments: ClassEnrollment[];
   students: Student[];
+  userId?: UUID;
   onRefresh: () => void;
 }
 
@@ -34,8 +38,16 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
   units,
   enrollments,
   students,
+  userId,
   onRefresh
 }) => {
+  const [actionError, setActionError] = useState<string | null>(null);
+  const service = new ClassSettingsService(db);
+  const actor = async () => {
+    const identity = await getAppIdentity(db);
+    if (!userId || identity.userId !== userId) throw new AuthorizationError('Acting teacher changed. Please refresh.');
+    return identity;
+  };
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'summative' | 'formative'>('all');
   const [filterUnit, setFilterUnit] = useState<string>('all');
@@ -72,106 +84,42 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
   const handleCreateAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString();
-    const assessId = crypto.randomUUID();
-
-    const policy = await db.gradingPolicies.where('classSectionId').equals(classSection.id).first();
-
-    await db.transaction('rw', [db.assessments, db.assessmentCategories, db.studentAssessments], async () => {
-      await db.assessments.add({
-        id: assessId,
-        classSectionId: classSection.id,
-        unitId: selectedUnitId,
-        reportingPeriodId: policy?.reportingPeriodId || 'rp-midterm',
-        // Keep the unique database code without asking the teacher to invent one.
-        code: `A-${assessId}`,
-        title: title.trim(),
-        assessmentType,
-        assignedAt: now,
-        dueAt: dueDate,
-        isLocked: false,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        version: 1
-      });
-
-      const catsToAdd: AssessmentCategory[] = [];
-      if (kChecked) catsToAdd.push({ id: crypto.randomUUID(), assessmentId: assessId, categoryCode: 'K', maxScore: kMax, evidenceWeight: kWeight, markScaleVersionId: policy?.defaultMarkScaleVersionId || null, createdAt: now, updatedAt: now, deletedAt: null, version: 1 });
-      if (tChecked) catsToAdd.push({ id: crypto.randomUUID(), assessmentId: assessId, categoryCode: 'T', maxScore: tMax, evidenceWeight: tWeight, markScaleVersionId: policy?.defaultMarkScaleVersionId || null, createdAt: now, updatedAt: now, deletedAt: null, version: 1 });
-      if (cChecked) catsToAdd.push({ id: crypto.randomUUID(), assessmentId: assessId, categoryCode: 'C', maxScore: cMax, evidenceWeight: cWeight, markScaleVersionId: policy?.defaultMarkScaleVersionId || null, createdAt: now, updatedAt: now, deletedAt: null, version: 1 });
-      if (aChecked) catsToAdd.push({ id: crypto.randomUUID(), assessmentId: assessId, categoryCode: 'A', maxScore: aMax, evidenceWeight: aWeight, markScaleVersionId: policy?.defaultMarkScaleVersionId || null, createdAt: now, updatedAt: now, deletedAt: null, version: 1 });
-
-      await db.assessmentCategories.bulkAdd(catsToAdd);
-
-      // Assign to all active enrollments by default
-      const activeEnrollments = enrollments.filter(enr => enr.deletedAt === null && enr.enrollmentStatus === 'active');
-      const sas = activeEnrollments.map(enr => ({
-        id: crypto.randomUUID(),
-        assessmentId: assessId,
-        classEnrollmentId: enr.id,
-        classSectionId: classSection.id,
-        workflowStatus: 'assigned' as const,
-        completionStatus: 'incomplete' as const,
-        isLate: false,
-        assignedAt: now,
-        dueAt: dueDate,
-        submittedAt: null,
-        assessedAt: null,
-        returnedAt: null,
-        overallFeedback: null,
-        privateNotes: null,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        version: 1
-      }));
-      await db.studentAssessments.bulkAdd(sas);
-    });
-
-    setShowCreateModal(false);
-    setTitle('');
-    onRefresh();
+    setActionError(null);
+    try {
+      const categories: { categoryCode: AssessmentCategory['categoryCode']; maxScore: number; evidenceWeight: number }[] = [];
+      if (kChecked) categories.push({ categoryCode: 'K', maxScore: kMax, evidenceWeight: kWeight });
+      if (tChecked) categories.push({ categoryCode: 'T', maxScore: tMax, evidenceWeight: tWeight });
+      if (cChecked) categories.push({ categoryCode: 'C', maxScore: cMax, evidenceWeight: cWeight });
+      if (aChecked) categories.push({ categoryCode: 'A', maxScore: aMax, evidenceWeight: aWeight });
+      await service.createAssessment({ classSectionId: classSection.id, unitId: selectedUnitId,
+        title, assessmentType, dueAt: dueDate, categories, ...await actor() });
+      setShowCreateModal(false);
+      setTitle('');
+      onRefresh();
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be saved.'); }
   };
 
   const handleArchive = async (assessId: UUID) => {
     if (!confirm('Archive this assessment?')) return;
-    await db.assessments.update(assessId, { deletedAt: new Date().toISOString() });
-    onRefresh();
+    setActionError(null);
+    try {
+      const assessment = assessments.find(a => a.id === assessId);
+      if (!assessment) throw new Error('Assessment is unavailable.');
+      await service.archiveAssessment(assessId, assessment.version, await actor());
+      onRefresh();
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be archived.'); }
   };
 
   const handleDuplicate = async (a: Assessment) => {
-    const now = new Date().toISOString();
-    const newId = crypto.randomUUID();
-
-    const oldCats = categories.filter(c => c.assessmentId === a.id && c.deletedAt === null);
-
-    await db.transaction('rw', [db.assessments, db.assessmentCategories], async () => {
-      await db.assessments.add({
-        ...a,
-        id: newId,
-        code: `${a.code}-COPY`,
-        title: `${a.title} (Copy)`,
-        createdAt: now,
-        updatedAt: now,
-        version: 1
-      });
-
-      const newCats = oldCats.map(c => ({
-        ...c,
-        id: crypto.randomUUID(),
-        assessmentId: newId,
-        createdAt: now,
-        updatedAt: now,
-        version: 1
-      }));
-      await db.assessmentCategories.bulkAdd(newCats);
-    });
-
-    onRefresh();
+    setActionError(null);
+    try {
+      await service.duplicateAssessment(a.id, a.version, await actor());
+      onRefresh();
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be duplicated.'); }
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {actionError && <p role="alert" className="text-red-700 mb-4">{actionError}</p>}
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-200 mb-6 gap-4">
         <div>
@@ -259,6 +207,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <h3 className="text-base font-bold text-slate-900 mb-3">Create New Assessment</h3>
             <form onSubmit={handleCreateAssessment} className="space-y-4">
+              {actionError && <p role="alert" className="text-red-700">{actionError}</p>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Type</label>
                 <select value={assessmentType} onChange={e => setAssessmentType(e.target.value as any)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
