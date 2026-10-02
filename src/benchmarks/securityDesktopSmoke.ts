@@ -35,12 +35,21 @@ async function main() {
     // Independently exercise the session guard from a CSP-free disposable renderer.
     const sessionBlocked = await app.evaluate(async ({ BrowserWindow }, url) => {
       const probe = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
+      const blockedErrors: string[] = [];
+      probe.webContents.session.webRequest.onErrorOccurred(details => {
+        if (details.url === url) blockedErrors.push(details.error);
+      });
       try {
         await probe.loadURL('data:text/html,<html><body>Fictional security probe</body></html>');
-        return await probe.webContents.executeJavaScript(`new Promise(resolve => { const image = new Image(); image.onload = () => resolve(false); image.onerror = () => resolve(true); image.src = ${JSON.stringify(url)}; })`);
-      } finally { probe.destroy(); }
+        const blocked = await probe.webContents.executeJavaScript(`new Promise(resolve => { const image = new Image(); image.onload = () => resolve(false); image.onerror = () => resolve(true); image.src = ${JSON.stringify(url)}; })`);
+        return { blocked, blockedErrors };
+      } finally {
+        probe.webContents.session.webRequest.onErrorOccurred(null);
+        probe.destroy();
+      }
     }, remoteUrl);
-    assert.equal(sessionBlocked, true, 'Session guard must block network without relying on page CSP');
+    assert.equal(sessionBlocked.blocked, true, 'Session guard must block network without relying on page CSP');
+    assert.ok(sessionBlocked.blockedErrors.some(error => error.includes('ERR_BLOCKED_BY_CLIENT')), 'Verify request cancellation by the session policy, not an unrelated load failure');
     assert.equal(received, 0, 'No request may reach the loopback collector');
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().click();
     await page.locator('[data-testid="student-settings-gear-btn"]').first().click();
