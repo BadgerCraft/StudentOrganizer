@@ -1,3 +1,4 @@
+import { ClassSettingsService } from '../services/classSettingsService';
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -94,19 +95,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
-    await db.gradingPolicies.update(policy.id, {
-      weightK,
-      weightT,
-      weightC,
-      weightA,
-      excludeFormative,
-      missingWorkPolicy: missingPolicy,
-      updatedAt: new Date().toISOString()
-    });
-
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
-    onRefresh();
+    setEventTypeErrorMessage(null);
+    try {
+      const identity = await getIdentity();
+      await new ClassSettingsService(db).updateGradingPolicy(policy.id, policy.version, {
+        weightK, weightT, weightC, weightA, excludeFormative, missingWorkPolicy: missingPolicy
+      }, identity);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+      onRefresh();
+    } catch (error) {
+      setSavedSuccess(false);
+      setEventTypeErrorMessage(error instanceof Error ? error.message : 'Grading policy could not be saved.');
+    }
   };
 
   const resetCreateForm = () => {

@@ -1,8 +1,9 @@
+import { isLocalPhoto, MAX_PHOTO_BYTES } from '../utils/localPhoto';
 import type { OntarioTeacherDB } from '../db/database';
 import type { AuditEntry, Student, StudentNote, SyncMutation, UUID } from '../types/schema';
 import { ValidationError } from './markbookService';
 import { ConcurrencyError } from './participationService';
-import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
+import { assertClassSectionWriteAccess, AUTH_TABLES, AuthorizationError } from './authHelper';
 
 export interface UpdateStudentProfileParams {
   studentId: UUID;
@@ -60,29 +61,36 @@ export class StudentDomainService {
 
     let normPhoto = params.photoUrl?.trim() ? params.photoUrl.trim() : null;
     if (normPhoto) {
-      // Reject external URLs
-      if (/^https?:\/\//i.test(normPhoto)) {
-        throw new ValidationError('External photo URLs are not permitted. Please upload a local image.');
-      }
-      // Must be a data URL
-      if (!normPhoto.startsWith('data:image/')) {
-        throw new ValidationError('Invalid photo format. Only local images (JPEG, PNG, WebP) are allowed.');
-      }
-      // Enforce 64 KB limit
-      const byteSize = new TextEncoder().encode(normPhoto).length;
-      if (byteSize > 64 * 1024) {
-        throw new ValidationError('Photo exceeds the maximum allowed size of 64 KB.');
+      if (/^https?:\/\//i.test(normPhoto)) throw new ValidationError('External photo URLs are not permitted. Please upload a local image.');
+      if (normPhoto.length > MAX_PHOTO_BYTES) throw new ValidationError('Photo exceeds the maximum allowed size of 64 KB.');
+      if (!isLocalPhoto(normPhoto)) {
+        throw new ValidationError('External photo URLs or invalid/oversized photos are not permitted. Upload a local JPEG, PNG or WebP image of at most 64 KB.');
       }
     }
 
     return await this.db.transaction(
       'rw',
-      [this.db.students, this.db.auditEntries, this.db.syncMutations],
+      [...AUTH_TABLES(this.db), this.db.classEnrollments, this.db.students, this.db.auditEntries, this.db.syncMutations],
       async () => {
         const current = await this.db.students.get(params.studentId);
         if (!current || current.deletedAt !== null) {
           throw new ValidationError(`Student ${params.studentId} not found or deleted.`);
         }
+
+        // Profiles are shared across classes. One active, authorized enrollment
+        // in the student's organization is required; the selector is attribution.
+        const enrollments = await this.db.classEnrollments.where('studentId').equals(current.id)
+          .filter(e => e.deletedAt === null && e.enrollmentStatus === 'active').toArray();
+        let authorized = false;
+        for (const enrollment of enrollments) {
+          try {
+            const auth = await assertClassSectionWriteAccess(this.db, params.userId, enrollment.classSectionId);
+            if (auth.organizationId === current.organizationId) { authorized = true; break; }
+          } catch (error) {
+            if (!(error instanceof AuthorizationError)) throw error;
+          }
+        }
+        if (!authorized) throw new AuthorizationError('Teacher cannot edit this student profile.');
 
         if (current.version !== params.expectedVersion) {
           throw new ConcurrencyError(

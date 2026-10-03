@@ -1,3 +1,4 @@
+import { safePhotoSource } from '../utils/localPhoto';
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Trash2, AlertCircle, Save } from 'lucide-react';
 import type { Student } from '../types/schema';
@@ -200,9 +201,9 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
           {/* Student Photo Management */}
           <div className="flex items-center space-x-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="relative group shrink-0">
-              {photoUrl ? (
+              {safePhotoSource(photoUrl) ? (
                 <img
-                  src={photoUrl}
+                  src={safePhotoSource(photoUrl)}
                   alt={`${firstName} ${lastName}`}
                   className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-sm ring-1 ring-slate-200"
                 />
