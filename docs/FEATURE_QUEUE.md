@@ -251,3 +251,9 @@ Fresh PR evidence inspected October 3:
 Recommended integration order remains: finish/check PR #11 → reconcile/recheck PR #10 → integrate PR #14 into PR #13 → narrow/rebase/reverify PR #13 → review PR #13 for main. No release approval is requested.
 
 Lookahead: F-007's local bug draft/preview is verified but private central receipt remains absent. The next consequential choice is adoption of a Tyler-owned private account-free receiver; prepare that brief after the installed-iPad plan decision. F-008 remains discovery-only until current code is available, so no product judgment is requested from stale descriptions.
+
+## October 3, 12:49 America/Toronto — actual approval and no-fee constraint
+
+Tyler: “Pr14 approved. I don't want to pay for the Apple app. Think of another way.” PR #14 was marked ready and merged into codex/mac-ipad-support at a7c6d941eb704b6f97a41543b6546cebfaccca07 after all four checks for b07651b passed. No main merge or release occurred.
+
+The paid Ad Hoc membership route is rejected for the current pilot. Revised installed-iPad plan remains unapproved. Official no-fee alternative: Xcode Personal Team using a free Apple Account for personal-device testing. Apple documents provisioning expiry after seven days, requiring rebuild/reinstallation; up to three devices and three apps per device. A Mac with Xcode remains required. This retains bundled installed-app/local-processing requirements but is a temporary development pilot, not durable distribution. Ask whether Tyler has access to a Mac before recommending it as workable. Do not silently restore the rejected website/PWA delivery or infer authorization for spending. Source checked October3: https://developer.apple.com/help/account/basics/about-your-developer-account .
