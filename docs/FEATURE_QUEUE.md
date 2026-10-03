@@ -257,3 +257,11 @@ Lookahead: F-007's local bug draft/preview is verified but private central recei
 Tyler: “Pr14 approved. I don't want to pay for the Apple app. Think of another way.” PR #14 was marked ready and merged into codex/mac-ipad-support at a7c6d941eb704b6f97a41543b6546cebfaccca07 after all four checks for b07651b passed. No main merge or release occurred.
 
 The paid Ad Hoc membership route is rejected for the current pilot. Revised installed-iPad plan remains unapproved. Official no-fee alternative: Xcode Personal Team using a free Apple Account for personal-device testing. Apple documents provisioning expiry after seven days, requiring rebuild/reinstallation; up to three devices and three apps per device. A Mac with Xcode remains required. This retains bundled installed-app/local-processing requirements but is a temporary development pilot, not durable distribution. Ask whether Tyler has access to a Mac before recommending it as workable. Do not silently restore the rejected website/PWA delivery or infer authorization for spending. Source checked October3: https://developer.apple.com/help/account/basics/about-your-developer-account .
+
+## October 3 afternoon check-in
+
+Current records: open PR #11 / codex/approved-plan-workflow; main still lacks the newer planning/learning files. Freshly observed PR11 b14f0ea package success and PR13 a7c6d941 four successful checks; PR14 confirmed merged into the feature branch only. No main merge or release approval inferred.
+
+Actual latest reply: “I guess I'll have to find one sure” in response to Mac access. Record willingness to look for Mac access, not confirmed hardware or approval of the revised free testing build. The subsequent build-approval request remains unanswered. Paid Apple membership is rejected for this pilot; Personal Team free provisioning is the proposed replacement, with seven-day renewal and Mac/Xcode dependence. Do not restart paid Ad Hoc or PWA delivery.
+
+Optional new F-006 documentation offered October3: free Personal Team provisioning, expiry/reinstallation versus updating application code, and preserving local records during renewal. Brief explanation, original Apple source reading or defer available. No choice/defer or product approval inferred. Prior unanswered optional reading remains unanswered.
