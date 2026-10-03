@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
+const { pathToFileURL, fileURLToPath } = require('url');
 
 app.name = 'ontario-teacher-assessment';
 
@@ -34,6 +35,21 @@ function createWindow() {
 
   // Load packaged local Vite build
   const indexPath = path.join(__dirname, '../dist/index.html');
+  const bundleRoot = path.dirname(indexPath);
+  // Desktop operation needs no network. Restrict file resources to the bundle.
+  mainWindow.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    let allowed = false;
+    try {
+      const url = new URL(details.url);
+      if (url.protocol === 'file:') {
+        const relative = path.relative(bundleRoot, fileURLToPath(url));
+        allowed = relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+      } else {
+        allowed = ['data:', 'blob:'].includes(url.protocol);
+      }
+    } catch { /* Fail closed. */ }
+    callback({ cancel: !allowed });
+  });
   mainWindow.loadFile(indexPath);
 
   mainWindow.once('ready-to-show', () => {
@@ -48,7 +64,7 @@ function createWindow() {
   // Security Lockdown: Block foreign navigation
   mainWindow.webContents.on('will-navigate', (event, url) => {
     // Only allow file:// protocol within the application bundle
-    if (!url.startsWith('file://')) {
+    if (url.split('#')[0] !== pathToFileURL(indexPath).href) {
       event.preventDefault();
     }
   });

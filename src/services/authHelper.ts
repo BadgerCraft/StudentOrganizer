@@ -38,10 +38,11 @@ export const AUTH_TABLES = (db: OntarioTeacherDB) => [
  *   - 'teacher': requires non-deleted ClassSectionStaff record with primary_teacher, co_teacher, or support role.
  *     (read_only is DENIED).
  */
-export async function assertClassSectionWriteAccess(
+async function assertClassSectionAccess(
   db: OntarioTeacherDB,
   userId: UUID,
-  classSectionId: UUID
+  classSectionId: UUID,
+  access: 'read' | 'write' = 'write'
 ): Promise<AuthContext> {
   // 1. User validation
   const user = await db.users.get(userId);
@@ -142,9 +143,27 @@ export async function assertClassSectionWriteAccess(
     throw new AuthorizationError(`Teacher is not assigned to class section ${classSectionId}.`);
   }
 
-  if (userStaff.role === 'read_only') {
+  if (access === 'write' && userStaff.role === 'read_only') {
     throw new AuthorizationError('Read-only staff cannot alter class records.');
   }
 
   return { userId, classSection: section, course, organizationId: directOrgId };
+}
+
+export async function assertClassSectionWriteAccess(db: OntarioTeacherDB, userId: UUID, classSectionId: UUID): Promise<AuthContext> {
+  return assertClassSectionAccess(db, userId, classSectionId, 'write');
+}
+
+/** Use the same membership/assignment rules for the class picker, allowing read-only staff. */
+export async function listAccessibleClassSections(db: OntarioTeacherDB, userId: UUID | null) {
+  if (!userId) return [];
+  return db.transaction('r', AUTH_TABLES(db), async () => {
+    const sections = await db.classSections.filter(s => s.deletedAt === null).toArray();
+    const accessible: ClassSection[] = [];
+    for (const section of sections) {
+      try { await assertClassSectionAccess(db, userId, section.id, 'read'); accessible.push(section); }
+      catch (error) { if (!(error instanceof AuthorizationError)) throw error; }
+    }
+    return accessible;
+  });
 }
