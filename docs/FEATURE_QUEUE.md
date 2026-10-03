@@ -234,3 +234,20 @@ The October 3 decision follow-up is satisfied early; do not ask for this choice 
 Tyler clarified at 10:21 America/Toronto: easy updates can wait; selling the product is a future goal. His words: “Cumbersome to everyone except myself is a feature.” Interpret this as intentionally restricted pilot access and acceptable manual distribution/update friction for other testers, while Tyler's own classroom use should remain straightforward. Do not design deliberate classroom UX obstacles, treat Ad Hoc as a security/license system, or infer approval for commercialization, payment, distribution, merge or release. This refines the morning “not a scalable service” rationale: small controlled pilot now, future commercial product possible. DEC-005 remains resolved as Ad Hoc; no decision follow-up is needed tomorrow.
 
 Optional F-006/DEC-005 depth offered October 2: how signing/provisioning controls installation on registered devices, how manual updates preserve local records, and why pilot distribution and eventual commercial distribution are separate plans. Choices remain brief explanation, original Apple sources, or defer; no answer/defer is inferred.
+
+## October 3 morning briefing
+
+Planning source: PR #11, branch `codex/approved-plan-workflow`; main remains `a608e01913b7c8ec211fcbac18f9bf325d05402f` and lacks these newer records. DEC-005 was resolved October 2 as a restricted Ad Hoc pilot; do not re-ask Ad Hoc versus TestFlight.
+
+A revised F-006 installed-iPad plan is prepared at [docs/plans/F-006-INSTALLED-IPAD-IMPLEMENTATION-PLAN-2026-10-03.md](plans/F-006-INSTALLED-IPAD-IMPLEMENTATION-PLAN-2026-10-03.md). Recommendation: Capacitor v8 installed app, existing Dexie database for the first pilot, explicit Files backup/restore, bundled assets, zero-network proof and an exact Ad Hoc IPA on Tyler's one registered iPad. Status: awaiting revised plan approval. Approval authorizes native-project/simulator implementation and fictional-data verification within existing access; it does not authorize Apple fees/enrollment, credentials, device registration/distribution, real-student use, merge or release. The most material drawback is dependence on Apple membership, Mac/Xcode and manual signing/update work before the physical pilot can finish.
+
+Fresh PR evidence inspected October 3:
+
+- PR #14 head `b07651b6966b072c57d6982c74da196791447ac5` targets PR #13's feature branch, is clean, and all four current-head checks passed. It fixes external restored-photo requests, affected authorization bypasses and CSV formula injection. Merge approval into the feature branch is pending; this would add the verified repairs to PR #13 and would not merge to main or release the app.
+- PR #13 head `ac44af3e6ba738937c535fa87f9aa2c35adc4586` has four passing checks but remains draft and not merge-ready. Its PWA delivery is superseded; valid Mac, touch, recovery and local-report work must be narrowed and combined with PR #14.
+- PR #10 head `b300aee33de18ef760deea47868d28a4e6e4a1f4` passed its package check and skipped release as intended. It waits for PR #11 first, then reconciliation/recheck because the instruction files overlap.
+- PR #11's previous head `007a3aa5080c2904a60c24dcaa712add1a80d3f4` passed its package check and was clean. Today's authorized planning commits advanced its head, so its refreshed exact-head check must pass before it is presented as merge-ready. No PR #11 merge approval is requested in this briefing.
+
+Recommended integration order remains: finish/check PR #11 → reconcile/recheck PR #10 → integrate PR #14 into PR #13 → narrow/rebase/reverify PR #13 → review PR #13 for main. No release approval is requested.
+
+Lookahead: F-007's local bug draft/preview is verified but private central receipt remains absent. The next consequential choice is adoption of a Tyler-owned private account-free receiver; prepare that brief after the installed-iPad plan decision. F-008 remains discovery-only until current code is available, so no product judgment is requested from stale descriptions.
