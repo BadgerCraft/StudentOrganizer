@@ -232,3 +232,11 @@ Actual latest reply: “I guess I'll have to find one sure” in response to Mac
 Optional new F-006 documentation offered October3: free Personal Team provisioning, expiry/reinstallation versus updating application code, and preserving local records during renewal. Brief explanation, original Apple source reading or defer available. No choice/defer or product approval inferred. Prior unanswered optional reading remains unanswered.
 
 DEV-016 is due today. Offer one fresh retrieval prompt before answers: explain what a provisioning profile controls and why renewing it is different from updating StudentOrganizer's features. This builds on today's actual explanation without repeating yesterday's branch/commit or AGENTS/plan prompts. No answer received; stage0 remains due October3 until an actual review outcome. DEV-007 is due but already demonstrated and not chosen as token participation. No successful recall from silence, Mac-access willingness or merge approval.
+
+## October 4 afternoon learning check
+
+Source: PR #11 / `codex/approved-plan-workflow`; main still lacks the current planning records. Fresh evidence observed before this administrative update: PR #11 head `7ebee5bd8d33ce7df95927c3d13d7c594206f51c` package check successful; PR #13 head `a7c6d941eb704b6f97a41543b6546cebfaccca07` all four checks successful. No merge/release approval inferred.
+
+The October3 provisioning prompt and October2 branch/commit plus AGENTS/plan prompts remain unanswered, so none are repeated. Rotate to DEV-012, which is directly relevant to the next queued feature. Prompt: “A teacher writes a bug report while the iPad is offline. What evidence distinguishes a locally saved draft from a report received centrally?” Ask before revealing the answer. No answer received in this run; DEV-012 remains stage0 and overdue until Tyler responds. No successful recall inferred.
+
+No optional reading is re-offered today: the free Personal Team material was already offered and the new free-pilot plan was presented this morning. F-007's private-receiver decision packet remains intentionally deferred until F-006 plan approval is resolved.
