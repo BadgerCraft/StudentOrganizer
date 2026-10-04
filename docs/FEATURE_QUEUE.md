@@ -265,3 +265,20 @@ Current records: open PR #11 / codex/approved-plan-workflow; main still lacks th
 Actual latest reply: “I guess I'll have to find one sure” in response to Mac access. Record willingness to look for Mac access, not confirmed hardware or approval of the revised free testing build. The subsequent build-approval request remains unanswered. Paid Apple membership is rejected for this pilot; Personal Team free provisioning is the proposed replacement, with seven-day renewal and Mac/Xcode dependence. Do not restart paid Ad Hoc or PWA delivery.
 
 Optional new F-006 documentation offered October3: free Personal Team provisioning, expiry/reinstallation versus updating application code, and preserving local records during renewal. Brief explanation, original Apple source reading or defer available. No choice/defer or product approval inferred. Prior unanswered optional reading remains unanswered.
+
+## October 4 morning briefing
+
+Planning source: PR #11 / `codex/approved-plan-workflow`; main remains `a608e01913b7c8ec211fcbac18f9bf325d05402f` and lacks the newer records.
+
+The stale paid Ad Hoc implementation plan is superseded. Current review plan: [F-006 free installed-iPad pilot](plans/F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md). Recommendation: prepare the Capacitor native project, simulator, local persistence/backup and zero-network checks now; finish installation when Tyler obtains Mac/Xcode access. The free Personal Team build expires after seven days and needs rebuild/reinstallation. Status: awaiting plan approval. Approval authorizes fictional-data native preparation only; no spending, real-student use, distribution, main merge or release.
+
+Fresh PR evidence:
+
+- PR #14 is merged into PR #13's feature branch at `a7c6d941eb704b6f97a41543b6546cebfaccca07`; no main merge or release occurred.
+- PR #13 current head `a7c6d941eb704b6f97a41543b6546cebfaccca07` is clean and has successful Windows, browser, Apple Silicon and Intel checks. It remains draft and not ready for main because the PWA scope must be removed/narrowed and the free installed-iPad work remains unapproved.
+- PR #10 head `b300aee33de18ef760deea47868d28a4e6e4a1f4` remains clean with a successful package check and skipped release. It waits for PR #11 merge, reconciliation and a fresh check.
+- PR #11 head `f05b19ad8eeaf67b67b05bb9d04a9cb2dc6ec440` was clean and passed its package check before today's authorized plan updates. These commits advance the head; inspect the refreshed check before requesting merge approval.
+
+Order: review/merge PR #11 when the current head passes → reconcile/recheck PR #10 → approve and implement the free F-006 preparation → narrow/rebase/reverify PR #13 → review PR #13 for main. No release approval is requested.
+
+Lookahead: hold the F-007 private receiver decision until the F-006 plan is resolved; local report drafting is already verified. F-008 still lacks current source, so no decision brief is assigned from stale summaries. No new learning packet is assigned today.
