@@ -1,3 +1,5 @@
+> **Superseded October 4, 2026:** Tyler rejected paid Apple enrollment for the current pilot. Use [the free Personal Team pilot plan](F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md). This file remains as decision history.
+
 # F-006 — Installed iPad Ad Hoc pilot implementation plan
 
 Prepared: 2026-10-03, America/Toronto  
