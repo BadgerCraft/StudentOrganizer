@@ -282,3 +282,7 @@ Fresh PR evidence:
 Order: review/merge PR #11 when the current head passes → reconcile/recheck PR #10 → approve and implement the free F-006 preparation → narrow/rebase/reverify PR #13 → review PR #13 for main. No release approval is requested.
 
 Lookahead: hold the F-007 private receiver decision until the F-006 plan is resolved; local report drafting is already verified. F-008 still lacks current source, so no decision brief is assigned from stale summaries. No new learning packet is assigned today.
+
+## October 4 afternoon
+
+DEV-012 local draft versus central receipt selected for the term review. No answer recorded. Existing unanswered prompts were not repeated. No optional documentation re-offered and no new decision assigned while the free F-006 plan approval remains pending.
