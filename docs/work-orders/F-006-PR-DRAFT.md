@@ -17,4 +17,4 @@ Validation:
 - Windows package check blocked by missing Wine; Mac package check blocked by missing macOS sips. Existing supported-platform workflows retained; this commit's platform checks remain pending.
 - Native Swift compile, WKWebView/Files execution, iOS simulator, physical iPad, airplane mode, low storage and seven-day renewal NOT RUN: Linux has no Xcode or device. Browser/static evidence does not establish those outcomes or completion of the installed pilot.
 
-Approval: Tyler's October 5 “Sure approved”; [work order and evidence](F-006-2026-10-05.md). No spending, hosting, real student data, main merge, release or distribution performed. PR #10/#11 reconciliation remains separate before future main integration.
+Approval: Tyler's October 5 “Sure approved”; [work order and evidence](docs/work-orders/F-006-2026-10-05.md). No spending, hosting, real student data, main merge, release or distribution performed. PR #10/#11 reconciliation remains separate before future main integration.
