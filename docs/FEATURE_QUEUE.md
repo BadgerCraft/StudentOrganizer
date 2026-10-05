@@ -319,3 +319,10 @@ Automatic launch remains an explicit incomplete workflow improvement. Continue a
 
 ## PR #11 revision and merge authorization — October 5
 Tyler instructed “Sure, revise then merge” after reviewing the missing automatic launch path. This authorizes the documentation correction and merging PR #11 after final-revision checks pass. It does not authorize merging PR #10, #13 or #15 or any release. F-001 documentation is ready for the authorized merge; F-005 automatic Cloud dispatch remains incomplete. PR #15 is a draft targeting codex/mac-ipad-support; do not treat the full iPad pilot as complete.
+
+## October 5 afternoon state and actual decisions
+- PR #11 merged with explicit “Sure, revise then merge”; main is now the coherent workflow source. Do not revive its closed branch as an active planning proposal.
+- Roster/seating/randomize repair: explicit approval “Yes that would be good” October 5. Scope: QA-20261005-02/03 import-to-seating discoverability and usable randomize confirmation; preserve history/authorization. No implementation launch inferred.
+- Manual Windows updater: approved October 5 “Awesome, put it at the bottom of settings” after scope review. Check only when clicked (“No, just when I click it”); version/status at bottom of Settings; user chooses download/install-and-restart; preserve records and test recovery. One initial manual install needed. Release publication, signing expenses and other platforms remain separate. Work order/implementation not yet observed.
+- Current fresh checks: PR #13 at a6dd17365d3b474e50393dad3da64f1df74708ee has four passing checks. PR #15 at a77fe406105f4153f9cb70f5c8af458fb0bee1aa has browser and Windows package success; both Mac checks failed. Failure cause not diagnosed in this learning check; it must not be called merge-ready or platform-complete.
+- DEV-002 selected for overdue recall; no answer recorded. Optional updater terminology documentation offered October 5; no response/defer inferred. No consequential decision packet assigned or implementation approval repeated.
