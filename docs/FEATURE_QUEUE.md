@@ -286,3 +286,13 @@ Lookahead: hold the F-007 private receiver decision until the F-006 plan is reso
 ## October 4 afternoon
 
 DEV-012 local draft versus central receipt selected for the term review. No answer recorded. Existing unanswered prompts were not repeated. No optional documentation re-offered and no new decision assigned while the free F-006 plan approval remains pending.
+
+
+## Morning briefing log — 2026-10-05
+- Source inspected: current `main` at `a608e01913b7c8ec211fcbac18f9bf325d05402f` and planning branch `codex/approved-plan-workflow` at `ea46303330c00d02d4ee240722a9c2b691bb4156`.
+- F-006: the revised free iPad pilot plan remains the sole feature-plan approval awaiting Tyler. No reply to the October 4 approval request is recorded. The plan prepares a native Capacitor app and simulator/local-data/backup verification now; physical installation later requires access to a Mac with Xcode and a free Apple account, with seven-day reprovisioning. Approval would authorize fictional-data implementation and verification only, not spending, real-student use, merge, release, or distribution.
+- PR #11: open, non-draft, clean at exact head `ea46303330c00d02d4ee240722a9c2b691bb4156`; Windows desktop build run 37230639110/package check passed. Merge approval remains separate and is not requested ahead of the outstanding F-006 plan decision in this briefing.
+- PR #10: open, non-draft, clean at `b300aee33de18ef760deea47868d28a4e6e4a1f4`; Windows run 37006005682 package passed and release correctly skipped. It remains sequenced after PR #11 reconciliation; no release approval requested.
+- PR #13: open draft, clean at `a7c6d941eb704b6f97a41543b6546cebfaccca07`; Windows package, browser, Mac Intel and Mac ARM checks passed on the exact head. It remains not merge-ready because the superseded Home Screen/PWA direction must be removed and replaced by the approved installed-app scope after F-006 plan approval and device-access verification.
+- Lookahead: F-007 local report drafting is already implemented and verified in PR #13; central receipt remains a later receiver/access decision. F-008 remains discovery-only. No new decision learning brief was assigned today because resolving the current F-006 plan is the next genuine judgment and routine provider/integration research remains agent work.
+- No merge or release approval was inferred or exercised.
