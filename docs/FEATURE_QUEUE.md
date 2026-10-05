@@ -296,3 +296,10 @@ DEV-012 local draft versus central receipt selected for the term review. No answ
 - PR #13: open draft, clean at `a7c6d941eb704b6f97a41543b6546cebfaccca07`; Windows package, browser, Mac Intel and Mac ARM checks passed on the exact head. It remains not merge-ready because the superseded Home Screen/PWA direction must be removed and replaced by the approved installed-app scope after F-006 plan approval and device-access verification.
 - Lookahead: F-007 local report drafting is already implemented and verified in PR #13; central receipt remains a later receiver/access decision. F-008 remains discovery-only. No new decision learning brief was assigned today because resolving the current F-006 plan is the next genuine judgment and routine provider/integration research remains agent work.
 - No merge or release approval was inferred or exercised.
+
+
+## F-006 approval — 2026-10-05, America/Toronto
+- Tyler replied “Sure approved” directly to the free iPad pilot plan review. This explicitly authorizes the scope in plans/F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md.
+- Status: approved; implementation has not yet been verified or launched in a separate coding environment.
+- Preserve existing Dexie data, Mac/touch/recovery/report/security work; prepare the bundled native app, Files backup/restore, network restrictions and fictional-data checks. No spending, real-student use, main merge, release or external distribution authorized.
+- Execution correction: iOS simulator tests require macOS/Xcode access too. This chat has shell execution but no existing application checkout; do not infer a Cloud workspace or continuous execution. Use an actual checkout/runner or record the precise access gap.
