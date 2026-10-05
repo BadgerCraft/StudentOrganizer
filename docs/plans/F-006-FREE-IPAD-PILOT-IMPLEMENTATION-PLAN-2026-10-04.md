@@ -1,7 +1,10 @@
 # F-006 — Free installed-iPad pilot implementation plan
 
 Prepared: 2026-10-04, America/Toronto
-Status: awaiting Tyler's approval
+Status: approved by Tyler, 2026-10-05, America/Toronto
+Approval evidence: “Sure approved” in direct reply to the October 5 free iPad pilot review.
+
+Execution clarification: native-project preparation can proceed without Tyler's Mac. iOS simulator execution requires an available macOS runner with Xcode; it must be reported NOT RUN until actual execution is observed. Physical-device access remains unconfirmed.
 Current feature source: PR #13 at `a7c6d941eb704b6f97a41543b6546cebfaccca07`
 
 ## Key points
