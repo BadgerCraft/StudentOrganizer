@@ -8,7 +8,8 @@ import {
   DownloadCloud,
   CheckCircle2,
   ChevronDown,
-  UserCheck
+  UserCheck,
+  MessageSquareWarning
 } from 'lucide-react';
 import type { ClassSection, Course, User } from '../types/schema';
 
@@ -20,6 +21,7 @@ interface HeaderProps {
   onSelectClass: (sectionId: string) => void;
   currentUser?: User | null;
   onOpenTeacherSelector?: () => void;
+  onReportProblem?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,14 +31,15 @@ export const Header: React.FC<HeaderProps> = ({
   allClasses,
   onSelectClass,
   currentUser,
-  onOpenTeacherSelector
+  onOpenTeacherSelector,
+  onReportProblem
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex flex-wrap justify-between items-center gap-2 py-2 lg:py-0 lg:min-h-16">
           {/* Left: Brand & Class Selector */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => onViewChange('dashboard')}
               data-testid="nav-dashboard-btn"
@@ -45,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                 ON
               </div>
-              <div className="text-left">
+              <div className="text-left hidden sm:block">
                 <span className="font-bold text-slate-900 tracking-tight text-base block leading-tight">
                   Ontario Markbook
                 </span>
@@ -92,11 +95,11 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Center: Class View / List View Primary Toggle (when a class is active) */}
           {activeClass && (
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner order-3 w-full lg:order-none lg:w-auto">
               <button
                 onClick={() => onViewChange('seating')}
                 data-testid="nav-seating-btn"
-                className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center space-x-2 px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition flex-1 lg:flex-none ${
                   currentView === 'seating'
                     ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
@@ -107,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => onViewChange('markbook')}
-                className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center space-x-2 px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition flex-1 lg:flex-none ${
                   currentView === 'markbook'
                     ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
@@ -120,7 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Right: Quick Tools & Autosave Badge */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center flex-wrap gap-1 ml-auto">
             {activeClass && (
               <>
                 <button
@@ -178,6 +181,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden lg:inline">Settings</span>
             </button>
 
+            <button type="button" onClick={onReportProblem} title="Report a problem" aria-label="Report a problem" data-testid="report-problem-btn" className="p-2 rounded-lg text-slate-600 hover:bg-slate-50">
+              <MessageSquareWarning className="w-4 h-4" />
+            </button>
+
             {/* Acting Teacher Attribution Badge */}
             <div className="flex items-center pl-3 border-l border-slate-200">
               {currentUser ? (
@@ -220,6 +227,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+      {import.meta.env.VITE_BUILD_SHA && <div className="bg-amber-50 px-4 py-1 text-xs text-amber-900" data-testid="platform-build-id">Platform test build · {import.meta.env.VITE_BUILD_SHA.slice(0, 12)} · local records</div>}
     </header>
   );
 };

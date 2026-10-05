@@ -121,20 +121,6 @@ export class SeatingDomainService {
             return existingStudentSeat; // Already in target seat
           }
 
-          // Swap occupant if target coordinate occupied
-          if (existingAtCoord) {
-            const swappedAtCoord = {
-              ...existingAtCoord,
-              row: existingStudentSeat.row,
-              col: existingStudentSeat.col,
-              updatedAt: now,
-              version: existingAtCoord.version + 1
-            };
-            await this.db.seatPositions.put(swappedAtCoord);
-          } else {
-            await this.db.seatPositions.delete(existingStudentSeat.id);
-          }
-
           const updatedPosition: SeatPosition = {
             ...existingStudentSeat,
             row,
@@ -142,42 +128,62 @@ export class SeatingDomainService {
             updatedAt: now,
             version: existingStudentSeat.version + 1
           };
-          await this.db.seatPositions.put(updatedPosition);
+          const changes: { previous: SeatPosition; next: SeatPosition }[] = [
+            { previous: existingStudentSeat, next: updatedPosition }
+          ];
+          if (existingAtCoord) {
+            changes.push({
+              previous: existingAtCoord,
+              next: {
+                ...existingAtCoord,
+                row: existingStudentSeat.row,
+                col: existingStudentSeat.col,
+                updatedAt: now,
+                version: existingAtCoord.version + 1
+              }
+            });
+          }
 
-          await this.db.auditEntries.add({
+          // Unique seat-coordinate indexes cannot temporarily contain both occupants
+          // at the source coordinate. Remove the old rows, then insert both updated
+          // rows inside this same transaction: failure restores the original seats.
+          await this.db.seatPositions.bulkDelete(changes.map(change => change.previous.id));
+          await this.db.seatPositions.bulkPut(changes.map(change => change.next));
+
+          await this.db.auditEntries.bulkAdd(changes.map(({ previous, next }) => ({
             id: crypto.randomUUID(),
             entityName: 'seatPositions',
-            entityId: updatedPosition.id,
-            action: 'UPDATE',
+            entityId: next.id,
+            action: 'UPDATE' as const,
             transactionId: txId,
-            previousStateJson: JSON.stringify(existingStudentSeat),
-            newStateJson: JSON.stringify(updatedPosition),
-            diffJson: JSON.stringify({ row: { old: existingStudentSeat.row, new: row }, col: { old: existingStudentSeat.col, new: col } }),
+            previousStateJson: JSON.stringify(previous),
+            newStateJson: JSON.stringify(next),
+            diffJson: JSON.stringify({ row: { old: previous.row, new: next.row }, col: { old: previous.col, new: next.col } }),
             userId,
             timestamp: now,
             clientVersion: '1.0.0'
-          });
+          })));
 
-          await this.db.syncMutations.add({
+          await this.db.syncMutations.bulkAdd(changes.map(({ previous, next }, index) => ({
             id: crypto.randomUUID(),
             deviceId,
             organizationId: derivedOrgId,
             mutationId: crypto.randomUUID(),
             transactionId: txId,
-            sequenceNumber: 1,
-            transactionSize: 1,
+            sequenceNumber: index + 1,
+            transactionSize: changes.length,
             entityName: 'seatPositions',
-            entityId: updatedPosition.id,
-            operation: 'UPDATE',
-            payloadJson: JSON.stringify(updatedPosition),
-            baseVersion: existingStudentSeat.version,
-            status: 'pending',
+            entityId: next.id,
+            operation: 'UPDATE' as const,
+            payloadJson: JSON.stringify(next),
+            baseVersion: previous.version,
+            status: 'pending' as const,
             createdAt: now,
             attemptCount: 0,
             lastAttemptAt: null,
             lastError: null,
             acknowledgedAt: null
-          });
+          })));
 
           return updatedPosition;
         }

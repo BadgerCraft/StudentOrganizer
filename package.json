@@ -16,7 +16,9 @@
     "test:workflow": "tsx src/benchmarks/visualTestWorkflow.ts",
     "test:browser:ux": "tsx src/benchmarks/browserUxE2ETest.ts",
     "electron:dev": "electron .",
-    "package:win": "npm run build && electron-builder --win nsis portable"
+    "package:win": "npm run build && electron-builder --win nsis portable",
+    "package:mac": "npm run build && electron-builder --mac dmg zip",
+    "test:mac:packages": "tsx src/benchmarks/macPackagesSmoke.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -68,6 +70,17 @@
     },
     "portable": {
       "artifactName": "OntarioTeacherAssessment-Portable.exe"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.education",
+      "minimumSystemVersion": "13.0",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "OntarioTeacherAssessment-${version}-mac-${arch}.${ext}"
     }
   }
 }
