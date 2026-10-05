@@ -240,3 +240,11 @@ Source: PR #11 / `codex/approved-plan-workflow`; main still lacks the current pl
 The October3 provisioning prompt and October2 branch/commit plus AGENTS/plan prompts remain unanswered, so none are repeated. Rotate to DEV-012, which is directly relevant to the next queued feature. Prompt: “A teacher writes a bug report while the iPad is offline. What evidence distinguishes a locally saved draft from a report received centrally?” Ask before revealing the answer. No answer received in this run; DEV-012 remains stage0 and overdue until Tyler responds. No successful recall inferred.
 
 No optional reading is re-offered today: the free Personal Team material was already offered and the new free-pilot plan was presented this morning. F-007's private-receiver decision packet remains intentionally deferred until F-006 plan approval is resolved.
+
+## October 5 afternoon review
+Source: main after merged PR #11. New administrative branch codex/learning-2026-10-05 preserves existing answers and leaves merge reserved.
+Rotate to overdue DEV-002 (publishing environment setup versus releasing an application), relevant to today's installed Windows QA build and proposed manual updater. Prior provisioning, local-draft/central-receipt, branch/commit, AGENTS/plan and checkout/CI prompts remain unanswered and are not repeated.
+Prepared recall request: Explain in your own words how publishing a Cloud environment differs from releasing a StudentOrganizer update for installation. No answer revealed or received; stage and due date unchanged.
+Optional new documentation offered: Windows manual updater, the relationship among source branch, build, release and installed version. Brief explanation/original-source reading/defer remain optional; no choice inferred.
+Actual user requests recorded: roster/seating/randomize repair approved with “Yes that would be good”; manual update check chosen with “No, just when I click it”; updater scope approved with “Awesome, put it at the bottom of settings.” These product choices are not retrieval answers.
+Today's “So does this make sense to do if it doesn't work?” prompted clarification that the workflow is partially automated and still needs manual Cloud launch. “Sure, revise then merge” authorized PR #11 revision/merge, observed complete. No successful terminology recall inferred.
