@@ -303,3 +303,19 @@ DEV-012 local draft versus central receipt selected for the term review. No answ
 - Status: approved; implementation has not yet been verified or launched in a separate coding environment.
 - Preserve existing Dexie data, Mac/touch/recovery/report/security work; prepare the bundled native app, Files backup/restore, network restrictions and fictional-data checks. No spending, real-student use, main merge, release or external distribution authorized.
 - Execution correction: iOS simulator tests require macOS/Xcode access too. This chat has shell execution but no existing application checkout; do not infer a Cloud workspace or continuous execution. Use an actual checkout/runner or record the precise access gap.
+
+
+## Actual execution path — October 5, 2026
+
+The workflow is partially automated. Scheduled briefings and bounded GitHub connector edits/checks/reporting have observed evidence. Automatic dispatch from this conversation or a scheduled briefing into the published Codex Cloud environment has not been verified.
+
+For application work requiring a source workspace, the working path is: record the approved plan and work order → Tyler starts a new task using Work in > Cloud and the published StudentOrganizer environment → the coding task verifies the source, implements and tests available milestones, then persists its branch/results → review and explicitly approve merge/release separately. Do not ask for implementation approval again during this handoff.
+
+This manual launch is currently required when the active chat lacks a usable checkout or execution capability. A saved work order, scheduled wake-up, approval, or subagent does not start or sustain a Cloud coding task. Use prepared/launch-pending until actual execution is observed; use running only with current execution evidence. No unattended feature-completion promise is established by these instructions.
+
+Observed October 5: Tyler manually launched the approved F-006 work in Cloud. It pushed codex/f006-installed-ipad-pilot at a77fe406105f4153f9cb70f5c8af458fb0bee1aa; its work record reports 191 tests/build and browser checks passed. Root independently verified the pushed source and opened draft PR #15 through the GitHub connector after Cloud PR creation failed. Native compilation, simulator/device acceptance and platform regressions for that new revision remain unverified. This proves the manual handoff, not automatic Cloud dispatch.
+
+Automatic launch remains an explicit incomplete workflow improvement. Continue available approved work; report the precise missing capability and provide a concrete handoff when needed. Never imply that merging this documentation supplies that capability.
+
+## PR #11 revision and merge authorization — October 5
+Tyler instructed “Sure, revise then merge” after reviewing the missing automatic launch path. This authorizes the documentation correction and merging PR #11 after final-revision checks pass. It does not authorize merging PR #10, #13 or #15 or any release. F-001 documentation is ready for the authorized merge; F-005 automatic Cloud dispatch remains incomplete. PR #15 is a draft targeting codex/mac-ipad-support; do not treat the full iPad pilot as complete.
