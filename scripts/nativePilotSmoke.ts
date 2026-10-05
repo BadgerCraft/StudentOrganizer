@@ -65,6 +65,15 @@ async function download(page: Page, buttonTestId: string) {
   return { name: file.suggestedFilename(), body: readFileSync(filename) };
 }
 
+async function assertBackupTables(page: Page, tables: Record<string, any[]>) {
+    for (const [table, expected] of Object.entries(tables)) {
+      const order = (rows: any[]) => [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      // Existing restore backfills the legacy label alias; permit only this documented addition.
+      const normalized = (expected as any[]).map(row => table === 'participationEventTypes' && row.label === undefined && typeof row.name === 'string' ? { ...row, label: row.name } : row);
+      assert.deepEqual(order(await records(page, table)), order(normalized), `Full backup round trip changed ${table}`);
+    }
+ }
+
 async function main() {
   const engine = process.env.IPAD_TEST_BROWSER === 'webkit' ? webkit : chromium;
   const server = await preview({ preview: { host: '127.0.0.1', port: 4178, strictPort: true } });
@@ -78,25 +87,34 @@ async function main() {
   }
   const url = 'http://127.0.0.1:4178/';
   const profile = mkdtempSync(join(tmpdir(), 'fictional-ipad-test-'));
-  const evidenceDir = join('screenshots', `ipad-${engine.name()}`);
+  const cleanProfile = mkdtempSync(join(tmpdir(), 'fictional-clean-restore-'));
+  let cleanContext: BrowserContext | undefined;
+  const evidenceDir = join('screenshots', `native-pilot-browser-${engine.name()}`);
   mkdirSync(evidenceDir, { recursive: true });
   let context: BrowserContext | undefined;
   let latestPage: Page | undefined;
   const errors: string[] = [];
   const failedLoads: string[] = [];
+  const externalRequests: string[] = [];
+  function observeRequests(context: BrowserContext) {
+    context.on('request', request => {
+      if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== new URL(url).origin) externalRequests.push(request.url());
+    });
+  }
   try {
     context = await engine.launchPersistentContext(profile, {
       headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
       acceptDownloads: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && engine === chromium ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {})
     });
+    observeRequests(context);
     let page = context.pages()[0] || await context.newPage();
     latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
     page.on('requestfailed', request => failedLoads.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
     await page.goto(url);
     await selectTeacher(page);
-    await page.waitForFunction(() => document.querySelector('[data-testid="offline-app-status"]')?.textContent?.includes('Ready for offline'));
+    assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), 0, 'Retired PWA worker must not register');
     await noPageOverflow(page, 'portrait dashboard');
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().tap();
     await page.locator('[data-testid="student-seat-card"]').first().waitFor();
@@ -153,7 +171,7 @@ async function main() {
     const removePhoto = page.locator('[data-testid="remove-photo-btn"]');
     if (await removePhoto.isVisible()) await removePhoto.tap();
     await removePhoto.waitFor({ state: 'hidden' });
-    await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({ name: 'fictional.png', mimeType: 'image/png', buffer: readFileSync('dist/icon-180.png') });
+    await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({ name: 'fictional.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1kAAAAASUVORK5CYII=', 'base64') });
     // FileReader + image resizing complete asynchronously; wait before saving.
     await removePhoto.waitFor({ state: 'visible' });
     assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), 'Fictional Tablet');
@@ -200,6 +218,14 @@ async function main() {
     await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
     await page.getByText('Restore Rejected: Database Left Intact', { exact: true }).waitFor();
     assert.ok((await records(page, 'assessments')).some(row => row.title === title));
+    const wrongVersion = { ...backupJson, schemaVersion: 999 };
+    await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: 'future.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(wrongVersion)) });
+    await page.getByText('Restore Rejected: Database Left Intact', { exact: true }).waitFor();
+    assert.ok((await records(page, 'assessments')).some(row => row.title === title));
+    await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.body });
+    await page.getByTestId('restore-confirm-dialog').getByRole('button', { name: 'Cancel', exact: true }).tap();
+    await page.getByTestId('restore-confirm-dialog').waitFor({ state: 'hidden' });
+    assert.ok((await records(page, 'assessments')).some(row => row.title === title));
     const afterBackupTitle = `${title} after backup`;
     await createAssessment(page, afterBackupTitle);
     await page.locator('[data-testid="nav-portability-btn"]').tap();
@@ -213,43 +239,57 @@ async function main() {
     assert.ok((await records(page, 'assessments')).some(row => row.title === title));
     assert.ok(!(await records(page, 'assessments')).some(row => row.title === afterBackupTitle));
     assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
-    // Close the browser process, relaunch the same profile offline, reopen records.
+    await assertBackupTables(page, backupJson.tables);
+    await page.getByRole('button', { name: 'Report a problem', exact: true }).tap();
+    await page.getByTestId('bug-report-summary').fill('Fictional installed pilot local draft');
+    await page.getByTestId('bug-report-modal').getByTestId('modal-close-x-btn').tap();
+    // Browser process persistence proxy only: this is NOT WKWebView or airplane-mode evidence.
     await context.close();
-    await stopServer();
     context = await engine.launchPersistentContext(profile, {
       headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && engine === chromium ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {})
     });
-    // Playwright 1.63 WebKit's offline emulation rejects even worker responses
-    // (microsoft/playwright#42775). Require a stopped origin for both engines;
-    // Chromium additionally exercises the network-offline flag. WebKit evidence
-    // is cached reopening with an unavailable origin, not device airplane mode.
-    if (engine === chromium) await context.setOffline(true);
+    observeRequests(context);
     page = context.pages()[0] || await context.newPage();
     latestPage = page;
     page.on('pageerror', error => errors.push(error.message));
     page.on('requestfailed', request => failedLoads.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
-    const reopenedResponse = await page.goto(url);
-    assert.equal(reopenedResponse?.fromServiceWorker(), true, 'Reopened shell must come from its service worker, not an HTTP cache');
+    await page.goto(url);
     await selectTeacher(page);
     await openAssessmentHub(page);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     assert.ok((await records(page, 'students')).some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl));
     assert.ok((await records(page, 'participationEvents')).some(row => row.note === 'Fictional iPad observation'));
     assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
+    await page.getByRole('button', { name: 'Report a problem', exact: true }).tap();
+    await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('[data-testid="bug-report-summary"]')?.value === 'Fictional installed pilot local draft');
+    assert.equal(await page.getByTestId('bug-report-summary').inputValue(), 'Fictional installed pilot local draft');
+    await page.getByTestId('bug-report-modal').getByTestId('modal-close-x-btn').tap();
     await page.screenshot({ path: join(evidenceDir, 'offline-reopened.png'), fullPage: true });
-    const cached = await page.evaluate(async () => {
-      const keys = await caches.keys();
-      const entries: string[] = [];
-      for (const key of keys.filter(name => name.startsWith('ontario-app-shell-'))) {
-        for (const request of await (await caches.open(key)).keys()) entries.push(request.url);
-      }
-      return entries;
+    // A wholly separate empty browser profile models a clean destination installation.
+    cleanContext = await engine.launchPersistentContext(cleanProfile, {
+      headless: true, viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true,
+      ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && engine === chromium ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {})
     });
-    assert.ok(cached.some(item => item.endsWith('/index.html')));
-    assert.ok(cached.every(item => /\/(index\.html|manifest\.webmanifest|app-icon\.svg|icon-\d+\.png|assets\/[^/]+\.(js|css))$/.test(item)));
+    observeRequests(cleanContext);
+    const cleanPage = cleanContext.pages()[0] || await cleanContext.newPage();
+    latestPage = cleanPage;
+    cleanPage.on('pageerror', error => errors.push(error.message));
+    cleanPage.on('requestfailed', request => failedLoads.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
+    await cleanPage.goto(url);
+    await selectTeacher(cleanPage);
+    assert.ok(!(await records(cleanPage, 'assessments')).some(row => row.title === title));
+    await cleanPage.getByTestId('nav-portability-btn').tap();
+    await cleanPage.getByTestId('restore-file-input').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.body });
+    await cleanPage.getByTestId('restore-confirm-dialog').waitFor();
+    await cleanPage.getByTestId('confirm-restore-btn').tap();
+    await cleanPage.getByText(/Database successfully restored/).waitFor();
+    await assertBackupTables(cleanPage, backupJson.tables);
+    await cleanPage.screenshot({ path: join(evidenceDir, 'clean-destination-restored.png'), fullPage: true });
     assert.deepEqual(errors, []);
-    console.log(`PASS ${engine.name()}: touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, file roster/CSV/backup/replacement, cached process reopen with stopped origin and persisted records${engine === chromium ? ' plus network-offline emulation' : '; WebKit network-offline emulation is unverified (Playwright #42775)'}; not physical iPad verification.`);
+    assert.deepEqual(externalRequests, [], 'No external application request may occur, including first startup');
+    assert.deepEqual(failedLoads, [], 'All local bundled resources must load');
+    console.log(`PASS ${engine.name()}: bundled production browser proxy, touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, roster/CSV/backup/replacement and clean-profile restore of all collections, browser process restart and persisted records, zero observed external requests; native Files, WKWebView, simulator and physical iPad NOT tested.`);
   } catch (error) {
     console.error('Fictional browser failure diagnostics:', JSON.stringify({
       pageErrors: errors, failedLoads,
@@ -258,9 +298,11 @@ async function main() {
     if (latestPage && !latestPage.isClosed()) await latestPage.screenshot({ path: join(evidenceDir, 'failure.png'), fullPage: true }).catch(() => {});
     throw error;
   } finally {
+    await cleanContext?.close();
     await context?.close();
     await stopServer();
     rmSync(profile, { recursive: true, force: true });
+    rmSync(cleanProfile, { recursive: true, force: true });
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

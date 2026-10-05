@@ -73,17 +73,16 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run ios:prepare
+      - run: npm run test:ipad:assets
       - name: Require matching preinstalled browser engines
         run: |
           node -e "const { version } = require('playwright/package.json'); if (version !== '1.63.0') throw new Error('Update browser image and lockfile together'); const fs = require('node:fs'); const { chromium, webkit } = require('playwright'); [chromium, webkit].forEach(engine => fs.accessSync(engine.executablePath()));"
-      - name: Check complete offline shell and update behaviour
-        run: node scripts/verifyOfflineShell.cjs
-      - name: Check touch and offline classroom flows in Chromium
-        run: node --import tsx scripts/ipadBrowserTest.ts
+      - name: Check bundled classroom and recovery flows in Chromium
+        run: node --import tsx scripts/nativePilotSmoke.ts
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}
-        run: node --import tsx scripts/ipadBrowserTest.ts
+        run: node --import tsx scripts/nativePilotSmoke.ts
         env:
           IPAD_TEST_BROWSER: webkit
       - name: Check bug-report draft recovery and failures
