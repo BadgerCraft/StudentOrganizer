@@ -254,3 +254,11 @@ Source: current planning branch records read in full; Tyler's “Sure approved�
 - Stage 0; next review October 6. No answer/recall recorded.
 - Milestone learning checks saved for return: (1) why does a browser test leave an iOS simulator check outstanding? (2) what must a verified backup demonstrate before seven-day renewal? These remain unanswered.
 - Recommended next direction after available checks: run the exact build on a Mac/Xcode iPad simulator, then physical fictional-data acceptance and renewal. Remaining authorized local milestones continued without waiting for a direction response. No background run or reminder is claimed.
+
+## October6 — batch implementation and deferred learning checks
+
+No unanswered prior question was marked passed. Trial instruction saves learning checks for return and continues independent approved work. Reproduced seating randomization violated a unique enrollment index; transactional replacement now retains IDs and attributes audit writes. This extends DEV014's existing indexed swap example without claiming physical/device verification. Prepared check: how do the unique index and transaction each protect a classroom shuffle? No answer received.
+
+DEV018 introduced: an update lookup compares release versions; it cannot establish installer publisher/authenticity or preservation of existing records. Project example: the Windows button sends only a fixed release lookup when clicked, handles installed QA versions, and cannot download/install anything until trust/channel/old-new acceptance prerequisites exist. Explanation in current task results; stage0, review dueOctober7. Prepared check: why can finding a newer version leave safe installation unverified? No recall response inferred.
+
+Separate schedule task: no task-management or scheduled-run inspection tools exist here. The current manually launched checkout is evidence for this task only; scheduled-run inheritance remains unverified. Primary coordination and no replacement-before-readback rule are persisted. No schedule/notification/continued-background activity claimed.

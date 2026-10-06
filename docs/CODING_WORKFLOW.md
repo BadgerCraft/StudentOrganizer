@@ -1,5 +1,22 @@
 # Daily development workflow
 
+## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
+
+Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.
+
+- 08:15 America/Toronto: prepare a batch of useful decisions and approved execution items. Aim for 3–5 substantive items when available; never invent work to fill a quota. Each decision includes outcome, recommendation, strongest drawback, evidence/limits and exact approval consequence. The one-new-learning-brief limit does not limit decision or execution throughput.
+- One coordinating coding task works through the whole approved batch, completing verification and review preparation before moving on. A blocked item does not stop independent approved items. Save learning questions for Tyler's return; do not ask for a new direction after each approved milestone.
+- Use bounded independent workers where available, separate file/branch ownership and root integration. Inspect current writers before starting. No worker creates an unattended execution mechanism.
+- Launch through a usable checkout/execution capability when available. Otherwise provide one concrete Cloud launch instruction for the complete batch and record launch-pending. A schedule, approval or prepared order is not evidence of running work; automatic Cloud dispatch remains unverified.
+- 16:00: report actual reviewable outcomes, current execution evidence, blockers, user interventions and the next action; then offer brief due learning/optional documentation. Report during the trial even if progress is zero, explaining why.
+- 20:15: continue/select the existing approved batch where execution is available; prepare tomorrow's decisions using technical research. Do not limit eligible independent work to one feature or duplicate an active writer. Keep unchanged launch blockers quiet.
+- Maintain a compact current-status snapshot before historical logs. Record approvals, work item dependencies, source heads, task/PR links and evidence. Read fresh contents/SHA before writes; preserve history without making older statements authoritative.
+- Trial measures: items made reviewable, avoidable user interventions, approved items left idle and reasons, and verified launch-to-handoff paths. Do not use elapsed time, messages, work orders or PR count as substitutes for completed outcomes.
+- On October 8 at the results check, recommend retain/revise/stop using observed evidence. Continue existing schedules after the trial without silently reinstating superseded constraints; ask only for a consequential change.
+
+Active work order: docs/work-orders/BATCH-2026-10-06.md. Proposed administrative source: codex/batch-work-trial; scheduled runs read it while its documentation PR is open.
+
+
 ## Actual execution path — October 5, 2026
 
 The workflow is partially automated. Scheduled briefings and bounded GitHub connector edits/checks/reporting have observed evidence. Automatic dispatch from this conversation or a scheduled briefing into the published Codex Cloud environment has not been verified.
@@ -88,3 +105,11 @@ Tyler created and published the reusable StudentOrganizer Cloud environment and 
 A new actual coding task uses the published environment; it is distinct from publishing an application release. GitHub stores durable code, plans, and results. Never say a reply keeps working after its turn ends without an actual task/execution mechanism.
 
 Official documentation: [Scheduled tasks](https://learn.chatgpt.com/docs/automations) and [Cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environments). Scheduled web runs can use connected tools and durable prompts but do not retain a local worktree between runs. Confirm the available execution tools and source checkout for each coding run.
+
+## Primary coordination — October 6, 2026
+
+Tyler designated the current StudentOrganizer Cloud conversation as the primary project conversation and launched the whole approved batch here. A real checkout and command execution are present; workers used separate isolated checkouts. This is observed manual launch-to-execution evidence, not automatic dispatch. The host exposes no durable task URL or schedule migration control; none is fabricated. Keep review results and decisions in this conversation and durable branch records; existing scheduled threads may still need a separate product-supported migration.
+
+### Schedule migration access boundary
+
+October 6 user instruction: daily 08:15 morning batch and16:00 results/learning belong in this primary conversation;20:15 continuation must remain paused. Exact live prompts/IDs/states and conversation binding are unavailable to this coding toolset. No replacements/disable operations or scheduled execution probes occurred. Do not substitute this Cloud task’s checkout/tools for evidence about a scheduled run. Preserve old schedules until confirmed replacements exist; use the explicit migration and readback order in SCHEDULE-MIGRATION-2026-10-06.md.
