@@ -81,7 +81,7 @@ async function main() {
         return request;
       };
     });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
     const updates = page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await app.evaluate(() => (globalThis as any).__manualUpdateRequests), [], 'Opening Settings must not check for updates');
