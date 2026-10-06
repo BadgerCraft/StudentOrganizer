@@ -18,9 +18,15 @@
     "electron:dev": "electron .",
     "package:win": "npm run build && electron-builder --win nsis portable",
     "package:mac": "npm run build && electron-builder --mac dmg zip",
-    "test:mac:packages": "tsx src/benchmarks/macPackagesSmoke.ts"
+    "test:mac:packages": "tsx src/benchmarks/macPackagesSmoke.ts",
+    "ios:prepare": "npm run build && cap sync ios",
+    "ios:open": "cap open ios",
+    "test:ipad:browser": "tsx scripts/nativePilotSmoke.ts",
+    "test:ipad:assets": "tsx scripts/auditNativePilot.ts"
   },
   "dependencies": {
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "clsx": "^2.1.1",
     "dexie": "^4.0.7",
     "dexie-react-hooks": "^1.1.7",
@@ -30,6 +36,7 @@
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

@@ -1,61 +1,38 @@
-# iPad Home Screen app implementation and QA
+# Installed iPad personal pilot — F-006
 
-F-006 implementation approved by Tyler October 1, 2026, 09:18 Toronto: Mac desktop plus iPad Home Screen app; device-local records and manual full-backup transfer first. Merge, release, hosting, paid services and live synchronization remain separate decisions.
+Tyler approved the [free installed-iPad plan](plans/F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md) on October 5, 2026 (“Sure approved”). This replaces the earlier Home Screen/PWA delivery. No hosting, paid Apple account, real student use, release, distribution, or main merge is authorized. Historical PWA evidence remains in Git history; it is not native iPad evidence.
 
-## Current evidence
+## Development and identity
 
-| Check | Evidence or remaining limit |
-| --- | --- |
-| Production build | `npm run build` passed October 1. Generates manifest, 180/192/512px PNG icons and versioned offline worker. Existing bundle-size warning remains. |
-| Existing service tests | Integrated `npm test` passed 162 tests October 1 (152 baseline, seven bug-report tests and three occupied-seat swap regressions). |
-| Actual generated offline worker | `node scripts/verifyOfflineShell.cjs` passed at root and `/teacher/` scopes: eight exact build assets, document and JS/CSS available without network; record downloads, POST requests, foreign origins and unrelated navigation excluded; another same-origin app path's old cache retained; no forced activation or page takeover. This is a Node worker simulation, not browser runtime evidence. |
-| Touch/browser checks | Local launch blocked: default Chromium/WebKit absent; normal install retries failed with empty/truncated Chromium ZIPs. First GitHub browser run on `466e5d0` reached the seat-swap step but failed when a nested profile action intercepted a center tap. Fixed move mode to hide quick actions; touch layout now places ordinary quick actions on a separate row. Second run on ee6545d exposed an existing occupied-seat swap unique-index conflict in the shared service. Fixed it atomically with preserved row IDs and audit/outbox for both occupants; regression checks cover successful swap, rollback after audit failure and rejected unauthorized writes. The subsequent93a639c run passed the seat swap but found attendance actions outside the reachable left edge: centered tracks overflowed a narrow grid container. The grid now expands to its minimum track width inside horizontal scrolling, and the scenario checks the actual attendance hit target in each viewport. Revised browser rerun must establish completion; neither failing run proves the whole classroom flow or offline reopen. |
-| Physical iPad | Unverified. No iPad Home Screen installation, on-screen keyboard, actual Files handoff or hardware close/reopen has been tested. |
-| Delivery | No HTTPS address provisioned or published. No release claim. `npm run preview` uses local development hosting only. |
+Use Node.js 24, `npm ci`, `npm run ios:prepare`, then `npm run test:ipad:assets`. Capacitor core/CLI/iOS are pinned to 8.5.2. The native project was generated with `npx cap add ios` (default Swift Package Manager template); do not regenerate it over the custom Swift sources. `ios:prepare` rebuilds and synchronizes bundled assets/configuration. Never run a live-server configuration for the pilot.
 
-## Classroom behaviour implemented
+The app ID `ca.on.teacher.assessment`, iOS origin `capacitor://localhost`, and database name `OntarioTeacherAssessmentDB` must remain stable. Dexie and the existing database/recovery schema remain unchanged. A browser database is a different storage context; explicitly transfer a validated backup when necessary. Records and local report drafts remain on the device; reports are not sent centrally.
 
-- Home Screen metadata, a local book icon and an app-shell offline cache. Only the app's bundled document, JS, CSS, manifest and icons enter that cache. Student records remain in the existing local IndexedDB; the worker never reads that database or uploads it.
-- First online setup reports **Ready for offline use on this device** once the worker activates. The status panel explains device-local records, Safari/Home Screen separation, manual backup replacement and storage protection. Storage protection is an explicit request, not a durability guarantee.
-- Updates install a complete new shell into a separate cache. They use the browser's normal waiting lifecycle: no `skipWaiting`, `clients.claim` or automatic reload. Save drafts and close all windows/tabs for this app before reopening to activate a waiting update. Only old `ontario-app-shell-*` caches belonging to that app path are removed on activation; another same-origin app path's shell survives and records are not cleared.
-- Touch targets have a 44px minimum height. Text fields avoid focus zoom from very small fonts while pinch zoom stays available. Modal height and participation-dock height use the current viewport, with scrolling and safe-area spacing. Header responsiveness is integrated separately.
-- **Move seats by tapping** is available on unlocked layouts: tap the source student, then a destination to move or swap. Tap the same source to cancel; **Done moving seats** returns to ordinary student selection. Existing service authorization and seat transaction handle the move. Busy/error states prevent repeated taps from silently issuing competing moves.
-- CSV/JSON downloads use a temporary DOM link and retain their Blob URL for 60 seconds so Safari can complete its asynchronous handoff. Download feedback says to check Files rather than claiming the operating system saved it. Existing file-reader import/restore has explicit read-error feedback. Backups are ordinary unencrypted JSON.
+Run `npm test`, `npm run build`, and `npm run test:ipad:browser`. A local system Chromium can be selected with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`. For WebKit set `IPAD_TEST_BROWSER=webkit` and install a matching verified Playwright runtime. Browser checks measure shared UI and persistence in that browser; they do not prove WKWebView, native Files, signing, restart, or renewal.
 
-## Installation and manual transfer guide
+## Data and network boundaries
 
-Use fictional data until the separate real-student/board approval is resolved.
+The signed app contains Vite assets. No website, service worker, remote update loader, telemetry, or remote student-data API is needed. Production CSP denies connections/workers and external resources. Native startup adds a WebKit network content rule before loading; failure leaves the application unloaded. Navigation accepts only the stable bundled origin, new windows are refused, direct Capacitor HTTP bridge calls are rejected, and asset-path mutation APIs are rejected. Native bridge logging is disabled. These controls require native runtime testing before claiming zero iPad traffic.
 
-1. After a delivery location is approved, open its stable HTTPS address in Safari. A local HTTP address on another computer does not satisfy iPad secure-context requirements.
-2. Tap Share, then **Add to Home Screen**. Enable **Open as Web App** if that option appears. Launch from the Home Screen icon while online and wait for the offline-ready message. Safari's existing records are not automatically copied into the Home Screen app.
-3. Use Import/Export to download a **Full Application Backup** from the source device. Check that the `.json` file is present and readable in Files/Downloads before leaving that device. Preserve a dated copy of the destination's records before restoring.
-4. Move the backup using a user-approved method. In the destination app select the backup from Files, inspect its metadata, and confirm replacement. Restore replaces all destination records; it does not merge two devices' work. Use one current working copy and transfer deliberately to avoid divergent edits.
-5. Reopen the destination and check the class, assessment, notes and photo. Download another backup after the day's changes. Deleting the Home Screen app, clearing website data or browser storage eviction can lose local records; an external backup is the recovery path.
+Full-backup export invokes the native Files picker. Import selects JSON, runs the unchanged versioned validator, shows the existing replacement confirmation, then uses the existing atomic restore. Cancellation/read failure does not replace records. Protected temporary export files are cleaned after completion/cancellation. Save backups to **On My iPad** for device-local retention. A user-selected cloud Files provider can transfer a backup; this is a deliberate user action, not background application sync. Backups are unencrypted JSON containing records and must be protected. CSV/photo picker handoffs on WKWebView remain physical-device checks.
 
-Keep the delivery origin/path stable. Different origins or browser/Home Screen contexts can have separate databases and offline caches. Different paths on the same origin share the existing named IndexedDB; their offline-shell caches are separately scoped. Use a dedicated, stable app location and do not direct colleagues to solve updates by clearing website data.
+## Mac/Xcode simulator handoff — NOT RUN here
 
-## Repeatable checks
+Requires macOS, Xcode 26 or later, iOS 15+ runtime, and a compatible simulator. The exact current Capacitor requirements were checked against the official docs repository at `77a828931a9a7d622f3efc3179ac6c64682c2f23`, notably `docs/main/updating/8-0.md`, `ios/custom-code.md`, and `ios/viewcontroller.md`. Website access was denied; official repository reads succeeded.
 
-```sh
-npm run build
-node scripts/verifyOfflineShell.cjs
-npx playwright install --with-deps chromium webkit
-node --import tsx scripts/ipadBrowserTest.ts
-IPAD_TEST_BROWSER=webkit node --import tsx scripts/ipadBrowserTest.ts
-```
+1. Check out the implementation commit, run `npm ci`, `npm run ios:prepare`, and `npm run test:ipad:assets`.
+2. Open `npm run ios:open`. Resolve the generated exact-version Swift packages. Select App and an iPad simulator. Build without a development server. Alternatively use `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath /tmp/student-organizer-ios CODE_SIGNING_ALLOWED=NO build`.
+3. Launch from bundled assets and select the fictional demo teacher/class. Verify portrait/landscape/split view, keyboard and modal guards, touch seat swaps, attendance, marks/notes/local photos, and report drafts. Record the exact source SHA, Xcode/runtime versions, executed test counts and failures.
+4. Save and inspect a full backup via Files, then restore into a separate clean simulator installation. Compare every collection, IDs, photos, settings and audit history (the existing legacy label/name backfill is expected). Try picker cancellation, corrupt JSON, future schema version, read/write failures, and canceled replacement; compare unchanged original records.
+5. Force-close/reopen, restart simulator, and rebuild/update without uninstalling. Compare records. Capture external application requests during cold launch, classroom/photo/export/restore; require zero. Explicitly attempt fetch/XHR/WebSocket, remote images/navigation/window.open, direct CapacitorHttp calls, and WebView path mutations; require denial without an external request. Separate OS/provider traffic from application traffic.
 
-The browser script launches a disposable persistent profile and production preview; performs touch portrait/landscape/512px split-view checks, seat swap/occupant preservation, attendance, note participation, student/photo edit, assessment creation and an 88% K result with feedback, file roster import, CSV download, full JSON backup and explicit replacement, then closes/relaunches the browser offline and checks retained records including the mark. Screenshots cover each viewport, mark entry, restore preview, offline reopening and any failure in ignored `screenshots/ipad-{engine}/`. Read-only assertions use native IndexedDB; no production test hooks or test-only seeds are added. Failure exits nonzero. Its prepared checks must not be reported as passed until an actual run completes.
+## Physical installation and seven-day renewal — NOT RUN here
 
-The physical device QA owner must record iPad model, iPadOS/Safari version and exact app commit/build, then repeat: first online Home Screen setup; airplane-mode reopen; touch/keyboard form editing; horizontal seating/markbook scrolling; mark entry and observational Levels 1–4; local photo selection; file roster import/CSV/full-backup save in Files; invalid-file rejection; destination backup before confirmed restore; close/reopen data retention; update waiting while a draft is open and activation after saving/closing all app windows. Neither a simulated browser nor a working icon proves all those behaviours. A tested supported OS range remains pending physical QA; use an up-to-date iPad for the initial trial.
+1. Use a free Apple Account with Xcode Personal Team on a Mac; never put account credentials, certificates, identifiers, or profiles into Git/chat. Do not enroll in a paid program. Enable required device development trust/mode locally, select the physical iPad and install from Xcode. If Apple requires a materially different account/service decision, stop.
+2. Record the exact source/build, iPadOS, Xcode and fictional acceptance results locally without publishing device identifiers. Repeat the simulator classroom/persistence/recovery cases on hardware; verify Files and local photo selection, airplane-mode cold launch, force-close/reopen, restart, low-storage/export/read failures, touch/keyboard guards, and zero application traffic. Do not interpret browser successes as these results.
+3. Before each renewal, export a current backup to On My iPad, verify it by restoring into a separate fictional test installation and comparing records, and keep a protected additional deliberate copy if needed. Free Personal Team profiles expire after seven days. Rebuild/re-sign the same stable app ID/team and install over the existing app without deleting it or clearing data. Verify records after renewal. If signing forces removal or identity change, stop until the verified backup and recovery path are available; reinstall preservation is not yet established.
+4. The pilot is complete only after the exact free-signed build passes physical offline/restart/Files/recovery/renewal checks. No simulator/device result or ongoing seven-day renewal is claimed by this Linux task.
 
-## Component learning applicability
+## Platform evidence
 
-Consulted Reuse Component Lessons index v2 (October 1) and workflow backlog v1. Its only current DB-001/DB-002 lessons come from a Python SQLite pilot, with no StudentOrganizer finding. Their engine-specific transaction conclusions do not establish WebKit/Dexie/cache durability. No matching PWA lesson exists; retained the app's existing Dexie restore validation/transaction and used complete-build cache and offline/backup checks here. New reusable PWA observations can be proposed after real browser evidence; none is promoted to Verified from an unexecuted browser script. After the occupied-seat defect was reproduced and repaired, database/index v3 added DB-003 for the three locally verified Dexie swap regressions. That directly applies to this shared seating service; complete browser flow still needs CI evidence.
-
-## Primary sources checked October 1, 2026
-
-- [Apple iPad: turn a website into an app](https://support.apple.com/en-ca/guide/ipad/ipad8f1f7a29/ipados): Home Screen installation guidance.
-- [WebKit: Safari 17.2](https://webkit.org/blog/14787/webkit-features-in-safari-17-2/): Home Screen installation does not copy non-cookie local storage; contexts remain separate afterward.
-- [WebKit: storage policy](https://webkit.org/blog/14403/updates-to-storage-policy/): persistent-storage request and browser storage limits/eviction.
-- [MDN: service workers](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers): secure contexts, precaching and normal install/activation waiting lifecycle.
-- [MDN: updateViaCache](https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/updateViaCache): direct worker script update checks without an HTTP-cache dependency.
+See [execution evidence](work-orders/F-006-2026-10-05.md). Existing Mac packaging and security-repaired desktop configuration are preserved. Current Windows/Mac package checks require their actual supported runners; neither shared UI tests nor prior PR #13 checks validate this new commit's packages. PR #10/#11 reconciliation and main integration remain separate review work.

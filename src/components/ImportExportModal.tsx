@@ -24,6 +24,7 @@ import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 import { downloadFile } from '../utils/downloadFile';
+import { usesNativeFiles, exportNativeBackup, selectNativeBackup } from '../services/nativeFiles';
 
 interface ImportExportModalProps {
   classSection: ClassSection | null;
@@ -163,39 +164,62 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const handleCreateBackup = async () => {
     try {
       const json = await portability.createFullBackupJSON();
-      const blob = new Blob([json], { type: 'application/json' });
-      downloadFile(blob, `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`);
-      setBackupDownloadStatus('Backup download requested. Check Downloads or Files before leaving this device.');
+      const filename = `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`;
+      if (usesNativeFiles()) {
+        const saved = await exportNativeBackup(filename, json);
+        setBackupDownloadStatus(saved ? 'Backup saved to Files. Verify this backup before renewing the installed app.' : 'Backup cancelled. No file was saved.');
+      } else {
+        downloadFile(new Blob([json], { type: 'application/json' }), filename);
+        setBackupDownloadStatus('Backup download requested. Check Downloads or Files before leaving this device.');
+      }
       setTimeout(() => setBackupDownloadStatus(null), 5000);
     } catch (err: any) {
       alert(err.message);
     }
   };
 
-  // Section 3: Backup File Selection & Pre-Validation
+  // Both pickers use the same validator and require explicit confirmation before restore.
+  const previewBackup = (content: string) => {
+    try {
+      const metadata = portability.validateBackupJSON(content);
+      setPendingBackupContent(content);
+      setPendingBackupMetadata(metadata);
+    } catch (err: any) {
+      setPendingBackupContent(null);
+      setPendingBackupMetadata(null);
+      setRestoreError(err.message || 'Invalid backup file.');
+    }
+  };
+
+  const handleChooseBackup = async () => {
+    if (!usesNativeFiles()) {
+      backupFileInputRef.current?.click();
+      return;
+    }
+    setRestoreError(null);
+    setRestoreSuccess(null);
+    setPendingBackupContent(null);
+    setPendingBackupMetadata(null);
+    try {
+      const content = await selectNativeBackup();
+      if (content !== null) previewBackup(content);
+    } catch {
+      setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
+    }
+  };
+
   const handleBackupFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRestoreError(null);
     setRestoreSuccess(null);
+    setPendingBackupContent(null);
+    setPendingBackupMetadata(null);
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = evt => {
       const content = evt.target?.result;
-      if (typeof content !== 'string') {
-        setRestoreError('Failed to read selected backup file.');
-        return;
-      }
-
-      try {
-        const metadata = portability.validateBackupJSON(content);
-        setPendingBackupContent(content);
-        setPendingBackupMetadata(metadata);
-      } catch (err: any) {
-        setPendingBackupContent(null);
-        setPendingBackupMetadata(null);
-        setRestoreError(err.message || 'Invalid backup file.');
-      }
+      if (typeof content === 'string') previewBackup(content);
+      else setRestoreError('Failed to read selected backup file.');
     };
     reader.onerror = () => setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
     reader.readAsText(file);
@@ -692,7 +716,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               />
               <button
                 type="button"
-                onClick={() => backupFileInputRef.current?.click()}
+                onClick={handleChooseBackup}
                 data-testid="choose-backup-file-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition"
               >
