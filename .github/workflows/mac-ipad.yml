@@ -46,6 +46,33 @@ jobs:
           CSC_FOR_PULL_REQUEST: 'true'
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
+      - name: Compile bundled iOS app without credentials
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # Use an installed compatible Xcode only; never download tools or sign.
+          selected_developer_dir=""
+          for candidate in "$(xcode-select -p)" /Applications/Xcode*.app/Contents/Developer; do
+            if [[ ! -d "$candidate" ]]; then continue; fi
+            version=$(DEVELOPER_DIR="$candidate" xcodebuild -version | awk '/^Xcode / {print $2}')
+            if [[ "${version%%.*}" =~ ^[0-9]+$ ]] && (( ${version%%.*} >= 26 )); then
+              selected_developer_dir="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$selected_developer_dir" ]]; then
+            echo "Native compile unavailable: this runner has no installed Xcode 26 or later. No tools were downloaded." | tee release/ios-build.log
+            exit 1
+          fi
+          export DEVELOPER_DIR="$selected_developer_dir"
+          {
+            xcodebuild -version
+            npm run ios:prepare
+            npm run test:ipad:assets
+            xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath release/ios-derived CODE_SIGNING_ALLOWED=NO build
+          } 2>&1 | tee release/ios-build.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -54,6 +81,7 @@ jobs:
             release/*.dmg
             release/*.zip
             release/mac-smoke/**
+            release/ios-build.log
           if-no-files-found: error
           retention-days: 90
   browser:
