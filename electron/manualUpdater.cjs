@@ -8,9 +8,13 @@ function version(value) {
   return match.slice(1).map(Number);
 }
 function isNewer(next, current) {
-  const a = version(next), b = version(current);
+  const a = version(next);
+  // Windows QA packaging adds exactly -qa.RUN.ATTEMPT via extraMetadata.
+  // Accept that local identity only; incoming release tags remain stable-only.
+  const qa = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})-qa\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/.exec(current);
+  const b = qa ? qa.slice(1, 4).map(Number) : version(current);
   for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; }
-  return false;
+  return qa !== null;
 }
 function releaseUrl(value, tag) {
   const url = new URL(value);
