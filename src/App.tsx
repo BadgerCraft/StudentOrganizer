@@ -592,6 +592,7 @@ export function App() {
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
             onRefresh={() => {}}
+            onOpenSeating={() => handleViewChange('seating')}
           />
         )}
 

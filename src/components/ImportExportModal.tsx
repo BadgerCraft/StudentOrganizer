@@ -32,6 +32,7 @@ interface ImportExportModalProps {
   userId?: UUID;
   deviceId?: UUID;
   onRefresh: () => void;
+  onOpenSeating?: () => void;
 }
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({
@@ -39,7 +40,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   course,
   userId: propUserId,
   deviceId: propDeviceId,
-  onRefresh
+  onRefresh,
+  onOpenSeating
 }) => {
   // Add Students workflow state: 'input' | 'preview' | 'success'
   const [importStep, setImportStep] = useState<'input' | 'preview' | 'success'>('input');
@@ -566,7 +568,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end pt-3">
+            <p className="text-sm text-emerald-900">Next, open Class View and choose Populate seating to place unassigned students in empty desks. Existing assignments stay in place.</p>
+            <div className="flex justify-end gap-2 pt-3">
+              {onOpenSeating && <button type="button" onClick={onOpenSeating} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl">Open Class View</button>}
               <button
                 type="button"
                 onClick={() => {

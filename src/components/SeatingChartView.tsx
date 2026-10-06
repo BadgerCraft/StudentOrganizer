@@ -1,4 +1,6 @@
 import { safePhotoSource } from '../utils/localPhoto';
+import { createPortal } from 'react-dom';
+import { ModalDialog } from './ModalDialog';
 import React, { useState, useEffect } from 'react';
 import {
   Lock,
@@ -74,6 +76,8 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   const [draggedSeat, setDraggedSeat] = useState<SeatPosition | null>(null);
   const [tapMoveMode, setTapMoveMode] = useState(false);
   const [tapMoveSource, setTapMoveSource] = useState<SeatPosition | null>(null);
+  const [seatingBusy, setSeatingBusy] = useState(false);
+  const [seatingError, setSeatingError] = useState<string | null>(null);
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
 
@@ -181,18 +185,26 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     return currentIdentity;
   };
 
-  const handleArrangeAlphabetically = async () => {
-    const id = await getIdentity();
-    await seatingService.arrangeAlphabetically(layout.id, id.userId, id.deviceId);
-    onRefresh();
+  const runSeatingAction = async (action: 'populate' | 'alphabetical' | 'randomize') => {
+    if (seatingBusy) return;
+    setSeatingBusy(true);
+    setSeatingError(null);
+    try {
+      const id = await getIdentity();
+      if (action === 'populate') await seatingService.populateEmptySeats(layout.id, id.userId, id.deviceId);
+      else if (action === 'alphabetical') await seatingService.arrangeAlphabetically(layout.id, id.userId, id.deviceId);
+      else await seatingService.randomizeSeats(layout.id, id.userId, id.deviceId);
+      setShowRandomConfirm(false);
+      onRefresh();
+    } catch (error) {
+      setSeatingError(error instanceof Error ? error.message : 'Seating could not be updated. Please try again.');
+    } finally {
+      setSeatingBusy(false);
+    }
   };
-
-  const handleConfirmRandomize = async () => {
-    const id = await getIdentity();
-    await seatingService.randomizeSeats(layout.id, id.userId, id.deviceId);
-    setShowRandomConfirm(false);
-    onRefresh();
-  };
+  const handleArrangeAlphabetically = () => runSeatingAction('alphabetical');
+  const handlePopulate = () => runSeatingAction('populate');
+  const handleConfirmRandomize = () => runSeatingAction('randomize');
 
   const handleToggleAttendance = async (enrollmentId: UUID, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -251,6 +263,14 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {unseatedEnrollments.length > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-amber-900">{unseatedEnrollments.length} students need desks. Populate seating to place them in empty desks; existing assignments stay in place.{layout.isLocked ? ' Unlock seating first.' : ''}</p>
+          <button onClick={handlePopulate} disabled={layout.isLocked || seatingBusy}
+            className="px-4 py-2 rounded-xl bg-amber-200 text-sm font-bold disabled:opacity-50">Populate seating</button>
+        </div>
+      )}
+      {seatingError && !showRandomConfirm && <p role="alert" className="mb-4 text-sm text-rose-700">{seatingError}</p>}
       {/* Controls Bar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         {/* Left: Search Student Highlighter */}
@@ -370,7 +390,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
         <div className="flex items-center space-x-2">
           <button
             onClick={handleArrangeAlphabetically}
-            disabled={layout.isLocked}
+            disabled={layout.isLocked || seatingBusy}
             className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl transition disabled:opacity-50"
             title="Arrange Alphabetically"
           >
@@ -379,10 +399,10 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
           </button>
 
           <button
-            onClick={() => setShowRandomConfirm(true)}
-            disabled={layout.isLocked}
+            onClick={() => { setSeatingError(null); setShowRandomConfirm(true); }}
+            disabled={layout.isLocked || seatingBusy || seatedEnrollmentIds.size < 2}
             className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl transition disabled:opacity-50"
-            title="Randomize Seats"
+            title={layout.isLocked ? "Unlock seating before randomizing" : seatedEnrollmentIds.size < 2 ? "Populate at least two desks before randomizing" : "Randomize Seats"}
           >
             <Shuffle className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Randomize</span>
@@ -683,8 +703,8 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                 </h3>
               </div>
               <button
-                onClick={handleArrangeAlphabetically}
-                disabled={layout.isLocked}
+                onClick={handlePopulate}
+                disabled={layout.isLocked || seatingBusy}
                 className="text-xs font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 px-3 py-1 rounded-lg transition disabled:opacity-50"
               >
                 Auto-Assign to Empty Desks
@@ -714,32 +734,26 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
         )}
       </div>
 
-      {/* Randomize Confirmation Modal */}
-      {showRandomConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900 mb-2">
-              Randomize Seating Arrangement?
-            </h3>
-            <p className="text-xs text-slate-600 mb-4">
-              This will randomly shuffle all currently seated students into available desk slots.
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowRandomConfirm(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmRandomize}
-                className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-              >
-                Confirm Randomize
-              </button>
+      {/* Above the fixed participation dock, with the shared focus/keyboard handling. */}
+      {showRandomConfirm && createPortal(
+        <div className="fixed inset-0 z-[60]">
+          <ModalDialog isOpen={showRandomConfirm} onClose={() => { if (!seatingBusy) setShowRandomConfirm(false); }}
+            title="Randomize Seating Arrangement?" ariaDescribedBy="randomize-description">
+            <div className="p-6">
+              <p id="randomize-description" className="text-sm text-slate-600 mb-4">
+                This will shuffle currently seated students among their occupied desks. Unassigned students stay unassigned.
+              </p>
+              {seatingError && <p role="alert" className="mb-4 text-sm text-rose-700">{seatingError}</p>}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowRandomConfirm(false)} disabled={seatingBusy} className="px-3 py-2 rounded-lg">Cancel</button>
+                <button onClick={handleConfirmRandomize} disabled={layout.isLocked || seatingBusy || seatedEnrollmentIds.size < 2}
+                  className="px-4 py-2 font-bold text-white bg-blue-600 rounded-lg disabled:opacity-50">
+                  {seatingBusy ? 'Randomizing…' : 'Confirm Randomize'}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+          </ModalDialog>
+        </div>, document.body
       )}
     </div>
   );
