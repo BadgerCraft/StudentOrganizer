@@ -1,6 +1,15 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
+
+const { createManualCheck, trustedCaller } = require('./manualUpdater.cjs');
+const manualCheck = createManualCheck({ platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion() });
+let updateWindow;
+ipcMain.handle('manual-update:check', (event, ...args) => {
+  const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
+  if (args.length || !updateWindow || !trustedCaller(event, updateWindow.webContents, indexUrl)) throw new Error('Update check denied');
+  return manualCheck();
+});
 
 app.name = 'ontario-teacher-assessment';
 
@@ -12,6 +21,7 @@ function createWindow() {
     minHeight: 640,
     title: 'Ontario Teacher Assessment & Classroom Suite',
     webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -20,6 +30,8 @@ function createWindow() {
     },
     show: false
   });
+
+  updateWindow = mainWindow;
 
   // Remove default menu bar for clean teacher desktop experience
   if (process.env.NODE_ENV !== 'development') {
