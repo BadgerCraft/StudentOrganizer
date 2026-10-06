@@ -64,10 +64,11 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "OntarioTeacherAssessment-${version}-${arch}-nsis.exe"
     },
     "portable": {
-      "artifactName": "OntarioTeacherAssessment-Portable.exe"
+      "artifactName": "OntarioTeacherAssessment-${version}-${arch}-Portable.exe"
     }
   }
 }

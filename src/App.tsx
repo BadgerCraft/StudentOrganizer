@@ -23,6 +23,8 @@ import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from
 import { AlertTriangle, AlertCircle } from 'lucide-react';
 import type { UUID, Student, User } from './types/schema';
 
+declare const __QA_BUILD_ID__: string;
+
 export function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability'>(() => {
     try {
@@ -426,6 +428,12 @@ export function App() {
         currentUser={currentUser}
         onOpenTeacherSelector={handleStartSwitchTeacher}
       />
+
+      {__QA_BUILD_ID__ && (
+        <div data-testid="qa-build-id" className="bg-amber-50 border-b border-amber-200 px-4 py-1 text-xs text-amber-900">
+          QA build {__QA_BUILD_ID__} · Fictional data only
+        </div>
+      )}
 
       {/* Identity Error Banner */}
       {identityError && (
