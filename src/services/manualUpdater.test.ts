@@ -55,7 +55,8 @@ describe('manual Windows release lookup boundary', () => {
   it('bounds slow connection and trickling responses by ten seconds, then permits retry', async () => {
     vi.useFakeTimers();
     const transports: { request: EventEmitter & { destroy: ReturnType<typeof vi.fn> }; respond: (response: EventEmitter) => void }[] = [];
-    vi.spyOn(https, 'get').mockImplementation((_url: unknown, _options: unknown, respond: (response: EventEmitter) => void) => {
+    vi.spyOn(https, 'get').mockImplementation((...args: unknown[]) => {
+      const respond = args[2] as (response: EventEmitter) => void;
       const request = new EventEmitter() as EventEmitter & { destroy: ReturnType<typeof vi.fn> };
       request.destroy = vi.fn((error: Error) => { request.emit('error', error); return request; });
       transports.push({ request, respond });
@@ -95,7 +96,8 @@ describe('manual Windows release lookup boundary', () => {
 
   it('releases a clicked check immediately when the response is interrupted', async () => {
     const responses: EventEmitter[] = [];
-    const transport = vi.spyOn(https, 'get').mockImplementation((_url: unknown, _options: unknown, respond: (response: EventEmitter) => void) => {
+    const transport = vi.spyOn(https, 'get').mockImplementation((...args: unknown[]) => {
+      const respond = args[2] as (response: EventEmitter) => void;
       const request = Object.assign(new EventEmitter(), { destroy: vi.fn() });
       const response = Object.assign(new EventEmitter(), { statusCode: 200 });
       responses.push(response);
