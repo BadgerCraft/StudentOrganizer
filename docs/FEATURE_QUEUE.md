@@ -1,5 +1,18 @@
 # Feature and decision queue
 
+## Latest results — October 6 afternoon, America/Toronto
+
+PR18 is merged by Tyler's actual approval; mainaa64da1b. Post-merge Windows run37504031116 package success/release skipped, independently observed today. Two completed source-batch teacher outcomes: roster/seating and manual update lookup; automatic installation remains unimplemented. PR18's final208-test/build/Windows/both Mac/browser/native compile evidence is in its review report, with physical/unsigned publisher limits retained.
+
+F008 is no longer missing source/discovery-only: codex/markinator-integration-20261006 atb27954a68a3e05b5910df72305b2b66cdd8a993d contains APPROVED_WORK_ORDER.md and resumable CHECKPOINT.md. That later explicit implementation authorization supersedes older discovery-only descriptions. Checkpoint reports256 tests/30files, build/fictional Chromium success; this session did not rerun them. Category-edit pending-draft reconciliation defect, expanded UI acceptance and platform gates remain. [DraftPR20](https://github.com/BadgerCraft/StudentOrganizer/pull/20) created only after checking for duplicates; exact-source Windows run37523834790 and Mac/browser run37523834791 started. These are actual running CI checks, not an observed running coding task. Implementation acceptance remains incomplete.
+
+Latest F007/F009 scope and execution-continuity instructions: open PR19/codex/bug-report-scope-20261006, read alongside this branch's newer results. Bug transfer first, deliberate essay/feedback sharing deferred. No live receiver acceptance was observed here and no new provider choice is inferred or re-requested.
+
+This afternoon session newly completed0 implementation milestones; administrative report/PR plumbing does not increment that count. Current workspace lacks a checkout and no callable Cloud coding launch returned a task. No duplicate writer launched. Physical iPad access and Windows installation channel/upgrade acceptance are actual gaps. Root review recorded0 avoidable user interventions; whole-project counts are not fully observable. One concrete continuation is saved for the existing approved Markinator scope.
+
+[Afternoon results, trial accounting and complete continuation](work-orders/RESULTS-2026-10-06.md). DEV017 optional native-bridge recall offered; no answer, stage0/dueOctober6 unchanged. DEV018 dueOctober7. No release, schedule change or feature completion inferred. October8 trial assessment remains pending.
+
+
 ## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
 
 Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.
@@ -28,7 +41,7 @@ The primary StudentOrganizer Cloud conversation completed the approved source ba
 
 Roster/seating and manual update lookup are implemented. Review additionally repaired invisible restored deleted-seat index blockers with audit/outbox/rollback coverage and added an absolute ten-second updater deadline. Exact current sourcee4301d6/test mergec72e1ed4 completed208 tests/25 files, production build, actual Windows portable/installed persistence/restart and real packaged updater IPC, both ARM/Intel Mac DMG/ZIP/photo/recovery/restart, Chromium/WebKit classroom/recovery/drafts, and unsigned simulator SDK compilation. Windows run37498090657 and Mac/browser run37498091491 both concluded success. PR18 completed review and was explicitly approved and merged ataa64da1b on October6 13:30 Toronto; release remains reserved. Exact source, run links, preserved failures and latest outcomes: [PR18 review](work-orders/PR-18-REVIEW-2026-10-06.md). Recommend the single combined code merge as a verified checkpoint with physical/distribution/upgrade limits retained. Candidate is the combined retained code path for overlapping PR10/13/15; their earlier passing checks are not current-head proof.
 
-Installer download/close/install/reopen remains unimplemented; authentic channel and old/new Windows upgrade preservation are separate gaps. Physical iPad Files/offline/low-storage/free-signing/renewal acceptance remains NOT RUN. No merge/release/distribution or real-student use occurred. PR17 holds proposed batch/workflow records and is a separate documentation review.
+Installer download/close/install/reopen remains unimplemented; authentic channel and old/new Windows upgrade preservation are separate gaps. Physical iPad Files/offline/low-storage/free-signing/renewal acceptance remains NOT RUN. The recorded approved PR18 merge occurred; no release/distribution or real-student use occurred. PR17 holds proposed batch/workflow records and is a separate documentation review.
 
 F007 decision packet: `docs/decisions/F-007-2026-10-06.md`, awaiting receiver judgment/access with no adopted provider. F008: `docs/decisions/F-008-2026-10-06.md`, discovery complete for available source; current separate marking source missing. Separate schedule migration remains unchanged and unverified. Full trial accounting: `docs/work-orders/BATCH-2026-10-06.md`. Shared applicable component lessons persisted at493d3f5 and83a71dc. Historical entries below do not override this snapshot or reserved merge/release boundaries.
 
