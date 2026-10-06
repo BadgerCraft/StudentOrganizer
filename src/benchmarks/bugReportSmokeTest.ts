@@ -31,10 +31,17 @@ try {
   assert.match(generated, /Screen: dashboard/);
   const edited = 'Fictional edited report. No identifying details.\nExpected: card moves.';
   await preview.fill(edited);
+  const savedDraft = await page.evaluate(() => JSON.parse(localStorage.getItem('ota.bug-report-draft.v1')!));
+  assert.equal(savedDraft.summary, 'Fictional test: card did not move');
+  assert.equal(savedDraft.previewText, edited);
   await modal.getByTestId('modal-close-x-btn').click();
   await page.reload();
   await page.getByRole('button', { name: 'Report a problem', exact: true }).click();
   await page.getByTestId('bug-report-summary').waitFor({ state: 'visible' });
+  // Visibility can precede the modal's saved-draft hydration effect. Require
+  // the restored value as well; fail if the saved draft never reaches the UI.
+  await page.waitForFunction(expected => document.querySelector<HTMLTextAreaElement>('[data-testid="bug-report-summary"]')?.value === expected,
+    'Fictional test: card did not move');
   assert.equal(await page.getByTestId('bug-report-summary').inputValue(), 'Fictional test: card did not move');
   await modal.getByRole('button', { name: 'Review report', exact: true }).click();
   assert.equal(await preview.inputValue(), edited);
