@@ -28,6 +28,7 @@ interface AssessmentHubViewProps {
   enrollments: ClassEnrollment[];
   students: Student[];
   userId?: UUID;
+  onOpenMarking?: (assessmentId: string) => void;
   onRefresh: () => void;
 }
 
@@ -39,7 +40,8 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
   enrollments,
   students,
   userId,
-  onRefresh
+  onRefresh,
+  onOpenMarking
 }) => {
   const [actionError, setActionError] = useState<string | null>(null);
   const service = new ClassSettingsService(db);
@@ -147,6 +149,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
           return (
             <div key={a.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow transition flex flex-col justify-between">
+              <button type="button" disabled={!userId} onClick={() => onOpenMarking?.(a.id)} className="mb-3 text-blue-700 underline text-left" data-testid={`open-marking-${a.id}`}>Rubric &amp; marking</button>
               <div>
                 <div className="flex items-start justify-between">
                   <div>

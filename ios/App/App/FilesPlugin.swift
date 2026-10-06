@@ -16,8 +16,8 @@ public class FilesPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate 
 
     @objc func exportBackup(_ call: CAPPluginCall) {
         guard let filename = call.getString("filename"), filename == URL(fileURLWithPath: filename).lastPathComponent,
-              filename.hasSuffix(".json"), let content = call.getString("content") else {
-            call.reject("Invalid backup export.")
+              (filename.hasSuffix(".json") || filename.hasSuffix(".html")), let content = call.getString("content") else {
+            call.reject("Invalid local file export.")
             return
         }
         DispatchQueue.main.async {

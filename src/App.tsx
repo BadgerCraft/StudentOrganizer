@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { BugReportModal } from './components/BugReportModal';
 import { DashboardView } from './components/DashboardView';
 import { SeatingChartView } from './components/SeatingChartView';
+import { MarkingWorkspace } from './components/MarkingWorkspace';
 import { MarkbookView } from './components/MarkbookView';
 import { ParticipationDock } from './components/ParticipationDock';
 import { StudentProfileModal } from './components/StudentProfileModal';
@@ -59,6 +60,12 @@ export function App() {
   const switchingFromTeacherIdRef = useRef<UUID | null>(null);
   const isSelectionCommittedRef = useRef<boolean>(false);
   const [isTeacherSelectorOpen, setIsTeacherSelectorOpen] = useState(false);
+  const [markingTarget, setMarkingTarget] = useState<{assessmentId:string; enrollmentId?:string} | null>(null);
+  useEffect(() => {
+    const workspace = document.getElementById('app-workspace');
+    workspace?.toggleAttribute('inert', !!markingTarget);
+    return () => workspace?.removeAttribute('inert');
+  }, [markingTarget]);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
@@ -114,6 +121,7 @@ export function App() {
   }, []);
 
   const handleStartSwitchTeacher = () => {
+    setMarkingTarget(null);
     // Clear old identity immediately to prevent pending/stale forms from submitting under old teacher ID
     const prevTeacherId = appIdentity?.userId || currentUser?.id || null;
     switchingFromTeacherIdRef.current = prevTeacherId;
@@ -419,7 +427,7 @@ export function App() {
       <div
         id="app-workspace"
         className={`flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
-        aria-hidden={isSelectionRequired ? 'true' : undefined}
+        aria-hidden={isSelectionRequired || markingTarget ? 'true' : undefined}
       >
         {/* Persistent Navigation Header */}
         <Header
@@ -555,6 +563,7 @@ export function App() {
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
             onOpenStudentProfile={setProfileEnrollmentId}
+            onOpenMarking={(assessmentId, enrollmentId) => setMarkingTarget({ assessmentId, enrollmentId })}
             onRefresh={() => {}}
           />
         )}
@@ -562,6 +571,7 @@ export function App() {
         {currentView === 'assessments' && activeClassObj && (
           <AssessmentHubView
             key={activeClassObj.section.id}
+            onOpenMarking={assessmentId => setMarkingTarget({assessmentId})}
             userId={appIdentity?.userId}
             classSection={activeClassObj.section}
             assessments={activeAssessments}
@@ -665,6 +675,10 @@ export function App() {
         />
       )}
       </div>
+
+      {markingTarget && appIdentity && <div className="fixed inset-0 z-40 overflow-auto bg-slate-50" role="dialog" aria-modal="true" aria-label="Assessment marking">
+        <MarkingWorkspace key={`${appIdentity.userId}:${markingTarget.assessmentId}`} assessmentId={markingTarget.assessmentId} initialEnrollmentId={markingTarget.enrollmentId} userId={appIdentity.userId} onClose={() => setMarkingTarget(null)} onSwitchTeacher={handleStartSwitchTeacher} onRefresh={() => {}} />
+      </div>}
 
       {/* Teacher Selector Modal */}
       <TeacherSelectorModal
