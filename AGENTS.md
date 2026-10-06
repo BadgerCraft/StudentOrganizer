@@ -1,5 +1,17 @@
 # Working rules for Ontario Teacher Assessment
 
+## Execution continuity — Tyler's October 6 correction
+
+Tyler said he should not have to repeatedly ask for the next step: “Next step, prompt me, update memory or skill ... Lets get this workflow going.” This supersedes older instructions to ask for a new direction after every milestone.
+
+- Own the next action. A saved plan, backlog update or opened PR is an intermediate result when authorized investigation, implementation, verification or review preparation remains.
+- Continue authorized steps in the same active turn. Do not end with “I'll research” when that research can be performed now. Do not claim ongoing/background execution after ending a turn without an actual running task.
+- At a real user-owned decision, finish the necessary investigation first. Present brief key points, one recommendation, the strongest drawback, exact approval consequence and one specific question as the final sentence. Do not leave Tyler to discover or request the decision.
+- Ask only for consequential product/data/cost/access changes or reserved merge/release decisions. Routine technical choices and checks belong to the agent. Do not repeat an approval already given.
+- Before ending, identify completed evidence and the next action as either executed, awaiting a named decision/access, or blocked by a specific unavailable capability. Provide a concrete handoff when a Cloud launch is necessary.
+- Keep workflow corrections in versioned project instructions so coding sessions can retrieve them. An open instructions PR is not merged policy on main; active sessions must read the latest planning revision. Do not claim global memory or an installed skill was changed when only repository instructions were updated.
+
+
 ## Requested schedule migration — October 6, 2026
 
 Tyler designated this Cloud conversation as primary and requested daily 08:15 morning batch /16:00 results and learning in America/Toronto, preserving current scheduler prompts and approval boundaries. Keep the 20:15 continuation paused. Do not disable old schedules until both replacements are created and read back here. The current coding tools cannot inspect or change schedules; no live migration or evening-state confirmation is claimed. Scheduled repository/tool inheritance remains unverified. See docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md. This requested pause supersedes older evening timing prose; it does not pause independent approved coding already running.
@@ -77,7 +89,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 1. Start from current `main`; check for uncommitted changes and identify the exact behaviour to change. Use a focused branch for a meaningful change.
 2. Reuse an approved feature plan. Approval authorizes implementation, verification, and routine repairs within that scope without repeated permission questions. Continue through all approved milestones until their completion checks pass or a genuine blocker requires Tyler's judgment; do not stop after the first partial success. Interrupt for materially different product behaviours, a consequential scope change, unavailable access, or a merge/release decision Tyler reserved. Inspect the affected code and callers. Make the smallest coherent change, with tests that exercise a real risk rather than duplicate the implementation.
 3. Run the checks relevant to the change. The usual baseline is `npm test` and `npm run build`. Use a real browser flow for UI behaviour, a backup round trip for recovery work, and packaged-app checks when Electron packaging or storage changes. Say when a check could not run.
-4. After each completed agreed step or milestone, explain the changed teacher experience, verification evidence, remaining risk, and useful concepts. Include a short learning check and a concrete question about Tyler's next priority, following the learning loop below. Defer unanswered checks if Tyler is away and continue independent authorized work. Never claim background execution this environment cannot provide. Present the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
+4. After each completed agreed step or milestone, explain the changed teacher experience, verification evidence, remaining risk, and useful concepts. Save useful learning checks for meaningful review; continue the authorized queue without a routine next-priority question. Defer unanswered checks if Tyler is away and continue independent authorized work. Never claim background execution this environment cannot provide. Present the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
 5. Merge and publish releases only after explicit approval for those actions. A passing build or an understanding check is not approval. Keep rollback straightforward and update the project reference when a verified change makes it stale.
 
 ## Learning and next-direction loop
@@ -88,7 +100,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - Record concepts the agent introduces and questions Tyler asks, with the explanation, follow-up questions, actual review responses, feedback, and next review date. Separate an explanation provided, a signal to proceed, and demonstrated recall. Commit log changes with the related work in the working branch; do not silently merge them.
 - Use the spaced-review schedule in the learning record: initially one day after explanation, then 3, 7, 14, and 30 days after successful recall. Re-explain gaps and review the next day; leave unanswered reviews unpassed. Ask due questions before revealing answers and give feedback after Tyler responds. Keep reviews brief and avoid repeating prompts in the current conversation.
 - When Tyler is away, save learning checks and direction questions for his return and continue all independent authorized milestones. Only claim scheduled reminders or background work when a tool has actually established them.
-- After a completed step, ask what Tyler wants next, offering concrete options and a recommendation. Treat the answer as direction for the next plan, not implicit merge/release approval or permission to expand the existing scope. If already-approved milestones remain, finish them without waiting for a new direction answer.
+- After a completed step, continue the next authorized milestone. If a genuine user-owned decision blocks dependent work, prepare its concrete recommendation and ask the specific question last; do not require a new direction for routine continuation. Keep merge/release approval separate.
 
 ## Scheduled briefing and feature decisions
 
