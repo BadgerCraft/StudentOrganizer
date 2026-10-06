@@ -1,0 +1,125 @@
+name: Mac packages and iPad browser checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-ipad-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      QA_ARCH: ${{ matrix.arch }}
+      VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Require credential-free test signature
+        run: node -e "if (require('./package.json').build.mac.identity !== '-') throw new Error('This PR job only allows an ad-hoc test signature')"
+      - name: Package Mac disk image and archive
+        run: npm run package:mac -- --${{ matrix.arch }} --publish never
+        env:
+          # v26 otherwise skips even ad-hoc signatures on pull requests.
+          # No certificate, keychain secret, publishing token or notarization credential is supplied.
+          CSC_FOR_PULL_REQUEST: 'true'
+      - name: Launch actual disk-image and archive apps; check restart persistence
+        run: npm run test:mac:packages
+      - name: Compile bundled iOS app without credentials
+        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # Use an installed compatible Xcode only; never download tools or sign.
+          selected_developer_dir=""
+          for candidate in "$(xcode-select -p)" /Applications/Xcode*.app/Contents/Developer; do
+            if [[ ! -d "$candidate" ]]; then continue; fi
+            version=$(DEVELOPER_DIR="$candidate" xcodebuild -version | awk '/^Xcode / {print $2}')
+            if [[ "${version%%.*}" =~ ^[0-9]+$ ]] && (( ${version%%.*} >= 26 )); then
+              selected_developer_dir="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$selected_developer_dir" ]]; then
+            echo "Native compile unavailable: this runner has no installed Xcode 26 or later. No tools were downloaded." | tee release/ios-build.log
+            exit 1
+          fi
+          export DEVELOPER_DIR="$selected_developer_dir"
+          {
+            xcodebuild -version
+            npm run ios:prepare
+            npm run test:ipad:assets
+            xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath release/ios-derived CODE_SIGNING_ALLOWED=NO build
+          } 2>&1 | tee release/ios-build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OntarioTeacherAssessment-Mac-${{ matrix.arch }}-${{ github.run_number }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/mac-smoke/**
+            release/ios-build.log
+          if-no-files-found: error
+          retention-days: 90
+  browser:
+    runs-on: ubuntu-latest
+    # Match package-lock.json; browsers and system dependencies are included.
+    # Avoid repeated Ubuntu mirror installs after the observed dependency timeout.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init --ipc=host
+    timeout-minutes: 20
+    env:
+      VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run ios:prepare
+      - run: npm run test:ipad:assets
+      - name: Require matching preinstalled browser engines
+        run: |
+          node -e "const { version } = require('playwright/package.json'); if (version !== '1.63.0') throw new Error('Update browser image and lockfile together'); const fs = require('node:fs'); const { chromium, webkit } = require('playwright'); [chromium, webkit].forEach(engine => fs.accessSync(engine.executablePath()));"
+      - name: Check bundled classroom and recovery flows in Chromium
+        run: node --import tsx scripts/nativePilotSmoke.ts
+      - name: Check WebKit browser compatibility
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/nativePilotSmoke.ts
+        env:
+          IPAD_TEST_BROWSER: webkit
+      - name: Check bug-report draft recovery and failures
+        if: ${{ !cancelled() }}
+        run: node --import tsx src/benchmarks/bugReportSmokeTest.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPad-browser-evidence-${{ github.run_number }}
+          path: screenshots/**
+          if-no-files-found: warn
+          retention-days: 90

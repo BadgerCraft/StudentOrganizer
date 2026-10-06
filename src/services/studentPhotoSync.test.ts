@@ -20,7 +20,7 @@ describe('Student Photo Sync Payload Hygiene & Local Photo Preservation', () => 
 
   it('Direction 1 (Outbound): updating student profile omits photoUrl completely from SyncMutation.payloadJson', async () => {
     const student = (await db.students.toCollection().first())!;
-    const mockDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...';
+    const mockDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP==';
 
     const updated = await studentService.updateStudentProfile({
       studentId: student.id,

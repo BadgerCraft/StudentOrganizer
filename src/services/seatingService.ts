@@ -121,20 +121,6 @@ export class SeatingDomainService {
             return existingStudentSeat; // Already in target seat
           }
 
-          // Swap occupant if target coordinate occupied
-          if (existingAtCoord) {
-            const swappedAtCoord = {
-              ...existingAtCoord,
-              row: existingStudentSeat.row,
-              col: existingStudentSeat.col,
-              updatedAt: now,
-              version: existingAtCoord.version + 1
-            };
-            await this.db.seatPositions.put(swappedAtCoord);
-          } else {
-            await this.db.seatPositions.delete(existingStudentSeat.id);
-          }
-
           const updatedPosition: SeatPosition = {
             ...existingStudentSeat,
             row,
@@ -142,42 +128,62 @@ export class SeatingDomainService {
             updatedAt: now,
             version: existingStudentSeat.version + 1
           };
-          await this.db.seatPositions.put(updatedPosition);
+          const changes: { previous: SeatPosition; next: SeatPosition }[] = [
+            { previous: existingStudentSeat, next: updatedPosition }
+          ];
+          if (existingAtCoord) {
+            changes.push({
+              previous: existingAtCoord,
+              next: {
+                ...existingAtCoord,
+                row: existingStudentSeat.row,
+                col: existingStudentSeat.col,
+                updatedAt: now,
+                version: existingAtCoord.version + 1
+              }
+            });
+          }
 
-          await this.db.auditEntries.add({
+          // Unique seat-coordinate indexes cannot temporarily contain both occupants
+          // at the source coordinate. Remove the old rows, then insert both updated
+          // rows inside this same transaction: failure restores the original seats.
+          await this.db.seatPositions.bulkDelete(changes.map(change => change.previous.id));
+          await this.db.seatPositions.bulkPut(changes.map(change => change.next));
+
+          await this.db.auditEntries.bulkAdd(changes.map(({ previous, next }) => ({
             id: crypto.randomUUID(),
             entityName: 'seatPositions',
-            entityId: updatedPosition.id,
-            action: 'UPDATE',
+            entityId: next.id,
+            action: 'UPDATE' as const,
             transactionId: txId,
-            previousStateJson: JSON.stringify(existingStudentSeat),
-            newStateJson: JSON.stringify(updatedPosition),
-            diffJson: JSON.stringify({ row: { old: existingStudentSeat.row, new: row }, col: { old: existingStudentSeat.col, new: col } }),
+            previousStateJson: JSON.stringify(previous),
+            newStateJson: JSON.stringify(next),
+            diffJson: JSON.stringify({ row: { old: previous.row, new: next.row }, col: { old: previous.col, new: next.col } }),
             userId,
             timestamp: now,
             clientVersion: '1.0.0'
-          });
+          })));
 
-          await this.db.syncMutations.add({
+          await this.db.syncMutations.bulkAdd(changes.map(({ previous, next }, index) => ({
             id: crypto.randomUUID(),
             deviceId,
             organizationId: derivedOrgId,
             mutationId: crypto.randomUUID(),
             transactionId: txId,
-            sequenceNumber: 1,
-            transactionSize: 1,
+            sequenceNumber: index + 1,
+            transactionSize: changes.length,
             entityName: 'seatPositions',
-            entityId: updatedPosition.id,
-            operation: 'UPDATE',
-            payloadJson: JSON.stringify(updatedPosition),
-            baseVersion: existingStudentSeat.version,
-            status: 'pending',
+            entityId: next.id,
+            operation: 'UPDATE' as const,
+            payloadJson: JSON.stringify(next),
+            baseVersion: previous.version,
+            status: 'pending' as const,
             createdAt: now,
             attemptCount: 0,
             lastAttemptAt: null,
             lastError: null,
             acknowledgedAt: null
-          });
+          })));
 
           return updatedPosition;
         }
@@ -281,6 +287,61 @@ export class SeatingDomainService {
         return newPosition;
       }
     );
+  }
+
+  /** Fill empty desks only; existing assignments and roster records remain intact. */
+  async populateEmptySeats(seatingLayoutId: UUID, userId: UUID, deviceId: UUID): Promise<void> {
+    await this.db.transaction('rw', [
+      ...AUTH_TABLES(this.db), this.db.seatingLayouts, this.db.classEnrollments,
+      this.db.students, this.db.seatPositions, this.db.auditEntries, this.db.syncMutations
+    ], async () => {
+      const layout = await this.db.seatingLayouts.get(seatingLayoutId);
+      if (!layout || layout.deletedAt !== null) throw new ValidationError('Layout not found.');
+      if (layout.isLocked) throw new ValidationError('Layout is locked. Unlock seating before populating.');
+      const auth = await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+      const seats = await this.db.seatPositions.where('seatingLayoutId').equals(seatingLayoutId).toArray();
+      const seated = new Set(seats.filter(s => s.deletedAt === null).map(s => s.classEnrollmentId));
+      const enrollments = (await this.db.classEnrollments.where('classSectionId').equals(layout.classSectionId).toArray())
+        .filter(e => e.deletedAt === null && e.enrollmentStatus === 'active' && !seated.has(e.id));
+      const students = await this.db.students.bulkGet(enrollments.map(e => e.studentId));
+      const unseated = enrollments.map((enrollment, i) => ({ enrollment, student: students[i] }))
+        .filter(p => p.student && p.student.deletedAt === null)
+        .sort((a, b) => a.student!.lastName.localeCompare(b.student!.lastName) || a.student!.firstName.localeCompare(b.student!.firstName));
+      const empty: { row: number; col: number }[] = [];
+      for (let row = 0; row < layout.rows; row++) {
+        for (let col = 0; col < layout.cols; col++) {
+          if (!seats.some(s => s.deletedAt === null && s.row === row && s.col === col)) empty.push({ row, col });
+        }
+      }
+      if (unseated.length > empty.length) throw new ValidationError(`Not enough empty desks (${empty.length}) for unassigned students (${unseated.length}). Add rows or columns, then populate seating.`);
+      // Restored tombstones still occupy both unique indexes. Retire only rows
+      // blocking this population, retaining their previous state in the audit.
+      // Do this after capacity checks and before any assignment, in this transaction.
+      const targetCoordinates = new Set(empty.slice(0, unseated.length).map(p => `${p.row}:${p.col}`));
+      const targetEnrollments = new Set(unseated.map(p => p.enrollment.id));
+      const blockers = seats.filter(s => s.deletedAt !== null &&
+        (targetCoordinates.has(`${s.row}:${s.col}`) || targetEnrollments.has(s.classEnrollmentId)));
+      if (blockers.length) {
+        const timestamp = new Date().toISOString(), transactionId = crypto.randomUUID();
+        await this.db.seatPositions.bulkDelete(blockers.map(s => s.id));
+        await this.db.auditEntries.bulkAdd(blockers.map(previous => ({
+          id: crypto.randomUUID(), entityName: 'seatPositions', entityId: previous.id,
+          action: 'DELETE' as const, transactionId, previousStateJson: JSON.stringify(previous),
+          newStateJson: null, diffJson: null, userId, timestamp, clientVersion: '1.0.0'
+        })));
+        await this.db.syncMutations.bulkAdd(blockers.map((previous, index) => ({
+          id: crypto.randomUUID(), deviceId, organizationId: auth.organizationId,
+          mutationId: crypto.randomUUID(), transactionId, sequenceNumber: index + 1,
+          transactionSize: blockers.length, entityName: 'seatPositions', entityId: previous.id,
+          operation: 'DELETE' as const, payloadJson: JSON.stringify(previous), baseVersion: previous.version,
+          status: 'pending' as const, createdAt: timestamp, attemptCount: 0,
+          lastAttemptAt: null, lastError: null, acknowledgedAt: null
+        })));
+      }
+      for (let i = 0; i < unseated.length; i++) {
+        await this.assignSeat(seatingLayoutId, empty[i].row, empty[i].col, unseated[i].enrollment.id, userId, deviceId);
+      }
+    });
   }
 
   /**
@@ -414,6 +475,7 @@ export class SeatingDomainService {
         const existingSeats = await this.db.seatPositions
           .where('seatingLayoutId')
           .equals(seatingLayoutId)
+          .filter(s => s.deletedAt === null)
           .toArray();
 
         if (existingSeats.length < 2) return;
@@ -457,7 +519,16 @@ export class SeatingDomainService {
           acknowledgedAt: null
         }));
 
+        // Enrollment uniqueness forbids overwriting a shuffled occupant while its
+        // old seat still exists. Replace within this transaction, retaining seat IDs.
+        await this.db.seatPositions.bulkDelete(existingSeats.map(s => s.id));
         await this.db.seatPositions.bulkPut(updated);
+        await this.db.auditEntries.bulkAdd(updated.map((seat, index) => ({
+          id: crypto.randomUUID(), entityName: 'seatPositions', entityId: seat.id,
+          action: 'UPDATE' as const, transactionId: txId,
+          previousStateJson: JSON.stringify(existingSeats[index]), newStateJson: JSON.stringify(seat),
+          diffJson: null, userId, timestamp: now, clientVersion: '1.0.0'
+        })));
         await this.db.syncMutations.bulkAdd(syncMutations);
       }
     );

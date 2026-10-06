@@ -29,3 +29,15 @@ The V6.6 import passed 151 Vitest tests and a production build on September 28, 
 The app stores its working data locally in IndexedDB. Keep real student names, numbers, photos, exports, backups, and credentials out of Git. `.gitignore` excludes common local data and build paths, but review `git status` before every commit because ignore rules cannot protect a file already tracked or every possible filename.
 
 The V6.6 source is the current baseline. Earlier `main` uploads remain in Git history.
+
+## Installed iPad pilot
+
+F-006 now prepares a bundled Capacitor iPad app; Home Screen/PWA delivery is retired. Use `npm run ios:prepare` to build/synchronize assets and `npm run ios:open` on a Mac with Xcode 26+. Run `npm run test:ipad:assets` for bundle/configuration checks and `npm run test:ipad:browser` for the shared UI proxy. See [iPad installation, privacy and renewal checklist](docs/IPAD_SUPPORT.md). Native/device acceptance remains separate from browser verification; no real student use or distribution is authorized.
+
+
+
+## Windows QA handoff
+
+See [the Windows QA guide](docs/WINDOWS_QA.md) for exact-package checks, build identification, publisher status, colleague feedback, and lasting downloads. Regular builds prepare QA bundles; only an explicitly reviewed QA tag publishes a prerelease.
+
+See [our coding workflow](docs/CODING_WORKFLOW.md) for feature plans, review boundaries, and the reusable cloud workspace setup.

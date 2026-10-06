@@ -1,8 +1,10 @@
+import { listAccessibleClassSections } from './services/authHelper';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { seedDatabase } from './db/seeds';
 import { Header } from './components/Header';
+import { BugReportModal } from './components/BugReportModal';
 import { DashboardView } from './components/DashboardView';
 import { SeatingChartView } from './components/SeatingChartView';
 import { MarkbookView } from './components/MarkbookView';
@@ -22,6 +24,8 @@ import { AuthorizationError } from './services/authHelper';
 import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from './utils/dateUtils';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
 import type { UUID, Student, User } from './types/schema';
+
+declare const __QA_BUILD_ID__: string;
 
 export function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability'>(() => {
@@ -55,6 +59,7 @@ export function App() {
   const switchingFromTeacherIdRef = useRef<UUID | null>(null);
   const isSelectionCommittedRef = useRef<boolean>(false);
   const [isTeacherSelectorOpen, setIsTeacherSelectorOpen] = useState(false);
+  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
   const handleOpenStudentSettings = (student: Student) => {
@@ -168,11 +173,11 @@ export function App() {
 
   // Live queries
   const userPref = useLiveQuery(() => db.userPreferences.toCollection().first());
-  const classSections = useLiveQuery(() => db.classSections.filter(s => s.deletedAt === null).toArray()) || [];
+  const classSections = useLiveQuery(() => listAccessibleClassSections(db, appIdentity?.userId ?? null), [appIdentity?.userId]) || [];
   const courses = useLiveQuery(() => db.courses.filter(c => c.deletedAt === null).toArray()) || [];
   const terms = useLiveQuery(() => db.terms.filter(t => t.deletedAt === null).toArray()) || [];
-  const allEnrollments = useLiveQuery(() => db.classEnrollments.filter(e => e.deletedAt === null).toArray()) || [];
-  const allStudents = useLiveQuery(() => db.students.filter(s => s.deletedAt === null).toArray()) || [];
+  const allEnrollments = useLiveQuery(() => classSections.length ? db.classEnrollments.where('classSectionId').anyOf(classSections.map(s => s.id)).filter(e => e.deletedAt === null).toArray() : [], [classSections]) || [];
+  const allStudents = useLiveQuery(() => allEnrollments.length ? db.students.where('id').anyOf(allEnrollments.map(e => e.studentId)).filter(s => s.deletedAt === null).toArray() : [], [allEnrollments]) || [];
   const eventTypeService = useMemo(() => new ParticipationEventTypeService(db), []);
   const eventTypes = useLiveQuery(
     () => eventTypeService.listEventTypesForSection(activeSectionId, false),
@@ -182,7 +187,7 @@ export function App() {
 
   // Set initial active class from preference
   useEffect(() => {
-    if (!activeSectionId && classSections.length > 0) {
+    if (!classSections.some(s => s.id === activeSectionId) && classSections.length > 0) {
       if (userPref?.lastOpenedClassSectionId && classSections.some(s => s.id === userPref.lastOpenedClassSectionId)) {
         setActiveSectionId(userPref.lastOpenedClassSectionId);
       } else {
@@ -215,8 +220,8 @@ export function App() {
 
   // Active Class Specific Live Queries
   const activeLayout = useLiveQuery(
-    () => activeSectionId ? db.seatingLayouts.where('classSectionId').equals(activeSectionId).first() : undefined,
-    [activeSectionId]
+    () => activeClassObj && activeSectionId ? db.seatingLayouts.where('classSectionId').equals(activeSectionId).first() : undefined,
+    [activeSectionId, activeClassObj?.section.id]
   );
   const activeSeats = useLiveQuery(
     () => activeLayout ? db.seatPositions.where('seatingLayoutId').equals(activeLayout.id).toArray() : [],
@@ -224,18 +229,18 @@ export function App() {
   ) || [];
 
   const activeEnrollments = useLiveQuery(
-    () => activeSectionId ? db.classEnrollments.where('classSectionId').equals(activeSectionId).toArray() : [],
-    [activeSectionId]
+    () => activeClassObj && activeSectionId ? db.classEnrollments.where('classSectionId').equals(activeSectionId).toArray() : [],
+    [activeSectionId, activeClassObj?.section.id]
   ) || [];
 
   const activeUnits = useLiveQuery(
-    () => activeSectionId ? db.units.where('classSectionId').equals(activeSectionId).toArray() : [],
-    [activeSectionId]
+    () => activeClassObj && activeSectionId ? db.units.where('classSectionId').equals(activeSectionId).toArray() : [],
+    [activeSectionId, activeClassObj?.section.id]
   ) || [];
 
   const activeAssessments = useLiveQuery(
-    () => activeSectionId ? db.assessments.where('classSectionId').equals(activeSectionId).toArray() : [],
-    [activeSectionId]
+    () => activeClassObj && activeSectionId ? db.assessments.where('classSectionId').equals(activeSectionId).toArray() : [],
+    [activeSectionId, activeClassObj?.section.id]
   ) || [];
 
   const activeCategories = useLiveQuery(
@@ -275,8 +280,8 @@ export function App() {
   ) || [];
 
   const activePolicy = useLiveQuery(
-    () => activeSectionId ? db.gradingPolicies.where('classSectionId').equals(activeSectionId).first() : undefined,
-    [activeSectionId]
+    () => activeClassObj && activeSectionId ? db.gradingPolicies.where('classSectionId').equals(activeSectionId).first() : undefined,
+    [activeSectionId, activeClassObj?.section.id]
   ) || {
     id: 'policy-default',
     classSectionId: activeSectionId || '',
@@ -425,7 +430,16 @@ export function App() {
         onSelectClass={handleSelectClass}
         currentUser={currentUser}
         onOpenTeacherSelector={handleStartSwitchTeacher}
+        onReportProblem={() => setIsBugReportOpen(true)}
       />
+
+      <BugReportModal isOpen={isBugReportOpen} onClose={() => setIsBugReportOpen(false)} currentView={currentView} />
+
+      {__QA_BUILD_ID__ && (
+        <div data-testid="qa-build-id" className="bg-amber-50 border-b border-amber-200 px-4 py-1 text-xs text-amber-900">
+          QA build {__QA_BUILD_ID__} · Fictional data only
+        </div>
+      )}
 
       {/* Identity Error Banner */}
       {identityError && (
@@ -547,6 +561,8 @@ export function App() {
 
         {currentView === 'assessments' && activeClassObj && (
           <AssessmentHubView
+            key={activeClassObj.section.id}
+            userId={appIdentity?.userId}
             classSection={activeClassObj.section}
             assessments={activeAssessments}
             categories={activeCategories}
@@ -576,11 +592,13 @@ export function App() {
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
             onRefresh={() => {}}
+            onOpenSeating={() => handleViewChange('seating')}
           />
         )}
 
         {currentView === 'settings' && (
           <SettingsView
+            key={activePolicy.id}
             policy={activePolicy}
             scaleEntries={markScaleEntries}
             activeSectionId={activeSectionId}

@@ -1,5 +1,42 @@
 # Feature and decision queue
 
+## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
+
+Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.
+
+- 08:15 America/Toronto: prepare a batch of useful decisions and approved execution items. Aim for 3–5 substantive items when available; never invent work to fill a quota. Each decision includes outcome, recommendation, strongest drawback, evidence/limits and exact approval consequence. The one-new-learning-brief limit does not limit decision or execution throughput.
+- One coordinating coding task works through the whole approved batch, completing verification and review preparation before moving on. A blocked item does not stop independent approved items. Save learning questions for Tyler's return; do not ask for a new direction after each approved milestone.
+- Use bounded independent workers where available, separate file/branch ownership and root integration. Inspect current writers before starting. No worker creates an unattended execution mechanism.
+- Launch through a usable checkout/execution capability when available. Otherwise provide one concrete Cloud launch instruction for the complete batch and record launch-pending. A schedule, approval or prepared order is not evidence of running work; automatic Cloud dispatch remains unverified.
+- 16:00: report actual reviewable outcomes, current execution evidence, blockers, user interventions and the next action; then offer brief due learning/optional documentation. Report during the trial even if progress is zero, explaining why.
+- 20:15: continue/select the existing approved batch where execution is available; prepare tomorrow's decisions using technical research. Do not limit eligible independent work to one feature or duplicate an active writer. Keep unchanged launch blockers quiet.
+- Maintain a compact current-status snapshot before historical logs. Record approvals, work item dependencies, source heads, task/PR links and evidence. Read fresh contents/SHA before writes; preserve history without making older statements authoritative.
+- Trial measures: items made reviewable, avoidable user interventions, approved items left idle and reasons, and verified launch-to-handoff paths. Do not use elapsed time, messages, work orders or PR count as substitutes for completed outcomes.
+- On October 8 at the results check, recommend retain/revise/stop using observed evidence. Continue existing schedules after the trial without silently reinstating superseded constraints; ask only for a consequential change.
+
+Active work order: docs/work-orders/BATCH-2026-10-06.md. Proposed administrative source: codex/batch-work-trial; scheduled runs read it while its documentation PR is open.
+
+## Current batch snapshot — October 6 Cloud execution
+
+Primary conversation: current StudentOrganizer Cloud conversation, designated by Tyler. The batch is executed through available local verification and review preparation; it is no longer launch-pending. Main unchanged; PR10 source15f402a and PR15 source1871cfd reconciled/pushed, with exact supported-platform Actions results still unobserved. Roster/seating repair64c6a3a and manual updater lookup55c4d3c are implemented/pushed; installation remains gated on trusted channel/signing and Windows old/new acceptance. `codex/batch-integration-20261006` contains retained approved Windows/Mac/touch/recovery/local-report/security/native scope plus these repairs; combined204 tests/build/native audit/full Chromium recovery/roster/report smokes pass. Candidate is for review, not merge-ready on unobserved platform checks.
+
+F007 decision packet: `docs/decisions/F-007-2026-10-06.md`, awaiting receiver judgment/access with no adopted provider. F008: `docs/decisions/F-008-2026-10-06.md`, discovery complete for available source; current separate marking source missing. Separate schedule migration is blocked on absent management tools: requested08:15/16:00 Toronto here,20:15 paused, no live changes or scheduled environment inheritance verified. Full exact heads/results/gates and trial counters: `docs/work-orders/BATCH-2026-10-06.md`. Historical entries below do not override this snapshot or reserved merge/release boundaries.
+
+## Historical execution snapshot — October 5, 2026
+
+| Item | Current state | Next authorized action | Reserved decision / actual blocker |
+| --- | --- | --- | --- |
+| F-001 / PR #11 | Workflow correction merged to main | Apply batch trial records | New documentation merge remains separate |
+| F-002 / PR #10 | Open, non-draft; connector reports mergeable=false | Diagnose/reconcile conflicts and verify exact resulting head; prepare Windows review | Main merge/release reserved; unsigned package/device acceptance remain limits |
+| F-006 / PR #15 | Approved native preparation implemented; draft targeting PR #13; connector reports mergeable=false | Review and repair approved native preparation; reconcile target drift; run available platform checks | Xcode/device checks unverified; no fees or distribution authorized |
+| PR #13 | Draft parent feature branch; connector reports mergeable=true | Prepare retained Mac/touch/recovery/report/security scope with approved iPad changes on a separate review candidate | Do not merge PR #15 into parent or parent into main without approval |
+| F-007 | Local draft UI implemented; central receipt absent | Technical investigation and concrete private receiver decision packet | Receiver adoption/access/spending unapproved |
+| F-008 | Discovery only | Inspect available current code; identify missing source precisely | No integration implementation approval |
+| Batch execution | Prepared; no task launched by this chat | Start coordinating Cloud task with BATCH-2026-10-06.md | Manual launch needed when no usable checkout is available |
+
+Supersedes older pending PR #11 and awaiting F-006 approval entries. These are live metadata observations, not exact-head test or merge-readiness verdicts. Workers must refresh source/checks before changes.
+
+
 ## Superseding privacy and platform decision — October 1, 13:59 America/Toronto
 
 Tyler explicitly confirmed that the iPad version must be an installed app that keeps all student data and processing on the device and needs no website to operate. His stated reason: “Student privacy is the most important condition that we need to abide by. Creating a hypothetical version doesn't make sense when we will have to change to it a closed loop at some point.”
@@ -11,7 +48,7 @@ F-006 next work: inspect a viable installed iPad packaging/storage/file-access p
 F-007 central reporting requires its own explicit, optional boundary: no automatic record/page/screenshot attachments or background sending. Existing private-service proposals remain unadopted; reassess them against this requirement before asking for service approval.
 
 
-Updated: 2026-10-01. This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. The original priority request approved planning; October 1's recorded daily approval authorizes the bounded implementation below. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
+Updated: 2026-10-05. (Earlier dated sections below are historical.) This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. The original priority request approved planning; October 1's recorded daily approval authorizes the bounded implementation below. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
 ## Queue discipline
 
@@ -319,3 +356,7 @@ Automatic launch remains an explicit incomplete workflow improvement. Continue a
 
 ## PR #11 revision and merge authorization — October 5
 Tyler instructed “Sure, revise then merge” after reviewing the missing automatic launch path. This authorizes the documentation correction and merging PR #11 after final-revision checks pass. It does not authorize merging PR #10, #13 or #15 or any release. F-001 documentation is ready for the authorized merge; F-005 automatic Cloud dispatch remains incomplete. PR #15 is a draft targeting codex/mac-ipad-support; do not treat the full iPad pilot as complete.
+
+
+## October 6 morning batch snapshot
+Current administrative source: open PR17 codex/batch-work-trial. Main rules from merged PR11 plus this approved trial govern execution. Work order BATCH-2026-10-06.md now carries fresh conflict/check evidence, actual roster-repair/manual-updater approvals and baseline trial measurements. PR10 needs routine conflict resolution; PR15 Mac packaged launch/restart failed although package creation passed. Neither is merge-ready. PR17 previous head package passed and was clean; this report advances its source and needs fresh checks. No merge/release approval inferred or action performed. Batch remains launch-pending in this chat; one complete Cloud handoff supplied. October6 date-specific reminder delivered to switch to the StudentOrganizer Cloud environment chat; no actual switch or launch claimed. No new personal research homework assigned.
