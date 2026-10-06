@@ -240,3 +240,17 @@ Source: PR #11 / `codex/approved-plan-workflow`; main still lacks the current pl
 The October3 provisioning prompt and October2 branch/commit plus AGENTS/plan prompts remain unanswered, so none are repeated. Rotate to DEV-012, which is directly relevant to the next queued feature. Prompt: “A teacher writes a bug report while the iPad is offline. What evidence distinguishes a locally saved draft from a report received centrally?” Ask before revealing the answer. No answer received in this run; DEV-012 remains stage0 and overdue until Tyler responds. No successful recall inferred.
 
 No optional reading is re-offered today: the free Personal Team material was already offered and the new free-pilot plan was presented this morning. F-007's private-receiver decision packet remains intentionally deferred until F-006 plan approval is resolved.
+
+
+## October 5 — approved F-006 implementation
+
+Source: current planning branch records read in full; Tyler's “Sure approved” authorizes the free installed pilot. Implementation continues independently; no merge/release approval inferred. Existing unanswered reviews remain unanswered and are not repeated.
+
+### DEV-017 — Bundled assets and a native bridge
+
+- Introduced October 5 during implementation: bundled assets are the application's scripts/styles included in the signed installation. A native bridge lets the React app request an operating-system operation, here the Files picker; it does not need a website or change Dexie storage.
+- Project example: native JSON selection is validated before the teacher confirms atomic replacement; canceling the picker does not restore anything. WebKit restrictions and denial of native HTTP bridge calls protect different connection paths.
+- Explanation provided in task commentary. Prepared review question: What does the native bridge do when StudentOrganizer opens Files, and why is that different from moving the database to a server?
+- Stage 0; next review October 6. No answer/recall recorded.
+- Milestone learning checks saved for return: (1) why does a browser test leave an iOS simulator check outstanding? (2) what must a verified backup demonstrate before seven-day renewal? These remain unanswered.
+- Recommended next direction after available checks: run the exact build on a Mac/Xcode iPad simulator, then physical fictional-data acceptance and renewal. Remaining authorized local milestones continued without waiting for a direction response. No background run or reminder is claimed.

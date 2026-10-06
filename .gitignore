@@ -28,3 +28,12 @@ scratch/
 screenshots/
 *.log
 *.tsbuildinfo
+
+# Native generated assets and machine-specific build state
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/Pods/
+ios/App/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/

@@ -170,6 +170,19 @@ describe('Multi-Teacher Identity & Dynamic Authorization Suite', () => {
     const identity = await getAppIdentity(db);
     const student = (await db.students.toCollection().first())!;
 
+    // An unrelated teacher must be rejected, with no profile or audit writes.
+    const request = { studentId: student.id, expectedVersion: student.version,
+      firstName: student.firstName, lastName: student.lastName, preferredName: 'Johnny',
+      pronouns: 'he/him', photoUrl: null, userId: identity.userId, deviceId: identity.deviceId };
+    const auditBefore = await db.auditEntries.toArray();
+    await expect(studentService.updateStudentProfile(request)).rejects.toThrow('Teacher cannot edit');
+    expect(await db.students.get(student.id)).toEqual(student);
+    expect(await db.auditEntries.toArray()).toEqual(auditBefore);
+    const enrollment = (await db.classEnrollments.where('studentId').equals(student.id).first())!;
+    const assignment = (await db.classSectionStaff.where('classSectionId').equals(enrollment.classSectionId).first())!;
+    await db.classSectionStaff.add({ ...assignment, id: crypto.randomUUID(),
+      organizationMembershipId: `mem-${SECOND_TEACHER_ID}`, role: 'co_teacher' });
+
     const updated = await studentService.updateStudentProfile({
       studentId: student.id,
       expectedVersion: student.version,

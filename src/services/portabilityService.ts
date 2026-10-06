@@ -1,3 +1,4 @@
+import { isLocalPhoto } from '../utils/localPhoto';
 import type { OntarioTeacherDB } from '../db/database';
 import { calculateOverallCourseGrade } from './calculationEngine';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
@@ -702,8 +703,8 @@ export class PortabilityService {
       }
 
       rowValues.push(
-        escapeCSVCell(grade.calculatedOverall !== null ? grade.calculatedOverall.toString() : ''),
-        escapeCSVCell(grade.finalOverall !== null ? grade.finalOverall.toString() : '')
+        escapeCSVCell(grade.calculatedOverall !== null ? grade.calculatedOverall : ''),
+        escapeCSVCell(grade.finalOverall !== null ? grade.finalOverall : '')
       );
 
       csvLines.push(rowValues.join(','));
@@ -784,8 +785,8 @@ export class PortabilityService {
         escapeCSVCell(ev.snapshottedClassification),
         escapeCSVCell(ev.snapshottedName),
         escapeCSVCell(ev.snapshottedRecordingMode || 'quick_tally'),
-        escapeCSVCell(ev.achievementLevel !== null && ev.achievementLevel !== undefined ? ev.achievementLevel.toString() : ''),
-        escapeCSVCell(ev.snapshottedPoints.toString()),
+        escapeCSVCell(ev.achievementLevel !== null && ev.achievementLevel !== undefined ? ev.achievementLevel : ''),
+        escapeCSVCell(ev.snapshottedPoints),
         escapeCSVCell(ev.categoryCode || ''),
         escapeCSVCell(ev.note || '')
       ].join(','));
@@ -928,6 +929,9 @@ export class PortabilityService {
             break;
 
           case 'students':
+            if (rec.photoUrl != null && !isLocalPhoto(rec.photoUrl)) {
+              throw new Error('Invalid backup file: student photo must be a local JPEG, PNG or WebP image of at most 64 KB. Existing data has not been changed.');
+            }
             requireString('organizationId');
             requireString('localStudentNumber');
             requireString('firstName');

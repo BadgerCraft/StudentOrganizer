@@ -23,6 +23,8 @@ import { parseRosterText } from '../services/rosterParser';
 import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
+import { downloadFile } from '../utils/downloadFile';
+import { usesNativeFiles, exportNativeBackup, selectNativeBackup } from '../services/nativeFiles';
 
 interface ImportExportModalProps {
   classSection: ClassSection | null;
@@ -130,6 +132,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         setRosterText(text);
       }
     };
+    reader.onerror = () => alert('The selected file could not be read. Try a local copy in Files.');
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -140,12 +143,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const csv = await portability.exportClassMarkbookCSV(classSection.id, null);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Markbook-${classSection.sectionNumber}-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, `Markbook-${classSection.sectionNumber}-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
       alert(err.message);
     }
@@ -156,12 +154,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const csv = await portability.exportParticipationEventsCSV(classSection.id);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err: any) {
       alert(err.message);
     }
@@ -171,45 +164,64 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const handleCreateBackup = async () => {
     try {
       const json = await portability.createFullBackupJSON();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setBackupDownloadStatus('Application backup downloaded successfully!');
+      const filename = `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`;
+      if (usesNativeFiles()) {
+        const saved = await exportNativeBackup(filename, json);
+        setBackupDownloadStatus(saved ? 'Backup saved to Files. Verify this backup before renewing the installed app.' : 'Backup cancelled. No file was saved.');
+      } else {
+        downloadFile(new Blob([json], { type: 'application/json' }), filename);
+        setBackupDownloadStatus('Backup download requested. Check Downloads or Files before leaving this device.');
+      }
       setTimeout(() => setBackupDownloadStatus(null), 5000);
     } catch (err: any) {
       alert(err.message);
     }
   };
 
-  // Section 3: Backup File Selection & Pre-Validation
+  // Both pickers use the same validator and require explicit confirmation before restore.
+  const previewBackup = (content: string) => {
+    try {
+      const metadata = portability.validateBackupJSON(content);
+      setPendingBackupContent(content);
+      setPendingBackupMetadata(metadata);
+    } catch (err: any) {
+      setPendingBackupContent(null);
+      setPendingBackupMetadata(null);
+      setRestoreError(err.message || 'Invalid backup file.');
+    }
+  };
+
+  const handleChooseBackup = async () => {
+    if (!usesNativeFiles()) {
+      backupFileInputRef.current?.click();
+      return;
+    }
+    setRestoreError(null);
+    setRestoreSuccess(null);
+    setPendingBackupContent(null);
+    setPendingBackupMetadata(null);
+    try {
+      const content = await selectNativeBackup();
+      if (content !== null) previewBackup(content);
+    } catch {
+      setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
+    }
+  };
+
   const handleBackupFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRestoreError(null);
     setRestoreSuccess(null);
+    setPendingBackupContent(null);
+    setPendingBackupMetadata(null);
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = evt => {
       const content = evt.target?.result;
-      if (typeof content !== 'string') {
-        setRestoreError('Failed to read selected backup file.');
-        return;
-      }
-
-      try {
-        const metadata = portability.validateBackupJSON(content);
-        setPendingBackupContent(content);
-        setPendingBackupMetadata(metadata);
-      } catch (err: any) {
-        setPendingBackupContent(null);
-        setPendingBackupMetadata(null);
-        setRestoreError(err.message || 'Invalid backup file.');
-      }
+      if (typeof content === 'string') previewBackup(content);
+      else setRestoreError('Failed to read selected backup file.');
     };
+    reader.onerror = () => setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -663,7 +675,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Download Full Application Backup</h3>
               <p className="text-xs text-slate-600 mt-1">
-                Generates a secure offline snapshot of all your classes, students, marks, and settings.
+                Generates an offline JSON snapshot of all your classes, students, marks, and settings. The file is not encrypted.
               </p>
             </div>
             <div>
@@ -689,7 +701,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Restore from Backup File</h3>
               <p className="text-xs text-slate-600 mt-1">
-                Select a previously saved backup file from your computer.
+                Select a previously saved backup file from this device or Files. Restoring replaces this device’s records; changes from different devices are not combined.
               </p>
             </div>
 
@@ -704,7 +716,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               />
               <button
                 type="button"
-                onClick={() => backupFileInputRef.current?.click()}
+                onClick={handleChooseBackup}
                 data-testid="choose-backup-file-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition"
               >

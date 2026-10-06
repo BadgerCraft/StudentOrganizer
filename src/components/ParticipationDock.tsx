@@ -105,7 +105,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex flex-col items-center pb-4 px-4">
+    <div className="participation-dock fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex flex-col items-center pb-4 px-4">
       {/* Non-Blocking Undo Toast Banner */}
       {lastBatchUndo && (
         <div
@@ -130,7 +130,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
 
       {/* Main Participation Control Dock (Visible when students selected) */}
       {selectedEnrollments.length > 0 && (
-        <div className="pointer-events-auto bg-white border border-slate-300/80 rounded-2xl shadow-2xl p-4 max-w-5xl w-full mx-auto animate-in slide-in-from-bottom-5 duration-150">
+        <div className="pointer-events-auto bg-white border border-slate-300/80 rounded-2xl shadow-2xl p-4 max-w-5xl w-full mx-auto max-h-[75dvh] overflow-y-auto animate-in slide-in-from-bottom-5 duration-150">
           {/* Historical Date Notice Banner */}
           {isHistorical && (
             <div
@@ -159,8 +159,8 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
           )}
 
           {/* Top Bar: Target students & quick actions */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-            <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap gap-3 items-center justify-between pb-3 border-b border-slate-100 mb-3">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
                 {selectedEnrollments.length === 1 ? '1' : selectedEnrollments.length}
               </div>
@@ -176,9 +176,9 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Category Override Selector */}
-              <div className="flex items-center space-x-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200 text-[11px] font-semibold">
+              <div className="flex flex-wrap items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200 text-[11px] font-semibold">
                 <span className="text-slate-600 px-1.5">Category:</span>
                 <button
                   onClick={() => setCategoryOverride('DEFAULT')}
