@@ -35,17 +35,45 @@ function trustedCaller(event, contents, expectedUrl) {
 }
 function requestLatest() {
   return new Promise((resolve, reject) => {
-    const request = https.get(ENDPOINT, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'StudentOrganizer-manual-update-check' }, timeout: 10000 }, response => {
-      // Redirects are never followed. This request contains no local records or device IDs.
-      if (response.statusCode === 404) { response.resume(); resolve(null); return; }
-      if (response.statusCode !== 200) { response.resume(); reject(new Error('Release unavailable')); return; }
-      let bytes = 0, body = '';
-      response.on('data', chunk => { bytes += chunk.length; if (bytes > LIMIT) { response.destroy(new Error('Response too large')); return; } body += chunk.toString('utf8'); });
-      response.on('error', reject);
-      response.on('end', () => { try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid response')); } });
-    });
-    request.on('timeout', () => request.destroy(new Error('Timeout')));
-    request.on('error', reject);
+    let request, settled = false;
+    const finish = (error, data) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      if (error) reject(error); else resolve(data);
+    };
+    // Socket inactivity alone cannot bound DNS, connection or a trickling body.
+    const deadline = setTimeout(() => {
+      const error = new Error('Timeout');
+      finish(error);
+      request?.destroy(error);
+    }, 10000);
+    try {
+      request = https.get(ENDPOINT, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'StudentOrganizer-manual-update-check' }, timeout: 10000 }, response => {
+        // Redirects are never followed. This request contains no local records or device IDs.
+        if (response.statusCode === 404) { response.resume(); finish(null, null); return; }
+        if (response.statusCode !== 200) { response.resume(); finish(new Error('Release unavailable')); return; }
+        let bytes = 0, body = '';
+        response.on('data', chunk => {
+          bytes += chunk.length;
+          if (bytes > LIMIT) {
+            const error = new Error('Response too large');
+            finish(error); response.destroy(error); return;
+          }
+          body += chunk.toString('utf8');
+        });
+        response.on('error', error => finish(error));
+        response.on('aborted', () => finish(new Error('Response interrupted')));
+        response.on('end', () => {
+          try { finish(null, JSON.parse(body)); } catch { finish(new Error('Invalid response')); }
+        });
+      });
+      request.on('timeout', () => {
+        const error = new Error('Timeout');
+        finish(error); request.destroy(error);
+      });
+      request.on('error', error => finish(error));
+    } catch (error) { finish(error); }
   });
 }
 function createManualCheck({ platform, packaged, currentVersion, lookup = requestLatest }) {
