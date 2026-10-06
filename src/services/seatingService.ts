@@ -298,7 +298,7 @@ export class SeatingDomainService {
       const layout = await this.db.seatingLayouts.get(seatingLayoutId);
       if (!layout || layout.deletedAt !== null) throw new ValidationError('Layout not found.');
       if (layout.isLocked) throw new ValidationError('Layout is locked. Unlock seating before populating.');
-      await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+      const auth = await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
       const seats = await this.db.seatPositions.where('seatingLayoutId').equals(seatingLayoutId).toArray();
       const seated = new Set(seats.filter(s => s.deletedAt === null).map(s => s.classEnrollmentId));
       const enrollments = (await this.db.classEnrollments.where('classSectionId').equals(layout.classSectionId).toArray())
@@ -314,6 +314,30 @@ export class SeatingDomainService {
         }
       }
       if (unseated.length > empty.length) throw new ValidationError(`Not enough empty desks (${empty.length}) for unassigned students (${unseated.length}). Add rows or columns, then populate seating.`);
+      // Restored tombstones still occupy both unique indexes. Retire only rows
+      // blocking this population, retaining their previous state in the audit.
+      // Do this after capacity checks and before any assignment, in this transaction.
+      const targetCoordinates = new Set(empty.slice(0, unseated.length).map(p => `${p.row}:${p.col}`));
+      const targetEnrollments = new Set(unseated.map(p => p.enrollment.id));
+      const blockers = seats.filter(s => s.deletedAt !== null &&
+        (targetCoordinates.has(`${s.row}:${s.col}`) || targetEnrollments.has(s.classEnrollmentId)));
+      if (blockers.length) {
+        const timestamp = new Date().toISOString(), transactionId = crypto.randomUUID();
+        await this.db.seatPositions.bulkDelete(blockers.map(s => s.id));
+        await this.db.auditEntries.bulkAdd(blockers.map(previous => ({
+          id: crypto.randomUUID(), entityName: 'seatPositions', entityId: previous.id,
+          action: 'DELETE' as const, transactionId, previousStateJson: JSON.stringify(previous),
+          newStateJson: null, diffJson: null, userId, timestamp, clientVersion: '1.0.0'
+        })));
+        await this.db.syncMutations.bulkAdd(blockers.map((previous, index) => ({
+          id: crypto.randomUUID(), deviceId, organizationId: auth.organizationId,
+          mutationId: crypto.randomUUID(), transactionId, sequenceNumber: index + 1,
+          transactionSize: blockers.length, entityName: 'seatPositions', entityId: previous.id,
+          operation: 'DELETE' as const, payloadJson: JSON.stringify(previous), baseVersion: previous.version,
+          status: 'pending' as const, createdAt: timestamp, attemptCount: 0,
+          lastAttemptAt: null, lastError: null, acknowledgedAt: null
+        })));
+      }
       for (let i = 0; i < unseated.length; i++) {
         await this.assignSeat(seatingLayoutId, empty[i].row, empty[i].col, unseated[i].enrollment.id, userId, deviceId);
       }
