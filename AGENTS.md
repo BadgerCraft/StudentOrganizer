@@ -1,5 +1,9 @@
 # Working rules for Ontario Teacher Assessment
 
+## Requested schedule migration — October 6, 2026
+
+Tyler designated this Cloud conversation as primary and requested daily 08:15 morning batch /16:00 results and learning in America/Toronto, preserving current scheduler prompts and approval boundaries. Keep the 20:15 continuation paused. Do not disable old schedules until both replacements are created and read back here. The current coding tools cannot inspect or change schedules; no live migration or evening-state confirmation is claimed. Scheduled repository/tool inheritance remains unverified. See docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md. This requested pause supersedes older evening timing prose; it does not pause independent approved coding already running.
+
 ## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
 
 Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.

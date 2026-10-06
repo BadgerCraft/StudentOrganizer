@@ -105,3 +105,11 @@ Tyler created and published the reusable StudentOrganizer Cloud environment and 
 A new actual coding task uses the published environment; it is distinct from publishing an application release. GitHub stores durable code, plans, and results. Never say a reply keeps working after its turn ends without an actual task/execution mechanism.
 
 Official documentation: [Scheduled tasks](https://learn.chatgpt.com/docs/automations) and [Cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environments). Scheduled web runs can use connected tools and durable prompts but do not retain a local worktree between runs. Confirm the available execution tools and source checkout for each coding run.
+
+## Primary coordination — October 6, 2026
+
+Tyler designated the current StudentOrganizer Cloud conversation as the primary project conversation and launched the whole approved batch here. A real checkout and command execution are present; workers used separate isolated checkouts. This is observed manual launch-to-execution evidence, not automatic dispatch. The host exposes no durable task URL or schedule migration control; none is fabricated. Keep review results and decisions in this conversation and durable branch records; existing scheduled threads may still need a separate product-supported migration.
+
+### Schedule migration access boundary
+
+October 6 user instruction: daily 08:15 morning batch and16:00 results/learning belong in this primary conversation;20:15 continuation must remain paused. Exact live prompts/IDs/states and conversation binding are unavailable to this coding toolset. No replacements/disable operations or scheduled execution probes occurred. Do not substitute this Cloud task’s checkout/tools for evidence about a scheduled run. Preserve old schedules until confirmed replacements exist; use the explicit migration and readback order in SCHEDULE-MIGRATION-2026-10-06.md.

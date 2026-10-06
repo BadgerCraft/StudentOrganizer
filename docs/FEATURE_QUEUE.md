@@ -44,6 +44,12 @@ F-007 central reporting requires its own explicit, optional boundary: no automat
 
 Updated: 2026-10-05. (Earlier dated sections below are historical.) This is the shared queue for StudentOrganizer. Read `AGENTS.md`, `docs/CODING_WORKFLOW.md`, and `docs/DEVELOPMENT_LEARNING.md`. Tyler's product priority order is Mac/iPad support, central bug reporting, then marking-app integration. The original priority request approved planning; October 1's recorded daily approval authorizes the bounded implementation below. Detailed plans and current-feature cross-reference are in [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
+## Current batch snapshot — October 6 Cloud execution
+
+Primary conversation: current StudentOrganizer Cloud conversation, designated by Tyler. The batch is executed through available local verification and review preparation; it is no longer launch-pending. Main unchanged; PR10 source15f402a and PR15 source1871cfd reconciled/pushed, with exact supported-platform Actions results still unobserved. Roster/seating repair64c6a3a and manual updater lookup55c4d3c are implemented/pushed; installation remains gated on trusted channel/signing and Windows old/new acceptance. `codex/batch-integration-20261006` contains retained approved Windows/Mac/touch/recovery/local-report/security/native scope plus these repairs; combined204 tests/build/native audit/full Chromium recovery/roster/report smokes pass. Candidate is for review, not merge-ready on unobserved platform checks.
+
+F007 decision packet: `docs/decisions/F-007-2026-10-06.md`, awaiting receiver judgment/access with no adopted provider. F008: `docs/decisions/F-008-2026-10-06.md`, discovery complete for available source; current separate marking source missing. Separate schedule migration is blocked on absent management tools: requested08:15/16:00 Toronto here,20:15 paused, no live changes or scheduled environment inheritance verified. Full exact heads/results/gates and trial counters: `docs/work-orders/BATCH-2026-10-06.md`. Historical entries below do not override this snapshot or reserved merge/release boundaries.
+
 ## Queue discipline
 
 - Keep a stable feature ID, teacher outcome, priority, status, plan, dependencies, completion checks, branch/PR/task links, and consequential decisions together.
