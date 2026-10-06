@@ -55,8 +55,8 @@ async function main() {
     // Only the ephemeral main-process HTTPS transport is substituted; renderer
     // bridge, trusted-caller checks and updater parsing remain production code.
     await app.evaluate(async () => {
-      const { default: https } = await import('node:https');
-      const { EventEmitter } = await import('node:events');
+      const https = (process as any).getBuiltinModule('https');
+      const { EventEmitter } = (process as any).getBuiltinModule('events');
       (globalThis as any).__manualUpdateOriginalGet = https.get;
       (globalThis as any).__manualUpdateRequests = [];
       (https as any).get = (url: string, options: any, respond: any) => {
@@ -99,7 +99,7 @@ async function main() {
     assert.equal(lookups.length, 3);
     assert.ok(lookups.every((request: any) => Object.keys(request.headers).sort().join(',') === 'Accept,User-Agent'), 'No classroom or device metadata sent');
     await app.evaluate(async () => {
-      const { default: https } = await import('node:https');
+      const https = (process as any).getBuiltinModule('https');
       https.get = (globalThis as any).__manualUpdateOriginalGet;
       delete (globalThis as any).__manualUpdateOriginalGet;
     });
@@ -113,7 +113,7 @@ async function main() {
     console.log('PASS: Packaged app loads with CSP, preserves renderer protections, blocks remote images at both page/session layers with zero collector requests, permits an authorized profile save, and exercises the real manual-update preload/IPC with deterministic absent/available/error responses and no external update traffic.');
   } finally {
     if (app) await app.evaluate(async () => {
-      const { default: https } = await import('node:https');
+      const https = (process as any).getBuiltinModule('https');
       if ((globalThis as any).__manualUpdateOriginalGet) https.get = (globalThis as any).__manualUpdateOriginalGet;
     }).catch(() => {});
     await app?.close();
