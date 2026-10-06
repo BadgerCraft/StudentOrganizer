@@ -123,7 +123,8 @@ async function checkApp(appPath: string, format: string) {
     if (await removePhoto.isVisible()) await removePhoto.click();
     await removePhoto.waitFor({ state: 'hidden' });
     await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({
-      name: 'fictional-mac.png', mimeType: 'image/png', buffer: fs.readFileSync('dist/icon-180.png')
+      name: 'fictional-mac.png', mimeType: 'image/png', // Self-contained fictional PNG: photo recovery must not depend on retired PWA icons.
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGPQqNjyH4QZYAwATjwJTSZS7G8AAAAASUVORK5CYII=', 'base64')
     });
     // Wait for the asynchronous image resize before committing the settings.
     await removePhoto.waitFor();
