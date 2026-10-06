@@ -10,6 +10,14 @@ describe('manual Windows release lookup boundary', () => {
     expect(isNewer('1.0.0', '2.0.0')).toBe(false);
     for (const input of ['1.0.0-qa.85.1', '01.0.0', '1.0', '1.0.0/path', '1.0.0+meta', '99999999999.0.0']) expect(() => version(input)).toThrow();
   });
+  it('compares an installed QA build against stable releases without accepting incoming QA tags', () => {
+    expect(isNewer('1.0.0', '1.0.0-qa.85.1')).toBe(true);
+    expect(isNewer('1.1.0', '1.0.0-qa.85.1')).toBe(true);
+    expect(isNewer('1.0.0', '1.1.0-qa.85.1')).toBe(false);
+    expect(parseRelease({ ...release, tag_name: 'v1.0.0', html_url: release.html_url.replace('v1.2.0', 'v1.0.0') }, '1.0.0-qa.85.1')).toMatchObject({ status: 'available', installationAvailable: false });
+    expect(() => isNewer('1.0.0-qa.86.1', '1.0.0-qa.85.1')).toThrow();
+    for (const current of ['1.0.0-beta.1', '1.0.0-qa.85', '1.0.0-qa.085.1', '1.0.0-qa.85.1+metadata', '1.0.0-qa.85.1/extra']) expect(() => isNewer('1.0.0', current)).toThrow();
+  });
   it('accepts only an exact repository release destination', () => {
     expect(releaseUrl(release.html_url, release.tag_name)).toBe(release.html_url);
     for (const url of ['http://github.com/BadgerCraft/StudentOrganizer/releases/tag/v1.2.0', 'https://github.com.evil.test/BadgerCraft/StudentOrganizer/releases/tag/v1.2.0', release.html_url + '?redirect=evil', release.html_url + '#install', 'https://github.com/Other/StudentOrganizer/releases/tag/v1.2.0', release.html_url.replace('github.com', 'user@github.com')]) expect(() => releaseUrl(url, release.tag_name)).toThrow();
