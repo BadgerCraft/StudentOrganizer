@@ -21,7 +21,7 @@ The bridge replaces direct HTTP and mutable asset-path APIs, restricts navigatio
 
 ## Mac failure diagnosis and remaining gates
 
-This Linux machine has neither `xcodebuild` nor Swift/macOS tooling. `npm run test:mac:packages` deliberately rejected execution with “Actual package smoke requires a Mac runner.” This is an unavailable-platform check, not evidence of a repaired package. Existing Mac CI performs credential-free ad-hoc DMG/ZIP package/restart checks but has no iOS simulator compilation step. Prior reported ARM package compilation succeeded and actual package smoke failed; exact failing logs remain unavailable to this task. Do not infer a cause from the job status.
+This Linux machine has neither `xcodebuild` nor Swift/macOS tooling. `npm run test:mac:packages` deliberately rejected execution with “Actual package smoke requires a Mac runner.” This is an unavailable-platform check, not evidence of a repaired package. Existing Mac CI performs credential-free ad-hoc DMG/ZIP package/restart checks. This revision adds an ARM-runner credential-free iOS simulator compilation gate using an already-installed Xcode 26+; it neither downloads Xcode nor signs/distributes an app. Exact compilation output is retained as `release/ios-build.log`. The new CI gate has not run in this Linux task; supported simulator launch/interaction checks remain separate. Prior reported ARM package compilation succeeded and actual package smoke failed; exact failing logs remain unavailable to this task. Do not infer a cause from the job status.
 
 Static regression comparison found no change to `electron/main.cjs` or `macPackagesSmoke.ts`. CSP changes deny connections/workers, preserving scripts/styles/local photo/blob resources; native Files is selected only on native iOS and desktop backup/import keeps its prior browser paths. No evidence-backed Mac repair was identified. Fresh supported Mac package results and credential-free Xcode 26+ native compile/simulator results remain necessary before native acceptance. Physical free-signed iPad Files/offline/restart/update/renewal checks remain unrun.
 
@@ -32,3 +32,7 @@ Current administrative AGENTS.md requires the external `reuse-component-lessons`
 ## Review recommendation
 
 Reconciliation and Linux/shared UI checks are reviewable. Keep native/Mac acceptance open: obtain the actual failing Mac smoke log and run the exact reviewed head on supported macOS/Xcode/iPad before claiming installation readiness. Do not merge, release, distribute, or introduce real records on the strength of browser/static evidence.
+
+## Native compile gate verification
+
+The added workflow shell was checked with `bash -n`. Its installed-Xcode selection and `pipefail` preserve failure results and fail clearly if Xcode 26+ is absent. Compilation is prepared for the existing PR-triggered Actions workflow, not claimed executed.
