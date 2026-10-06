@@ -1,5 +1,19 @@
 # Feature and decision queue
 
+## Current scope clarification — October 6, 2026, 13:37–13:38 America/Toronto
+
+Tyler clarified that classroom marking and feedback stay on Teacher X's device by default, while deliberate sharing is a desired future capability. He then directed: “only work on transferring a bug report” and “Update that as a future step ... create PRs”.
+
+- **F-007 active next scope:** deliberate private bug-report transfer, with registered reporter/device attribution, exact payload preview, explicit Send, secure transport and private receipt. Existing local draft/copy/download remains usable offline. No student work, marks, classroom notes, database exports, screenshots or automatic attachments enter this transport.
+- Attribution is a target requiring a receiver/enrollment design; the local acting-teacher selector is not authenticated identity. A display name alone is not verified attribution.
+- **F-009 deferred:** optional teacher-selected essay plus its feedback shared into an owner assessment/exemplar repository. Preserve this request; revisit after bug-report receipt is verified. Define permissions, consent/authorization, removal of student identifiers, access, retention and deletion before implementation. No essay upload or marking integration is authorized now.
+- Release/update approvals and implementation-feedback expansion remain future control-panel scope, outside the bug-transfer first slice.
+- This clarification authorizes recording scope and preparing concrete PR/implementation work; it does not adopt a receiver/provider, authorize accounts/hosting/spending, transmit real data, merge or release.
+- [Bug-transfer implementation preparation](plans/F-007-BUG-TRANSFER-SCOPE-2026-10-06.md) defines PR slices, acceptance evidence and the remaining receiver/access judgment.
+
+This section supersedes older absolute descriptions of “closed loop”: classroom data and processing remain on-device by default; explicitly selected future sharing requires its own defined boundary. It does not loosen current network restrictions or authorize automatic uploads.
+
+
 ## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
 
 Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.
