@@ -44,6 +44,57 @@ describe('Imported roster seating and randomization', () => {
     expect(await db.auditEntries.where('entityName').equals('seatPositions').count()).toBe(1);
   });
 
+  it('populates a restored deleted desk while retiring both coordinate and out-of-grid enrollment tombstones', async () => {
+    const layout = (await db.seatingLayouts.get(source.seatingLayoutId))!;
+    const deletedAt = '2026-10-01T12:00:00.000Z';
+    await db.seatPositions.update(source.id, { row: layout.rows + 1, deletedAt });
+    await db.seatPositions.update(destination.id, { row: source.row, col: source.col, deletedAt });
+    await db.classEnrollments.update(destination.classEnrollmentId, { enrollmentStatus: 'dropped' });
+    const before = await db.seatPositions.toArray();
+    const enrollments = await db.classEnrollments.toArray();
+    const students = await db.students.toArray();
+    await service.populateEmptySeats(source.seatingLayoutId, 'user-tyler', 'fictional-device');
+    const live = await db.seatPositions.filter(s => s.deletedAt === null).toArray();
+    const populated = live.filter(s => s.classEnrollmentId === source.classEnrollmentId);
+    expect(populated).toHaveLength(1);
+    expect(populated[0]).toMatchObject({ row: source.row, col: source.col, deletedAt: null });
+    for (const seat of before.filter(s => s.deletedAt === null)) expect(await db.seatPositions.get(seat.id)).toEqual(seat);
+    expect(await db.classEnrollments.toArray()).toEqual(enrollments);
+    expect(await db.students.toArray()).toEqual(students);
+    const audits = await db.auditEntries.where('entityName').equals('seatPositions').toArray();
+    const deletes = audits.filter(a => a.action === 'DELETE');
+    expect(deletes).toHaveLength(2);
+    for (const tombstone of before.filter(s => s.deletedAt !== null)) {
+      expect(await db.seatPositions.get(tombstone.id)).toBeUndefined();
+      expect(JSON.parse(deletes.find(a => a.entityId === tombstone.id)!.previousStateJson!)).toEqual(tombstone);
+    }
+    expect(audits.every(a => a.userId === 'user-tyler')).toBe(true);
+    expect(new Set(deletes.map(a => a.transactionId)).size).toBe(1);
+    const outbox = (await db.syncMutations.toArray()).filter(m => m.transactionId === deletes[0].transactionId);
+    expect(outbox.map(m => m.sequenceNumber).sort()).toEqual([1, 2]);
+    expect(outbox.every(m => m.transactionSize === 2 && m.operation === 'DELETE')).toBe(true);
+    await service.populateEmptySeats(source.seatingLayoutId, 'user-tyler', 'fictional-device');
+    expect(await db.auditEntries.where('entityName').equals('seatPositions').count()).toBe(audits.length);
+  });
+
+  it('restores deleted-seat rows, audits and outbox when population later fails', async () => {
+    await db.seatPositions.update(source.id, { deletedAt: '2026-10-01T12:00:00.000Z' });
+    await db.seatPositions.update(destination.id, { deletedAt: '2026-10-01T12:00:00.000Z' });
+    const seats = await db.seatPositions.toArray();
+    const audits = await db.auditEntries.toArray();
+    const outbox = await db.syncMutations.toArray();
+    const original = service.assignSeat.bind(service);
+    let assignments = 0;
+    vi.spyOn(service, 'assignSeat').mockImplementation(async (...args) => {
+      if (++assignments === 2) throw new Error('Fictional assignment after tombstone cleanup');
+      return original(...args);
+    });
+    await expect(service.populateEmptySeats(source.seatingLayoutId, 'user-tyler', 'fictional-device')).rejects.toThrow('after tombstone cleanup');
+    expect(await db.seatPositions.toArray()).toEqual(seats);
+    expect(await db.auditEntries.toArray()).toEqual(audits);
+    expect(await db.syncMutations.toArray()).toEqual(outbox);
+  });
+
   it('rejects insufficient capacity before assigning anyone', async () => {
     await db.seatPositions.where('seatingLayoutId').equals(source.seatingLayoutId).delete();
     await db.seatingLayouts.update(source.seatingLayoutId, { rows: 1, cols: 1 });
