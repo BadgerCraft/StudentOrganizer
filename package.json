@@ -22,7 +22,8 @@
     "ios:prepare": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
     "test:ipad:browser": "tsx scripts/nativePilotSmoke.ts",
-    "test:ipad:assets": "tsx scripts/auditNativePilot.ts"
+    "test:ipad:assets": "tsx scripts/auditNativePilot.ts",
+    "test:marking:browser": "tsx scripts/markingWorkflowSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
