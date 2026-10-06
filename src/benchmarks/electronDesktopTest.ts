@@ -27,8 +27,12 @@ async function main() {
   console.log('WINDOWS ELECTRON DESKTOP VERIFICATION SUITE');
   console.log('================================================================\n');
 
-  const installerPath = path.resolve('release/Ontario Teacher Assessment Setup 1.0.0.exe');
-  const portablePath = path.resolve('release/OntarioTeacherAssessment-Portable.exe');
+  const packages = fs.readdirSync('release');
+  const installerFile = packages.find(file => file.endsWith('-nsis.exe'));
+  const portableFile = packages.find(file => file.endsWith('-Portable.exe'));
+  if (!installerFile || !portableFile) throw new Error('Build the Windows installer and portable files first.');
+  const installerPath = path.resolve('release', installerFile);
+  const portablePath = path.resolve('release', portableFile);
   const unpackedPath = path.resolve('release/win-unpacked/Ontario Teacher Assessment.exe');
 
   // 1. Verify existence and calculate SHA-256 checksums
@@ -209,7 +213,7 @@ async function main() {
   console.log('PASS: Portable executable starts and initializes cleanly as a standalone binary.');
   // Terminate test portable process
   try {
-    execSync(`taskkill /F /IM "OntarioTeacherAssessment-Portable.exe" 2>nul`);
+    execSync(`taskkill /F /IM "${portableFile}" 2>nul`);
     execSync(`taskkill /F /IM "Ontario Teacher Assessment.exe" 2>nul`);
   } catch (_) {}
 
