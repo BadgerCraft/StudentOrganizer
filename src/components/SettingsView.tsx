@@ -1,3 +1,4 @@
+import { ManualWindowsUpdate } from './ManualWindowsUpdate';
 import { ClassSettingsService } from '../services/classSettingsService';
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -753,6 +754,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ))}
         </div>
       </div>
+
+      <ManualWindowsUpdate />
 
       {/* Create Button Modal */}
       <ModalDialog
