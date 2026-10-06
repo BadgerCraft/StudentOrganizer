@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
+const https = require('node:https');
 const { version, isNewer, releaseUrl, parseRelease, trustedCaller, createManualCheck } = require('../../electron/manualUpdater.cjs');
 const release = { tag_name: 'v1.2.0', html_url: 'https://github.com/BadgerCraft/StudentOrganizer/releases/tag/v1.2.0', draft: false, prerelease: false };
 describe('manual Windows release lookup boundary', () => {
@@ -50,4 +52,62 @@ describe('manual Windows release lookup boundary', () => {
       expect(await createManualCheck({ platform: 'win32', packaged: true, currentVersion: '1.0.0', lookup })()).toEqual({ status });
     }
   });
+  it('bounds slow connection and trickling responses by ten seconds, then permits retry', async () => {
+    vi.useFakeTimers();
+    const transports: { request: EventEmitter & { destroy: ReturnType<typeof vi.fn> }; respond: (response: EventEmitter) => void }[] = [];
+    vi.spyOn(https, 'get').mockImplementation((_url: unknown, _options: unknown, respond: (response: EventEmitter) => void) => {
+      const request = new EventEmitter() as EventEmitter & { destroy: ReturnType<typeof vi.fn> };
+      request.destroy = vi.fn((error: Error) => { request.emit('error', error); return request; });
+      transports.push({ request, respond });
+      return request;
+    });
+    try {
+      const check = createManualCheck({ platform: 'win32', packaged: true, currentVersion: '1.0.0' });
+      // Connection/DNS stall: no socket or response event arrives.
+      const stalled = check();
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(await stalled).toEqual({ status: 'error' });
+      expect(transports[0].request.destroy).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+      // Data keeps arriving, so a socket inactivity timeout would never fire.
+      const trickling = check();
+      const response = new EventEmitter() as EventEmitter & { statusCode: number };
+      response.statusCode = 200;
+      transports[1].respond(response);
+      for (let second = 0; second < 9; second++) {
+        response.emit('data', Buffer.from(' '));
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(transports[1].request.destroy).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await trickling).toEqual({ status: 'error' });
+      expect(transports[1].request.destroy).toHaveBeenCalledTimes(1);
+      // Failure must clear the pending latch; a subsequent clicked check succeeds.
+      const retry = check();
+      const absent = Object.assign(new EventEmitter(), { statusCode: 404, resume: vi.fn() });
+      transports[2].respond(absent);
+      expect(await retry).toEqual({ status: 'unpublished' });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(transports[2].request.destroy).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.restoreAllMocks(); vi.useRealTimers(); }
+  });
+
+  it('releases a clicked check immediately when the response is interrupted', async () => {
+    const responses: EventEmitter[] = [];
+    const transport = vi.spyOn(https, 'get').mockImplementation((_url: unknown, _options: unknown, respond: (response: EventEmitter) => void) => {
+      const request = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+      const response = Object.assign(new EventEmitter(), { statusCode: 200 });
+      responses.push(response);
+      queueMicrotask(() => { respond(response); response.emit('aborted'); });
+      return request;
+    });
+    try {
+      const check = createManualCheck({ platform: 'win32', packaged: true, currentVersion: '1.0.0' });
+      expect(await check()).toEqual({ status: 'error' });
+      expect(await check()).toEqual({ status: 'error' });
+      expect(responses).toHaveLength(2);
+    } finally { transport.mockRestore(); }
+  });
+
 });
