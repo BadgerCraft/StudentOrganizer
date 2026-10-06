@@ -350,3 +350,7 @@ Automatic launch remains an explicit incomplete workflow improvement. Continue a
 
 ## PR #11 revision and merge authorization — October 5
 Tyler instructed “Sure, revise then merge” after reviewing the missing automatic launch path. This authorizes the documentation correction and merging PR #11 after final-revision checks pass. It does not authorize merging PR #10, #13 or #15 or any release. F-001 documentation is ready for the authorized merge; F-005 automatic Cloud dispatch remains incomplete. PR #15 is a draft targeting codex/mac-ipad-support; do not treat the full iPad pilot as complete.
+
+
+## October 6 morning batch snapshot
+Current administrative source: open PR17 codex/batch-work-trial. Main rules from merged PR11 plus this approved trial govern execution. Work order BATCH-2026-10-06.md now carries fresh conflict/check evidence, actual roster-repair/manual-updater approvals and baseline trial measurements. PR10 needs routine conflict resolution; PR15 Mac packaged launch/restart failed although package creation passed. Neither is merge-ready. PR17 previous head package passed and was clean; this report advances its source and needs fresh checks. No merge/release approval inferred or action performed. Batch remains launch-pending in this chat; one complete Cloud handoff supplied. October6 date-specific reminder delivered to switch to the StudentOrganizer Cloud environment chat; no actual switch or launch claimed. No new personal research homework assigned.
