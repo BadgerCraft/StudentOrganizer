@@ -289,6 +289,37 @@ export class SeatingDomainService {
     );
   }
 
+  /** Fill empty desks only; existing assignments and roster records remain intact. */
+  async populateEmptySeats(seatingLayoutId: UUID, userId: UUID, deviceId: UUID): Promise<void> {
+    await this.db.transaction('rw', [
+      ...AUTH_TABLES(this.db), this.db.seatingLayouts, this.db.classEnrollments,
+      this.db.students, this.db.seatPositions, this.db.auditEntries, this.db.syncMutations
+    ], async () => {
+      const layout = await this.db.seatingLayouts.get(seatingLayoutId);
+      if (!layout || layout.deletedAt !== null) throw new ValidationError('Layout not found.');
+      if (layout.isLocked) throw new ValidationError('Layout is locked. Unlock seating before populating.');
+      await assertClassSectionWriteAccess(this.db, userId, layout.classSectionId);
+      const seats = await this.db.seatPositions.where('seatingLayoutId').equals(seatingLayoutId).toArray();
+      const seated = new Set(seats.filter(s => s.deletedAt === null).map(s => s.classEnrollmentId));
+      const enrollments = (await this.db.classEnrollments.where('classSectionId').equals(layout.classSectionId).toArray())
+        .filter(e => e.deletedAt === null && e.enrollmentStatus === 'active' && !seated.has(e.id));
+      const students = await this.db.students.bulkGet(enrollments.map(e => e.studentId));
+      const unseated = enrollments.map((enrollment, i) => ({ enrollment, student: students[i] }))
+        .filter(p => p.student && p.student.deletedAt === null)
+        .sort((a, b) => a.student!.lastName.localeCompare(b.student!.lastName) || a.student!.firstName.localeCompare(b.student!.firstName));
+      const empty: { row: number; col: number }[] = [];
+      for (let row = 0; row < layout.rows; row++) {
+        for (let col = 0; col < layout.cols; col++) {
+          if (!seats.some(s => s.deletedAt === null && s.row === row && s.col === col)) empty.push({ row, col });
+        }
+      }
+      if (unseated.length > empty.length) throw new ValidationError(`Not enough empty desks (${empty.length}) for unassigned students (${unseated.length}). Add rows or columns, then populate seating.`);
+      for (let i = 0; i < unseated.length; i++) {
+        await this.assignSeat(seatingLayoutId, empty[i].row, empty[i].col, unseated[i].enrollment.id, userId, deviceId);
+      }
+    });
+  }
+
   /**
    * Arranges active students in the class alphabetically by last name into the layout.
    * Pre-validates capacity so active students are NEVER silently dropped.
@@ -420,6 +451,7 @@ export class SeatingDomainService {
         const existingSeats = await this.db.seatPositions
           .where('seatingLayoutId')
           .equals(seatingLayoutId)
+          .filter(s => s.deletedAt === null)
           .toArray();
 
         if (existingSeats.length < 2) return;
@@ -463,7 +495,16 @@ export class SeatingDomainService {
           acknowledgedAt: null
         }));
 
+        // Enrollment uniqueness forbids overwriting a shuffled occupant while its
+        // old seat still exists. Replace within this transaction, retaining seat IDs.
+        await this.db.seatPositions.bulkDelete(existingSeats.map(s => s.id));
         await this.db.seatPositions.bulkPut(updated);
+        await this.db.auditEntries.bulkAdd(updated.map((seat, index) => ({
+          id: crypto.randomUUID(), entityName: 'seatPositions', entityId: seat.id,
+          action: 'UPDATE' as const, transactionId: txId,
+          previousStateJson: JSON.stringify(existingSeats[index]), newStateJson: JSON.stringify(seat),
+          diffJson: null, userId, timestamp: now, clientVersion: '1.0.0'
+        })));
         await this.db.syncMutations.bulkAdd(syncMutations);
       }
     );
