@@ -262,3 +262,12 @@ No unanswered prior question was marked passed. Trial instruction saves learning
 DEV018 introduced: an update lookup compares release versions; it cannot establish installer publisher/authenticity or preservation of existing records. Project example: the Windows button sends only a fixed release lookup when clicked, handles installed QA versions, and cannot download/install anything until trust/channel/old-new acceptance prerequisites exist. Explanation in current task results; stage0, review dueOctober7. Prepared check: why can finding a newer version leave safe installation unverified? No recall response inferred.
 
 Separate schedule task: no task-management or scheduled-run inspection tools exist here. The current manually launched checkout is evidence for this task only; scheduled-run inheritance remains unverified. Primary coordination and no replacement-before-readback rule are persisted. No schedule/notification/continued-background activity claimed.
+
+### DEV-019 — Saving a draft versus reconciling changed categories
+
+- Date/source: October 7, 2026, America/Toronto; introduced during the approved Markinator category-recovery fix.
+- Explanation: a saved snapshot keeps the category definitions that the teacher actually used. Reconciliation is a separate, explicit decision about how those saved judgments relate to the assessment's current categories. Saving feedback must remain possible while that decision is unresolved.
+- StudentOrganizer example: replacing a T category no longer blocks a pending comment from being saved. The teacher reviews the pinned rubric and chooses whether to retain a compatible judgment or keep the original in recovery history. Both choices leave official marks unchanged. If storage fails, the app must say the pending edits are not saved; an attempted write is not evidence of recovery.
+- Evidence: fictional UI save/reconciliation failures, reload/reopen, unchanged existing official marks, and full-backup recovery tests. Browser results do not establish native storage readiness.
+- Prepared review question for Tyler's return: how does a saved category snapshot let feedback survive before the teacher has decided how to reconcile it?
+- Stage 0; no answer or demonstrated recall recorded. Next review October 8. The requested bounded batch finishes without a learning question or direction request blocking delivery.

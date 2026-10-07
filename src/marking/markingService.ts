@@ -5,7 +5,8 @@ import { assertClassSectionWriteAccess, AuthorizationError } from '../services/a
 import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
-import { assertMarkingDocuments, assertMarkingDraft, assertRubricContent } from './validation';
+import { assertMarkingDocuments, assertMarkingDraft, assertRubricContent, sessionCategories } from './validation';
+import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
 
 const live = <T extends { deletedAt: string | null }>(rows: T[]) => rows.filter(row => row.deletedAt === null);
 const sorted = <T extends { id: string }>(rows: T[]) => [...rows].sort((a, b) => a.id.localeCompare(b.id));
@@ -52,7 +53,7 @@ export class MarkingService {
     if (!period || period.deletedAt !== null || period.termId !== auth.classSection.termId) throw new ValidationError('The assessment reporting period is unavailable.');
     if (write && (assessment.isLocked || period.isClosed)) throw new ValidationError('The assessment is locked or its reporting period is closed.');
     const categories = live(await this.db.assessmentCategories.where('assessmentId').equals(assessmentId).toArray());
-    if (!categories.length || new Set(categories.map(c => c.categoryCode)).size !== categories.length) throw new ValidationError('The assessment requires distinct valid KTAC categories.');
+    if (new Set(categories.map(c => c.categoryCode)).size !== categories.length) throw new ValidationError('The assessment requires distinct valid KTAC categories.');
     return { assessment, categories, auth };
   }
   private async enrollment(assessment: Assessment, enrollmentId: string, requireActive = true) {
@@ -189,19 +190,62 @@ export class MarkingService {
       const pending = history.find(s => s.status === 'draft'); if (pending) return pending;
       const previous = history[0];
       const old = previous?.draft;
-      const draft: MarkingDraft = { annotations: clone(old?.annotations ?? []), pending: null, overallFeedback: old?.overallFeedback ?? '', judgments: categories.map(category => clone(old?.judgments.find(j => j.assessmentCategoryId === category.id) ?? { assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code' as const, feedback: '' })) };
-      assertMarkingDraft(draft, rubric, attempt.documents, categories.map(c => c.id));
-      const session: MarkingSession = { ...this.base(assessment, actor), attemptId, rubricId: rubric.id, revision: (previous?.revision ?? 0) + 1, status: 'draft', draft, baseline: await this.baseline(assessment, categories, attempt.classEnrollmentId), commitId: null };
+      const categorySnapshot = clone(previous ? sessionCategories(previous) : categories);
+      const draft: MarkingDraft = old ? clone(old) : { annotations: [], pending: null, overallFeedback: '', judgments: categorySnapshot.map(category => ({ assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' })) };
+      assertMarkingDraft(draft, rubric, attempt.documents, categorySnapshot.map(c => c.id));
+      const session: MarkingSession = { ...this.base(assessment, actor), attemptId, rubricId: rubric.id, revision: (previous?.revision ?? 0) + 1, status: 'draft', draft, categorySnapshot, retainedCategoryJudgments: clone(previous?.retainedCategoryJudgments ?? []), baseline: await this.baseline(assessment, categories, attempt.classEnrollmentId), commitId: null };
       await this.db.markingSessions.add(session); await this.audit('markingSessions', session, null, actor); return session;
     });
   }
   async saveDraft(sessionId: string, draft: MarkingDraft, expectedVersion: number, actor: MarkingActor): Promise<MarkingSession> {
     assertMarkingDraft(draft); const snapshot = clone(draft);
     return this.transaction(actor, true, async () => {
-      const { session, rubric, attempt, categories } = await this.sessionContext(sessionId, actor, true); this.version(session, expectedVersion);
+      const { session, rubric, attempt } = await this.sessionContext(sessionId, actor, true); this.version(session, expectedVersion);
       if (session.status !== 'draft') throw new ValidationError('Reopen the finalized session to create a draft revision.');
-      assertMarkingDraft(snapshot, rubric, attempt.documents, categories.map(c => c.id));
-      const next: MarkingSession = { ...session, draft: snapshot, version: session.version + 1, updatedAt: new Date().toISOString() };
+      // Saving pending work is separate from accepting changed assessment settings.
+      // Preserve the IDs the teacher actually edited until explicit reconciliation.
+      const categorySnapshot = sessionCategories(session);
+      assertMarkingDraft(snapshot, rubric, attempt.documents, categorySnapshot.map(c => c.id));
+      const next: MarkingSession = { ...session, draft: snapshot, categorySnapshot: clone(categorySnapshot), version: session.version + 1, updatedAt: new Date().toISOString() };
+      await this.db.markingSessions.put(next); await this.audit('markingSessions', next, session, actor); return next;
+    });
+  }
+  async reviewCategoryChanges(sessionId: string, actor: MarkingActor) {
+    return this.transaction(actor, false, async () => {
+      const { session, categories, rubric } = await this.sessionContext(sessionId, actor, false);
+      if (session.status !== 'draft') throw new ValidationError('Reopen the finalized session before reviewing changed categories.');
+      return categoryChangeReview(session, categories, rubric);
+    });
+  }
+  async reconcileCategoryChanges(sessionId: string, expectedVersion: number, reviewToken: string, mapping: Record<string, string | null>, actor: MarkingActor): Promise<MarkingSession> {
+    const decisions = clone(mapping);
+    return this.transaction(actor, true, async () => {
+      const { session, categories, rubric, attempt } = await this.sessionContext(sessionId, actor, true);
+      this.version(session, expectedVersion);
+      if (session.status !== 'draft') throw new ValidationError('Only a draft can reconcile changed categories.');
+      const review = categoryChangeReview(session, categories, rubric);
+      if (review.token !== reviewToken) throw new ConcurrencyConflictError('Categories or the saved draft changed again. Review category changes again before reconciling.');
+      if (!review.compatible) throw new ValidationError(review.reasons.join(' '));
+      const previous = review.previousCategories;
+      if (!decisions || typeof decisions !== 'object' || Array.isArray(decisions) || Object.keys(decisions).length !== previous.length || previous.some(c => !Object.prototype.hasOwnProperty.call(decisions, c.id))) throw new ValidationError('Explicitly review a destination or retain the original feedback for every saved category.');
+      assertMarkingDraft(session.draft, rubric, attempt.documents, previous.map(c => c.id));
+      const judgments: MarkingDraft['judgments'] = categories.map(c => ({ assessmentCategoryId: c.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' }));
+      const retained = clone(session.retainedCategoryJudgments ?? []);
+      const used = new Set<string>();
+      for (const category of previous) {
+        const judgment = session.draft.judgments.find(j => j.assessmentCategoryId === category.id)!;
+        const destinationId = decisions[category.id];
+        const destination = categories.find(c => c.id === destinationId);
+        if (destinationId !== null) {
+          if (!destination || !compatibleCategoryTarget(category, destination) || used.has(destination.id)) throw new ValidationError('Incompatible category mapping. Keep the original feedback in recovery history; score maximum, scale and KTAC category must match to retain a judgment.');
+          used.add(destination.id);
+          judgments[judgments.findIndex(j => j.assessmentCategoryId === destination.id)] = { ...clone(judgment), assessmentCategoryId: destination.id };
+        }
+        if (!destination || categorySignature([category]) !== categorySignature([destination])) retained.push({ category: clone(category), judgment: clone(judgment) });
+      }
+      if (retained.length > 200) throw new ValidationError('Recovery history is full. This draft is still preserved; export a backup before starting a new submission.');
+      const next: MarkingSession = { ...session, categorySnapshot: clone(categories), retainedCategoryJudgments: retained, draft: { ...session.draft, judgments }, version: session.version + 1, updatedAt: new Date().toISOString() };
+      // Do not accept newer official marks as a side effect of category recovery.
       await this.db.markingSessions.put(next); await this.audit('markingSessions', next, session, actor); return next;
     });
   }
@@ -209,13 +253,14 @@ export class MarkingService {
     return this.transaction(actor, true, async () => {
       const { session, attempt, assessment, categories } = await this.sessionContext(sessionId, actor, true); this.version(session, expectedVersion);
       if (session.status !== 'draft' || !attempt.classEnrollmentId) throw new ValidationError('Only a matched draft can accept a newer official baseline.');
+      if (categorySignature(sessionCategories(session)) !== categorySignature(categories)) throw new ConcurrencyConflictError('Assessment categories changed. Review category changes and reconcile the saved feedback first.');
       if (reviewedOfficialSignature !== undefined) {
         const value = await this.getContext(assessment.id, actor);
         const studentAssessment = value.studentAssessments.find(a => a.classEnrollmentId === attempt.classEnrollmentId);
         const signature = JSON.stringify({assessment:value.assessment,categories:value.categories,studentAssessment,results:value.currentResults.filter(r => r.studentAssessmentId === studentAssessment?.id)});
         if (signature !== reviewedOfficialSignature) throw new ConcurrencyConflictError('Official results changed again. Review them before accepting this baseline.');
       }
-      const next: MarkingSession = { ...session, draft: { ...session.draft, judgments: categories.map(category => session.draft.judgments.find(j => j.assessmentCategoryId === category.id) ?? { assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' }) }, baseline: await this.baseline(assessment, categories, attempt.classEnrollmentId), version: session.version + 1, updatedAt: new Date().toISOString() };
+      const next: MarkingSession = { ...session, baseline: await this.baseline(assessment, categories, attempt.classEnrollmentId), version: session.version + 1, updatedAt: new Date().toISOString() };
       await this.db.markingSessions.put(next); await this.audit('markingSessions', next, session, actor); return next;
     });
   }
@@ -232,8 +277,10 @@ export class MarkingService {
       if (attempt.classEnrollmentId) await this.enrollment(assessment, attempt.classEnrollmentId);
       this.version(session, expectedVersion);
       if (!attempt.classEnrollmentId) throw new ValidationError('Confirm a student before finalization.');
+      if (categorySignature(sessionCategories(session)) !== categorySignature(categories)) throw new ConcurrencyConflictError('Assessment categories changed. Review category changes and reconcile the saved feedback first.');
       assertMarkingDraft(session.draft, rubric, attempt.documents, categories.map(c => c.id));
-      if (rubric.criteria.some(c => !categories.some(category => category.categoryCode === c.categoryCode))) throw new ValidationError('The assessment categories changed. Confirm a new rubric and import a new attempt; the previous rubric and marking history remain retained.');
+      const categoryReview = categoryChangeReview(session, categories, rubric);
+      if (!categoryReview.compatible) throw new ValidationError(categoryReview.reasons.join(' '));
       if (session.draft.pending) throw new ValidationError('Save or explicitly discard the pending comment before finalization.');
       if (session.baseline !== await this.baseline(assessment, categories, attempt.classEnrollmentId)) throw new ConcurrencyConflictError('The official mark or assessment settings changed. Review the current result, then explicitly accept the newer baseline before finalizing.');
       let sa = await this.db.studentAssessments.where({ assessmentId: assessment.id, classEnrollmentId: attempt.classEnrollmentId }).first();

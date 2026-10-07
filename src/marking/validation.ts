@@ -1,6 +1,7 @@
 import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { MARKING_LIMITS } from './types';
 import { ValidationError } from '../services/markbookService';
+import type { AssessmentCategory } from '../types/schema';
 
 export type MarkingTableName = 'markingRubrics' | 'markingAttempts' | 'markingSessions' | 'markingCommits';
 function fail(message: string): never { throw new ValidationError(message); }
@@ -25,6 +26,33 @@ function base(value: Record<string, unknown>) {
   time(value.createdAt, 'createdAt'); time(value.updatedAt, 'updatedAt');
   if (value.deletedAt !== null) time(value.deletedAt, 'deletedAt');
   integer(value.version, 'version');
+}
+
+export function assertCategorySnapshot(value: unknown, assessmentId: string): asserts value is AssessmentCategory[] {
+  arr(value, 'Saved assessment categories', 4);
+  for (const item of value) {
+    const category = object(item, 'Saved assessment category');
+    str(category.id, 'Saved category ID', 200);
+    if (category.assessmentId !== assessmentId) fail('Saved category belongs to a different assessment.');
+    if (!['K', 'T', 'A', 'C'].includes(category.categoryCode as string)) fail('Saved category must use KTAC.');
+    if (typeof category.maxScore !== 'number' || !Number.isFinite(category.maxScore) || category.maxScore <= 0) fail('Saved category maximum is invalid.');
+    if (typeof category.evidenceWeight !== 'number' || !Number.isFinite(category.evidenceWeight) || category.evidenceWeight < 0) fail('Saved category weight is invalid.');
+    nullableId(category.markScaleVersionId, 'Saved category scale');
+    time(category.createdAt, 'Saved category creation'); time(category.updatedAt, 'Saved category update');
+    if (category.deletedAt !== null) fail('Saved category must have been active when pinned.');
+    integer(category.version, 'Saved category version');
+  }
+  unique(value.map(item => (item as AssessmentCategory).id), 'Saved category IDs');
+  unique(value.map(item => (item as AssessmentCategory).categoryCode), 'Saved category codes');
+}
+
+export function sessionCategories(session: Pick<MarkingSession, 'categorySnapshot' | 'baseline' | 'assessmentId'>): AssessmentCategory[] {
+  let categories: unknown = session.categorySnapshot;
+  if (categories === undefined) {
+    try { categories = JSON.parse(session.baseline).categories; } catch { fail('Saved category baseline is invalid. Keep this draft and restore a valid backup.'); }
+  }
+  assertCategorySnapshot(categories, session.assessmentId);
+  return categories;
 }
 
 export function assertRubricContent(value: unknown): asserts value is RubricContent {
@@ -117,6 +145,16 @@ export function assertMarkingRecord(table: MarkingTableName, value: unknown): as
     str(v.attemptId, 'Attempt ID', 200); str(v.rubricId, 'Rubric ID', 200); integer(v.revision, 'Revision');
     if (!['draft', 'finalized'].includes(v.status as string)) fail('Unsupported session status.');
     str(v.baseline, 'Official-result baseline', 1000000); nullableId(v.commitId, 'Commit ID'); assertMarkingDraft(v.draft);
+    const categories = sessionCategories(v as unknown as MarkingSession);
+    assertMarkingDraft(v.draft, undefined, undefined, categories.map(c => c.id));
+    if (v.retainedCategoryJudgments !== undefined) {
+      arr(v.retainedCategoryJudgments, 'Retained category feedback', 200);
+      for (const item of v.retainedCategoryJudgments) {
+        const retained = object(item, 'Retained category feedback');
+        assertCategorySnapshot([retained.category], v.assessmentId as string);
+        assertMarkingDraft({ annotations: [], pending: null, overallFeedback: '', judgments: [retained.judgment] }, undefined, undefined, [(retained.category as AssessmentCategory).id]);
+      }
+    }
     if ((v.status === 'draft' && v.commitId !== null) || (v.status === 'finalized' && v.commitId === null)) fail('Session finalization state is inconsistent.');
   } else {
     for (const field of ['sessionId', 'attemptId', 'rubricId', 'studentAssessmentId']) str(v[field], field, 200);

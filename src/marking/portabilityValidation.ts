@@ -1,5 +1,5 @@
 import type { MarkingAttempt, MarkingBase, MarkingCommit, MarkingSession } from './types';
-import { assertMarkingDraft, assertMarkingRecord } from './validation';
+import { assertMarkingDraft, assertMarkingRecord, sessionCategories } from './validation';
 
 export const MARKING_TABLE_NAMES = ['markingRubrics', 'markingAttempts', 'markingSessions', 'markingCommits'] as const;
 
@@ -48,9 +48,13 @@ export function validateMarkingBackup(tables: BackupTables): void {
   }
   function draft(record: MarkingSession | MarkingCommit, attempt: MarkingAttempt) {
     const rubric = ref('markingRubrics', record.rubricId);
-    assertMarkingDraft(record.draft, rubric, attempt.documents);
+    // Draft recovery may refer to categories removed after marking began. Only a
+    // validated, assessment-bound session snapshot can stand in for a missing row.
+    const savedCategories = sessionCategories('baseline' in record ? record : ref('markingSessions', record.sessionId));
+    assertMarkingDraft(record.draft, rubric, attempt.documents, savedCategories?.map(c => c.id));
     for (const judgment of record.draft.judgments) {
-      const category = ref('assessmentCategories', judgment.assessmentCategoryId);
+      const category = maps.assessmentCategories?.get(judgment.assessmentCategoryId) ?? savedCategories?.find(c => c.id === judgment.assessmentCategoryId);
+      if (!category) fail('judgment has no assessment category or retained snapshot');
       if (category.assessmentId !== record.assessmentId) fail('judgment refers to a different assessment');
     }
   }
@@ -75,6 +79,11 @@ export function validateMarkingBackup(tables: BackupTables): void {
   }
   for (const rubric of tables.markingRubrics) {
     const categories = tables.assessmentCategories.filter(category => category.assessmentId === rubric.assessmentId);
+    for (const session of tables.markingSessions as MarkingSession[]) {
+      if (session.rubricId === rubric.id && session.assessmentId === rubric.assessmentId && session.classSectionId === rubric.classSectionId && session.createdBy === rubric.createdBy) {
+        categories.push(...sessionCategories(session), ...(session.retainedCategoryJudgments ?? []).map(item => item.category));
+      }
+    }
     if (rubric.criteria.some((criterion: { categoryCode: string }) => !categories.some(category => category.categoryCode === criterion.categoryCode))) fail('rubric mapping refers to an absent assessment category');
   }
   for (const attempt of tables.markingAttempts as MarkingAttempt[]) {

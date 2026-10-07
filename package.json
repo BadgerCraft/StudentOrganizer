@@ -23,7 +23,8 @@
     "ios:open": "cap open ios",
     "test:ipad:browser": "tsx scripts/nativePilotSmoke.ts",
     "test:ipad:assets": "tsx scripts/auditNativePilot.ts",
-    "test:marking:browser": "tsx scripts/markingWorkflowSmoke.ts"
+    "test:marking:browser": "tsx scripts/markingWorkflowSmoke.ts",
+    "test:marking:category-recovery": "tsx scripts/markingCategoryRecoverySmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
