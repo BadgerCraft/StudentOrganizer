@@ -37,6 +37,10 @@ Focused independent review found the historical finalized-commit backup edge abo
 
 Local evidence (temporary, regenerable by the checked-in scripts): `/tmp/markinator-recovery-full-tests.json`, `/tmp/markinator-recovery-build.log`, `/tmp/markinator-recovery-production-browser.log`, `/tmp/category-recovery-resumed.log`, `/tmp/markinator-category-*-review.png`, `/tmp/markinator-category-storage-failure.png`. The pre-fix browser screenshot is `/tmp/markinator-category-before.png`. No continuation depends on these temporary files or a running worker.
 
+## Requested future features — October 7, 2026
+
+The [StudentOrganizer product roadmap](../PRODUCT_ROADMAP.md#markinator-follow-up-backlog--requested-october-7-2026) records Tyler's two future Markinator requests: a starting screen with essay markup + rubric, oral presentation checklist + rubric, and rubric-only modes; and on-device photograph/import plus annotation of handwritten work through the essay-style rubric/feedback process. These belong to StudentOrganizer's backlog. Finish and verify the existing integration first; do not add them to the remaining batches below. Implementation planning/approval is pending; this request does not approve OCR, remote processing, merge or release.
+
 ## Resume here — separate remaining batches in order
 
 1. **Expanded real UI acceptance.** Exercise manual rubric entry/duplicate-label correction, pending-save teacher switch and access revocation, grouped attachments/resubmission queue, malformed/failed import UI, newer manual mark conflict resolution, explicit post-finalization retry, protected navigation under storage failure, clean-profile full marking backup/restore, and downloaded report print rendering. Reuse the passing primary flow and category-recovery evidence; investigate only missing or invalidated evidence. Fixtures remain fictional.
