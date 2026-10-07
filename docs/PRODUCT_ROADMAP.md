@@ -1,5 +1,26 @@
 # Product roadmap, implementation plans, and decision lookahead
 
+## Markinator follow-up backlog — requested October 7, 2026
+
+Tyler requested the following additions to StudentOrganizer and authorized recording them in the existing project backlog. **Status: requested future work; implementation plan/approval pending.** Finish and verify the current essay integration before implementing these additions. This record does not expand the current integration batch. See [current Markinator checkpoint](markinator/CHECKPOINT.md) for implementation and acceptance status; older F-008 discovery-only statements below are historical.
+
+### F-008 follow-up: choose a marking workflow
+
+- [ ] Add a screen before entering Markinator with three options:
+  1. **Default / essay:** essay markup + rubric.
+  2. **Oral presentation:** checklist + rubric.
+  3. **Rubric only:** rubric assessment without requiring an essay or checklist.
+- [ ] Keep each mode linked to the correct student and assessment and connected to the existing feedback and KTAC finalization process.
+
+### F-008 follow-up: photographed handwritten work
+
+- [ ] Allow the teacher to take a picture of handwritten work or import an existing photo.
+- [ ] Support markup/comments on the photographed work, followed by rubric assessment, feedback and finalization through a process similar to the default essay workflow.
+- [ ] Retain the original image and saved annotations on-device, linked to the correct student and assessment.
+- [ ] Preserve closed-loop student privacy: capture, processing and storage stay on-device; no external document processing or automatic upload.
+
+Resolve the annotation approach when preparing the implementation plan: direct image annotations, optional on-device handwriting recognition, or both. Handwriting recognition is not a prerequisite for marking up an image and is not newly approved by this backlog entry.
+
 ## Superseding privacy and platform decision — October 1, 13:59 America/Toronto
 
 Tyler explicitly confirmed that the iPad version must be an installed app that keeps all student data and processing on the device and needs no website to operate. His stated reason: “Student privacy is the most important condition that we need to abide by. Creating a hypothetical version doesn't make sense when we will have to change to it a closed loop at some point.”
