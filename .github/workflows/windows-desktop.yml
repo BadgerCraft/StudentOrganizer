@@ -63,7 +63,7 @@ jobs:
             release/SHA256SUMS.txt
             release/QA-GUIDE.md
             release/package-smoke.json
-            release/qa-evidence/*.png
+            release/qa-evidence/**
           if-no-files-found: error
           retention-days: 90
       - name: Upload failure diagnostics

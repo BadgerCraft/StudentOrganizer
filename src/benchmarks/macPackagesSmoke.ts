@@ -1,3 +1,4 @@
+import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import assert from 'node:assert/strict';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -231,6 +232,27 @@ async function checkApp(appPath: string, format: string) {
     assert.equal((await records(page, 'students')).find(row => row.id === student.id)?.photoUrl, student.photoUrl);
     assert.ok((await records(page, 'participationEvents')).some(row => row.id === event.id && row.note === observation));
     await page.screenshot({ path: path.join(evidence, `${format}-recovered.png`) });
+    await openHub(page);
+    const marking = await runMarkingDesktopAcceptance(page, path.join(evidence, `${format}-marking`), async (trigger, destination) => {
+      await app!.evaluate(({ BrowserWindow }, savePath) => {
+        (globalThis as any).__markingDownload = { state: 'pending' };
+        BrowserWindow.getAllWindows()[0].webContents.session.once('will-download', (_event, item) => {
+          item.setSavePath(savePath);
+          item.once('done', (_done, state) => { (globalThis as any).__markingDownload = { state, path: item.getSavePath() }; });
+        });
+      }, destination);
+      assert.equal((await app!.evaluate(() => (globalThis as any).__markingDownload)).state, 'pending', 'Actual session callback must be registered before exporting');
+      await trigger();
+      let result = { state: 'pending', path: '' };
+      for (let attempt = 0; attempt < 300; attempt++) {
+        result = await app!.evaluate(() => (globalThis as any).__markingDownload);
+        if (result.state !== 'pending') break;
+        await page.waitForTimeout(100);
+      }
+      assert.equal(result.state, 'completed', 'Real Electron marking download must complete');
+      assert.equal(result.path, destination);
+    });
+
 
     await app.close();
     app = undefined;
@@ -248,10 +270,12 @@ async function checkApp(appPath: string, format: string) {
     await persisted.form.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal((await records(page, 'students')).find(row => row.id === student.id)?.photoUrl, student.photoUrl);
     assert.ok((await records(page, 'participationEvents')).some(row => row.id === event.id && row.note === observation));
+    await openHub(page);
+    await verifyAfterRestart(page, marking);
     await page.screenshot({ path: path.join(evidence, `${format}-reopened.png`) });
     assert.deepEqual(errors, []);
     return { format, status: 'PASS', architecture: arch, userDataPath,
-      assessmentCreatedAndRetained: true, noteParticipationRetained: true,
+      marking, assessmentCreatedAndRetained: true, noteParticipationRetained: true,
       categoryPercentageAndFeedbackRetained: true, localPhotoRetained: true,
       fullBackupAllStores: true, invalidRestoreRejected: true, confirmedRecoveryAndRestart: true,
       backupEvidence: path.basename(backupPath), nativeSaveDialog: 'CI selects evidence destination; unverified' };

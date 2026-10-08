@@ -1,3 +1,4 @@
+import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import { chromium, type Browser, type Page } from 'playwright';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -101,6 +102,34 @@ async function openHub(page: Page) {
   await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor({ state: 'visible' });
 }
 
+// Select only the evidence destination; renderer export still creates the bytes.
+// The native Save As dialog is deliberately outside this automation's claim.
+async function markingDownload(browser: Browser, trigger: () => Promise<void>, destination: string) {
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const temporary = fs.mkdtempSync(path.join(path.dirname(destination), 'download-'));
+  const session = await browser.newBrowserCDPSession();
+  let guid = '';
+  let state = 'pending';
+  session.on('Browser.downloadWillBegin', event => { guid = event.guid; });
+  session.on('Browser.downloadProgress', event => { if (event.guid === guid) state = event.state; });
+  try {
+    await session.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: temporary, eventsEnabled: true });
+    await trigger();
+    const deadline = Date.now() + 30000;
+    while (state === 'pending' || state === 'inProgress') {
+      if (Date.now() >= deadline) throw new Error('Actual packaged marking export download timed out');
+      await delay(100);
+    }
+    if (state !== 'completed' || !guid) throw new Error(`Actual marking download failed: ${state}`);
+    fs.renameSync(path.join(temporary, guid), destination);
+    if (!fs.statSync(destination).size) throw new Error('Downloaded marking artifact is empty');
+  } finally {
+    await session.send('Browser.setDownloadBehavior', { behavior: 'default' }).catch(() => {});
+    await session.detach();
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
 async function verify(executable: string, variant: string) {
   const title = `QA Fictional ${variant} Assessment ${Date.now()}`;
   const errors: string[] = [];
@@ -116,16 +145,18 @@ async function verify(executable: string, variant: string) {
     await form.getByRole('button', { name: 'Create Assessment' }).click();
     await app.page.getByRole('heading', { name: title, exact: true }).waitFor({ state: 'visible' });
     await app.page.screenshot({ path: path.join(evidenceDir, `${variant}-created.png`) });
+    const marking = await runMarkingDesktopAcceptance(app.page, path.join(evidenceDir, `${variant}-marking`), (trigger, destination) => markingDownload(app!.browser, trigger, destination));
     await close(app);
     app = undefined;
     app = await launch(executable);
     app.page.on('pageerror', error => errors.push(error.message));
     await openHub(app.page);
     await app.page.getByRole('heading', { name: title, exact: true }).waitFor({ state: 'visible' });
+    await verifyAfterRestart(app.page, marking);
     await app.page.screenshot({ path: path.join(evidenceDir, `${variant}-restarted.png`) });
     if (errors.length) throw new Error(`Renderer errors: ${errors.join('; ')}`);
     console.log(`PASS: Actual ${variant} app shows build ID, creates an assessment without Code, and retains it after restart.`);
-    return { variant, executable: path.basename(executable), assessment: title, status: 'passed' };
+    return { variant, executable: path.basename(executable), assessment: title, status: 'passed', marking };
   } catch (error) {
     await app?.page.screenshot({ path: path.join(evidenceDir, `${variant}-failed.png`) }).catch(() => {});
     throw error;
