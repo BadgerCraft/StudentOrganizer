@@ -22,6 +22,16 @@ Tyler asked “How can we change the repeated authorization for routine verifica
 
 Current concrete application: the October8 database-upgrade verification is carried through tests/build, commit, normal feature-branch push and PR20 update without another approval question. Update new CI evidence before a merge verdict. Preserve Tyler's actual learning reply; no general test count guarantees classroom satisfaction.
 
+## October 8 afternoon results / trial decision
+
+The three-day trial assessment is saved in [BATCH-2026-10-06.md](work-orders/BATCH-2026-10-06.md). Recommendation: revise while retaining batch execution, the single current queue and approved authorization-through-review-publication. Three bounded teacher-facing code outcomes are reviewable: roster/seating and manual update lookup merged via PR18; core local Markinator ready in PR20. PR creation, repairs/tests and administrative records are not additional features.
+
+Freshly fetched current PR20 source30a13dd/test merged41f1fc: Windows37780989087 and Mac/browser37780989028 completed SUCCESS; logs confirm289 tests/32 files. Build, actual supported desktop packages/restart and browser acceptance PASS; release skipped and physical iPad/OS dialogs/old-new installer upgrade remain unverified. No live coding worker is observed in this coordinator's tree; no Cloud task ID/link or published-environment usage is established. This results check retrieved the active source and completed administrative verification using a usable shell checkout plus GitHub connector; no new production implementation or duplicate launch.
+
+Trial friction: at least one documented avoidable reauthorization, plus a distinct later automatic approval-review interruption; no total intervention count across conversations is invented. Keep routine publication authorized, preserve platform enforcement and reserve actual main merge/release decisions. Remaining eight UI requests are not approved implementation, and device/access gates are explicit. No schedule, service or release change is performed.
+
+Optional DEV018 term review is offered for a later response, with answer withheld; no recall supplied or stage advanced. DEV020 first review remains October9. Next action: review reserved PR19/PR20 main merges, keeping release/distribution separate.
+
 ## Next approved batch
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
