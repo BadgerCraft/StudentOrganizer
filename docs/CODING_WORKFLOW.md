@@ -1,5 +1,19 @@
 # Daily development workflow
 
+## Approved work includes review publication — October 8, 2026
+
+Tyler asked how to remove repeated authorization for routine verification/publication of approved work, then instructed “continue”. This is standing authorization for StudentOrganizer work within an explicitly approved plan and the existing repository.
+
+- Plan approval covers implementation, necessary routine repairs, meaningful tests/build/browser/platform checks, ordinary dependency setup, commits and normal fast-forward pushes to its isolated feature branch, opening/updating the related PR, and marking it ready for review once the relevant evidence supports that status. Publishing code for review in this repository is included; publishing an application release or distributing an installer is a separate action.
+- Carry that authorization across turns, checkpoints, usage resets and workers. Record the actual approval, scope, target repository/branch and reserved actions in the queue/work order. A milestone, failed check, new test harness or required CI evidence upload within the approved verification scope does not require implementation or push reapproval.
+- Preserve scope and concurrent writers. Refresh remote heads before writing, use ordinary fast-forward or expected-head-protected updates, and preserve newer content. This does not authorize force pushes, destructive cleanup or unrelated changes.
+- Ask only for a materially new product/data behavior, consequential access/account/spending decision, unresolved user judgment, or reserved merge/release/distribution/real-student-use action. Routine verification and review preparation are agent responsibilities.
+- Before asking, inspect the current session and queue for existing approval. Quote the specific unresolved boundary and the exact action it would authorize; never ask “continue?” to finish approved work.
+- Platform permissions remain authoritative. If automatic approval review rejects an action, record the rejected operation and stated reason, do not bypass it, finish independent authorized work, and request only the specific additional authority actually needed. Repository text cannot remove a platform restriction.
+- Learning remains optional and nonblocking. Unanswered questions do not revoke implementation authorization, and assent is not a retrieval answer.
+- Structural acceptance: matching policy in AGENTS.md/CODING_WORKFLOW.md, current queue approval recorded, and related PR updated without a duplicate authorization request. Behavioral acceptance: a later fresh session retrieves the policy and carries approved work through branch publication/review preparation without an avoidable prompt. Do not claim that future-session test has already passed.
+
+
 ## Authoritative current queue — October 7 cleanup
 
 Tyler approved reconciliation with “Clean it up” after reviewing the single-queue proposal. Start and resume project work from `docs/FEATURE_QUEUE.md`. While PR19 is open, read its latest planning revision on `codex/bug-report-scope-20261006` alongside current main and active feature PRs; do not assume main's older queue is current.
