@@ -42,6 +42,19 @@ async function eventually<T>(page: Page, read: () => Promise<T | undefined>, mes
   }
   throw new Error(message);
 }
+/** The document node is reused across students; mounted alone does not mean navigation finished. */
+async function openDraft(page: Page, attemptId: string, expectedText: string) {
+  await page.getByTestId(`marking-session-open-${attemptId}`).click();
+  await eventually(page, async () => {
+    const document = page.getByTestId('marking-document');
+    const save = page.getByRole('button', { name: 'Save now', exact: true });
+    const session = page.locator('section[aria-label="Marking session"]');
+    if (!(await document.count()) || !(await save.count()) || !(await session.count())) return undefined;
+    return (await document.innerText()).includes(expectedText)
+      && (await session.innerText()).includes('Draft — official marks unchanged')
+      && await save.isEnabled() ? true : undefined;
+  }, `Draft workspace did not settle for ${attemptId}`);
+}
 async function selectPassage(page: Page, start: number, end: number) {
   await page.getByTestId('marking-document').evaluate((root, offsets) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -125,12 +138,10 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
     assert.equal(original.hash, createHash('sha256').update(file.buffer).digest('hex'));
   }
   assert.match(second.documents[0].text, /Second fictional essay/);
-  await page.getByTestId(`marking-session-open-${second.id}`).click();
-  await page.getByTestId('marking-document').waitFor();
+  await openDraft(page, second.id, 'Second fictional essay.');
   assert.match(await page.getByTestId('marking-document').innerText(), /Second fictional essay/);
   assert.equal(await page.getByTestId('marking-feedback').count(), 0, 'DOCX student must have no TXT pending feedback');
-  await page.getByTestId(`marking-session-open-${first.id}`).click();
-  await page.getByTestId('marking-document').waitFor();
+  await openDraft(page, first.id, 'Echo phrase. Middle words.');
   await selectPassage(page, 27, 38);
   await page.getByTestId('marking-feedback').fill('Packaged feedback on repeated passage');
   await page.getByLabel('Evidence level (optional)').selectOption('Level 3');
@@ -157,7 +168,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.doesNotMatch(report, /<script\b|<img\b|<iframe\b/i);
 
   // A revision with an unfinished annotation must survive a real process restart.
-  await page.getByTestId(`marking-session-open-${first.id}`).click();
+  await openDraft(page, first.id, 'Echo phrase. Middle words.');
   await page.getByLabel('Overall student-facing feedback').fill('Fictional pending desktop revision');
   await selectPassage(page, 0, 4);
   const pendingFeedback = 'Fictional unfinished feedback survives desktop restart';
@@ -186,7 +197,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.locator('button[title="Manage Assessments & Rubrics"]').click();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByTestId(`marking-session-open-${first.id}`).click();
+  await openDraft(page, first.id, 'Echo phrase. Middle words.');
   await page.getByTestId('marking-feedback').fill('Fictional post-backup change to discard');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await eventually(page, async () => {
@@ -211,10 +222,9 @@ async function verifyRestart(page: Page, evidence: MarkingDesktopEvidence): Prom
   await page.getByRole('heading', { name: evidence.assessmentTitle, exact: true }).waitFor();
   assert.deepEqual(await snapshot(page, evidence.assessmentId), evidence.snapshots, 'Actual process restart must preserve originals, rubric, sessions, pending feedback and official records');
   await page.getByTestId(`open-marking-${evidence.assessmentId}`).click();
-  await page.getByTestId(`marking-session-open-${evidence.secondAttemptId}`).click();
-  await page.getByTestId('marking-document').waitFor();
+  await openDraft(page, evidence.secondAttemptId, 'Second fictional essay.');
   assert.match(await page.getByTestId('marking-document').innerText(), /Second fictional essay/);
-  await page.getByTestId(`marking-session-open-${evidence.firstAttemptId}`).click();
+  await openDraft(page, evidence.firstAttemptId, 'Echo phrase. Middle words.');
   await page.getByTestId('marking-feedback').waitFor();
   assert.equal(await page.getByTestId('marking-feedback').inputValue(), evidence.pendingFeedback);
   assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), 'Fictional pending desktop revision');
