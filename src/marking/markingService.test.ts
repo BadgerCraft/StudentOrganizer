@@ -4,10 +4,11 @@ import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
-import { AuthorizationError } from '../services/authHelper';
+import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
 import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher, setActiveTeacherId } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import { MarkingService } from './markingService';
+import { renderMarkingReport } from './report';
 import type { AssessmentCategory, ClassEnrollment } from '../types/schema';
 import type { MarkingActor, MarkingAnnotation, MarkingAttempt, MarkingDocument, MarkingDraft, MarkingRubric, RubricContent } from './types';
 
@@ -482,6 +483,40 @@ describe('Assessment-linked marking integrity', () => {
       classEnrollmentId: attempt.classEnrollmentId!, assessmentCategoryId: categories[0].id, rawScore: '3', inputFormat: 'scale_code', userId: actor.userId, deviceId: actor.deviceId });
     await expect(service.refreshBaseline(session.id, session.version, actor, signature)).rejects.toThrow('changed again');
     expect((await db.markingSessions.get(session.id))!.baseline).toBe(session.baseline);
+  });
+
+  it.each([false, true])('keeps saved report categories immutable after edits and removal (legacy=%s)', async legacy => {
+    const { session } = await savedDraft();
+    const commit = await service.finalize(session.id, session.version, actor);
+    const originalReport = renderMarkingReport(await service.exportContext(commit.id, actor));
+    if (legacy) {
+      const finalized = (await db.markingSessions.get(session.id))!;
+      delete finalized.categorySnapshot;
+      await db.markingSessions.put(finalized);
+    }
+    await db.transaction('rw', db.tables, async () => {
+      await assertClassSectionWriteAccess(db, actor.userId, SECTION);
+      // The removed category was unassessed; no official result loses its parent.
+      await db.assessmentCategories.delete('fictional-category-C');
+      await db.assessmentCategories.update('fictional-category-K', { maxScore: 80, evidenceWeight: 2 });
+    });
+    const before = await snapshot();
+    const saved = await service.exportContext(commit.id, actor);
+    expect(saved.categories).toEqual(categories);
+    expect(renderMarkingReport(saved)).toBe(originalReport);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('does not export private saved reports with another teacher or a stale identity', async () => {
+    const { session } = await savedDraft();
+    const commit = await service.finalize(session.id, session.version, actor);
+    await addOtherTeacher();
+    const identity = await selectActingTeacher(db, OTHER_TEACHER);
+    const other = { userId: identity.userId, deviceId: identity.deviceId, epoch: getIdentityEpoch() };
+    const before = await snapshot();
+    await expect(service.exportContext(commit.id, other)).rejects.toThrow(AuthorizationError);
+    await expect(service.exportContext(commit.id, actor)).rejects.toThrow(AuthorizationError);
+    expect(await snapshot()).toEqual(before);
   });
 
 });

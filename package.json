@@ -24,7 +24,11 @@
     "test:ipad:browser": "tsx scripts/nativePilotSmoke.ts",
     "test:ipad:assets": "tsx scripts/auditNativePilot.ts",
     "test:marking:browser": "tsx scripts/markingWorkflowSmoke.ts",
-    "test:marking:category-recovery": "tsx scripts/markingCategoryRecoverySmoke.ts"
+    "test:marking:category-recovery": "tsx scripts/markingCategoryRecoverySmoke.ts",
+    "test:marking:inputs": "tsx scripts/markingInputAcceptanceSmoke.ts",
+    "test:marking:authority": "tsx scripts/markingAuthorityAcceptanceSmoke.ts",
+    "test:marking:portability": "tsx scripts/markingPortabilityAcceptanceSmoke.ts",
+    "test:marking:acceptance": "npm run test:marking:inputs && npm run test:marking:authority && npm run test:marking:portability"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

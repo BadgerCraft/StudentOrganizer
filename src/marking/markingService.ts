@@ -320,11 +320,13 @@ export class MarkingService {
   async exportContext(commitId: string, actor: MarkingActor) {
     return this.transaction(actor, false, async () => {
       const commit = this.owned(await this.db.markingCommits.get(commitId), actor, 'Finalized report');
-      const { session, assessment, attempt, rubric, categories } = await this.sessionContext(commit.sessionId, actor, false);
+      const { session, assessment, attempt, rubric } = await this.sessionContext(commit.sessionId, actor, false);
       if (session.commitId !== commit.id || session.status !== 'finalized' || commit.attemptId !== attempt.id || commit.rubricId !== rubric.id || !attempt.classEnrollmentId) throw new ValidationError('The finalized report links are inconsistent.');
       const enrollment = await this.enrollment(assessment, attempt.classEnrollmentId, false);
       const student = await this.db.students.get(enrollment.studentId);
-      return { commit, session, assessment, attempt, rubric, categories, student: student! };
+      // Saved reports describe the finalized revision, even after the assessment's
+      // categories change. Legacy sessions retain this snapshot in their baseline.
+      return { commit, session, assessment, attempt, rubric, categories: clone(sessionCategories(session)), student: student! };
     });
   }
 }

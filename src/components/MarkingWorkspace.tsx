@@ -170,11 +170,8 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     return revisions.length ? 'finalized' : 'ready';
   };
   const exportCommit = async (commitId: string) => {
-    const fresh = await service.getContext(assessmentId, validActor());
-    const commit = fresh.commits.find(c => c.id === commitId), attempt = fresh.attempts.find(a => a.id === commit?.attemptId), savedRubric = fresh.rubrics.find(r => r.id === commit?.rubricId);
-    const enrollment = fresh.enrollments.find(e => e.id === attempt?.classEnrollmentId), student = fresh.students.find(s => s.id === enrollment?.studentId);
-    if (!commit || !attempt || !savedRubric || !student) throw new Error('Saved report is unavailable.');
-    validActor(); await exportMarkingReport({ commit, attempt, rubric: savedRubric, student, assessment: fresh.assessment, categories: fresh.categories });
+    const saved = await service.exportContext(commitId, validActor());
+    validActor(); await exportMarkingReport(saved);
   };
   return <div className="max-w-7xl mx-auto p-4 space-y-4 text-slate-900">
     <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => void action(async () => onClose())}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy} onClick={() => void action(async () => onSwitchTeacher())}>Switch teacher</button>}</div></header>
