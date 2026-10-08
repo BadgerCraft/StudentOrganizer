@@ -1,5 +1,13 @@
 # Feature and decision queue
 
+## Current review snapshot — October 8, 2026
+
+- **F-008 / PR #20:** ready for Tyler's merge review. PR #20 was moved from draft to ready-for-review after independent review, repaired browser acceptance and exact packaged Windows/macOS checks completed. Head `bf1eed0527459f962e8faed6cf7f8fc460f4860c` is 13 commits ahead of and 0 behind main, with no unresolved review threads. Windows run 37724345910 and Mac/browser run 37724345920 succeeded; verified application/test source `5443e15` has 287 passing tests/build plus actual Windows portable/installed and Mac arm64/x64 DMG/ZIP marking flows. Merge approval is pending; release, distribution and real-student use remain unapproved.
+- **F-008 remaining access gates:** actual iPad Files/touch/background/restart/recovery, native picker/Save As dialogs and system printing remain unverified. These are platform/device acceptance items, not another implementation-approval request. Future marking modes and handwritten-photo marking remain deferred until the current integration is merged and stabilized.
+- **F-007:** local bug drafts remain implemented; central transfer is still awaiting a provider/account/access decision. No service is adopted or provisioned.
+- **Workflow trial:** preliminary evidence supports **revise**, not stop: one manual Cloud launch carried approved work through multiple substantive gates, but Tyler still encountered a repeated approval/continuation prompt. Final October 8 results assessment remains due at 16:00. Full evidence and merge consequence: [active batch work order](work-orders/BATCH-2026-10-06.md).
+
+
 ## Latest results — October 6 afternoon, America/Toronto
 
 PR18 is merged by Tyler's actual approval; mainaa64da1b. Post-merge Windows run37504031116 package success/release skipped, independently observed today. Two completed source-batch teacher outcomes: roster/seating and manual update lookup; automatic installation remains unimplemented. PR18's final208-test/build/Windows/both Mac/browser/native compile evidence is in its review report, with physical/unsigned publisher limits retained.
