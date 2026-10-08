@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
-import { createPastedDocument, parseMarkingFiles, sha256, validateDocxArchive } from './importDocuments';
+import { createPastedDocument, parseMarkingFiles, sha256, validateDocxArchive, validateRetainedOriginal } from './importDocuments';
 import { MARKING_LIMITS } from './types';
 
 const wrap = (text: string) => `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`;
@@ -14,6 +14,15 @@ function docx(document = wrap('Fictional essay &amp; evidence.'), additions: Rec
 function file(bytes: Uint8Array, name = 'Fictional.docx') { return new File([new Uint8Array(bytes)], name); }
 
 describe('local marking document import', () => {
+  it('rejects a retained DOCX paired with independently rehashed different marking text', async () => {
+    const result = await parseMarkingFiles([file(docx())]);
+    expect(result.errors).toEqual([]);
+    const document = result.documents[0];
+    await expect(validateRetainedOriginal(document)).resolves.toBeUndefined();
+    document.text = 'A different fictional essay.';
+    document.hash = await sha256(new TextEncoder().encode(document.text));
+    await expect(validateRetainedOriginal(document)).rejects.toThrow('normalized marking text do not match');
+  });
   it('retains exact originals and normalizes version-bound text without executing HTML', async () => {
     const raw = '<img src="https://example.invalid/a">\r\nRepeat.\rRepeat.';
     const result = await parseMarkingFiles([new File([raw], 'Fictional.txt', { type: 'text/html' })]);

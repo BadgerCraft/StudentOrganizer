@@ -33,6 +33,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
   const [saveStatus, setSaveStatus] = useState('Saved locally');
   const [busy, setBusy] = useState(false), [previewFinal, setPreviewFinal] = useState(false);
   const busyRef = useRef(false);
+  const rubricDirty = useRef(false);
   const [conflictReview, setConflictReview] = useState(false);
   const [categoryReview, setCategoryReview] = useState<CategoryChangeReview | null>(null);
   const [selectedFeedbackIds, setSelectedFeedbackIds] = useState<string[]>([]);
@@ -91,7 +92,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     return () => clearTimeout(timer);
   }, [draft]);
   useEffect(() => {
-    const guard = (event: BeforeUnloadEvent) => { if (savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
+    const guard = (event: BeforeUnloadEvent) => { if (rubricDirty.current || savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, []);
   async function action(work: () => Promise<void>, rethrow = false) {
@@ -174,11 +175,11 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     validActor(); await exportMarkingReport(saved);
   };
   return <div className="max-w-7xl mx-auto p-4 space-y-4 text-slate-900">
-    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => void action(async () => onClose())}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy} onClick={() => void action(async () => onSwitchTeacher())}>Switch teacher</button>}</div></header>
+    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => void action(async () => { if (!rubricDirty.current || confirm('Discard your unsaved rubric edits and close marking?')) onClose(); })}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy} onClick={() => void action(async () => { if (!rubricDirty.current || confirm('Discard your unsaved rubric edits and switch teacher?')) onSwitchTeacher(); })}>Switch teacher</button>}</div></header>
     {error && <div role="alert" className="bg-red-50 border border-red-200 p-3 whitespace-pre-wrap">{error}<button className={`${button} ml-3`} onClick={() => void action(async () => {})}>Retry save</button></div>}
     <fieldset disabled={busy} className="space-y-4">
     <nav className="flex gap-2">{(['queue','rubric','import'] as const).map(t => <button className={button} key={t} disabled={busy} aria-pressed={tab === t} onClick={() => void action(async () => setTab(t))}>{t === 'queue' ? 'Marking queue' : t === 'rubric' ? 'Rubric editor' : 'Import submissions'}</button>)}</nav>
-    {tab === 'rubric' && <RubricEditor rubrics={context.rubrics} categories={context.categories.map(c => c.categoryCode as KTAC)} onSave={content => action(async () => { const saved = await service.saveRubric(assessmentId,content,validActor()); validActor(); setRubricId(saved.id); setTab('import'); }, true)} />}
+    <div hidden={tab !== 'rubric'}><RubricEditor onDirtyChange={dirty => { rubricDirty.current = dirty; }} rubrics={context.rubrics} categories={context.categories.map(c => c.categoryCode as KTAC)} onSave={content => action(async () => { const saved = await service.saveRubric(assessmentId,content,validActor()); validActor(); setRubricId(saved.id); setTab('import'); }, true)} /></div>
     {tab === 'import' && <section className="bg-white border rounded-xl p-4 space-y-3"><h2 className="font-bold">Preview and match student work</h2><p className="text-sm">TXT, DOCX or pasted text. Original files are retained locally. Up to 10 files, 2 MB each and 10 MB per batch. Replacement work creates a new attempt; official marks stay unchanged.</p>
       <label className="block">Confirmed rubric<select className={field} value={rubricId} onChange={e => setRubricId(e.target.value)}><option value="">Choose a confirmed rubric</option>{context.rubrics.map(r => <option key={r.id} value={r.id}>{r.title} · {r.createdAt}</option>)}</select></label>
       {!context.rubrics.length && <p>Create and confirm a rubric before importing.</p>}

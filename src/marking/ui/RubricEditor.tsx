@@ -8,8 +8,8 @@ const categoryNames: Record<KTAC, string> = { K: 'Knowledge / Understanding', T:
 function blankCriterion(levels: string[], categoryCode: KTAC): RubricCriterion {
   return { id: crypto.randomUUID(), name: '', categoryCode, descriptors: Object.fromEntries(levels.map(level => [level, ''])) };
 }
-export function RubricEditor({ rubrics, categories, onSave }: {
-  rubrics: MarkingRubric[]; categories: KTAC[]; onSave: (content: RubricContent) => Promise<void>;
+export function RubricEditor({ rubrics, categories, onSave, onDirtyChange }: {
+  rubrics: MarkingRubric[]; categories: KTAC[]; onSave: (content: RubricContent) => Promise<void>; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const initialLevels = ['Level 1', 'Level 2', 'Level 3', 'Level 4'];
   const [content, setContent] = useState<RubricContent>(() => ({ title: '', levels: initialLevels, criteria: [blankCriterion(initialLevels, categories[0] ?? 'K')] }));
@@ -17,7 +17,7 @@ export function RubricEditor({ rubrics, categories, onSave }: {
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const change = (next: RubricContent) => { setContent(next); setConfirmed(false); };
+  const change = (next: RubricContent) => { setContent(next); setConfirmed(false); onDirtyChange?.(true); };
   const criterionChange = (id: string, patch: Partial<RubricCriterion>) => change({ ...content, criteria: content.criteria.map(c => c.id === id ? { ...c, ...patch } : c) });
   const renameLevel = (index: number, name: string) => {
     const old = content.levels[index];
@@ -43,7 +43,7 @@ export function RubricEditor({ rubrics, categories, onSave }: {
         if (source) change({ title: source.title, levels: [...source.levels], criteria: structuredClone(source.criteria) });
       }}><option value="">Choose saved rubric…</option>{rubrics.map((r, i) => <option key={r.id} value={r.id}>{r.title} · version {rubrics.length - i}</option>)}</select>
     </label>}
-    <label className="block text-sm">Paste rubric text or table<textarea data-testid="marking-rubric-paste" className={`${field} min-h-24`} value={paste} onChange={e => setPaste(e.target.value)} /></label>
+    <label className="block text-sm">Paste rubric text or table<textarea data-testid="marking-rubric-paste" className={`${field} min-h-24`} value={paste} onChange={e => { setPaste(e.target.value); onDirtyChange?.(true); }} /></label>
     <button data-testid="marking-rubric-preview" className={button} type="button" disabled={!paste.trim()} onClick={() => {
       try { change(parseRubricPaste(paste)); setError(''); } catch (e) { setError(e instanceof Error ? e.message : 'Could not parse rubric.'); }
     }}>Preview pasted rubric</button>
@@ -69,7 +69,7 @@ export function RubricEditor({ rubrics, categories, onSave }: {
     {error && <p role="alert" className="text-red-700">{error}</p>}
     <button className={`${button} bg-blue-700 text-white`} disabled={!confirmed || saving || categories.length === 0 || content.criteria.some(c => !categories.includes(c.categoryCode))} onClick={async () => {
       setSaving(true); setError('');
-      try { await onSave(content); setConfirmed(false); } catch (e) { setError(e instanceof Error ? e.message : 'Rubric could not be saved.'); } finally { setSaving(false); }
+      try { await onSave(content); setConfirmed(false); onDirtyChange?.(false); } catch (e) { setError(e instanceof Error ? e.message : 'Rubric could not be saved.'); } finally { setSaving(false); }
     }}>{saving ? 'Saving rubric…' : 'Save confirmed rubric version'}</button>
     <p className="text-xs text-slate-500">Every save creates a new version for future imports. Existing marking attempts keep their original rubric.</p>
     </fieldset>

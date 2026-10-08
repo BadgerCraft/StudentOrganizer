@@ -159,24 +159,12 @@ function stableJSON(value: unknown): string {
 /** Crypto and bounded archive inspection finish before the restore write transaction begins. */
 export async function validateMarkingBackupFiles(tables: BackupTables): Promise<void> {
   if (!tables.markingAttempts.length) return;
-  const { sha256, normalizeMarkingText, parseMarkingFiles } = await import('./importDocuments');
+  const { sha256, normalizeMarkingText, validateRetainedOriginal } = await import('./importDocuments');
   for (const attempt of tables.markingAttempts as MarkingAttempt[]) {
     for (const document of attempt.documents) {
       if (document.text !== normalizeMarkingText(document.text) || await sha256(new TextEncoder().encode(document.text)) !== document.hash) fail('document text does not match its immutable hash');
-      if (document.original === null) continue;
-      const original = document.original;
-      if (original.name !== document.name || original.name.length > 255 || /[\u0000-\u001f\u007f/\\]/.test(original.name)) fail('original filename is unsafe or mismatched');
-      const bytes = Uint8Array.from(atob(original.base64), char => char.charCodeAt(0));
-      if (await sha256(bytes) !== original.hash) fail('original file does not match its retained hash');
-      if (original.mime === 'text/plain' && /\.txt$/i.test(original.name)) {
-        let text: string;
-        try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('original text file is not valid UTF-8'); }
-        if (normalizeMarkingText(text) !== document.text) fail('original text file does not match the normalized document');
-      } else if (original.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && /\.docx$/i.test(original.name)) {
-        const parsed = await parseMarkingFiles([new File([new Uint8Array(bytes)], original.name, { type: original.mime })]);
-        if (parsed.errors.length || parsed.documents.length !== 1) fail(`original DOCX is invalid: ${parsed.errors[0]?.message ?? 'Unable to parse original file'}`);
-        if (parsed.documents[0].text !== document.text) fail('original DOCX does not match the normalized document');
-      } else fail('original file type is unsupported');
+      try { await validateRetainedOriginal(document); }
+      catch (error) { fail(error instanceof Error ? error.message : 'original file is invalid'); }
     }
   }
 }

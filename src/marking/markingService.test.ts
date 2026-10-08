@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { createHash } from 'node:crypto';
+import { strToU8, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
@@ -8,6 +9,7 @@ import { assertClassSectionWriteAccess, AuthorizationError } from '../services/a
 import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher, setActiveTeacherId } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import { MarkingService } from './markingService';
+import { parseMarkingFiles } from './importDocuments';
 import { renderMarkingReport } from './report';
 import type { AssessmentCategory, ClassEnrollment } from '../types/schema';
 import type { MarkingActor, MarkingAnnotation, MarkingAttempt, MarkingDocument, MarkingDraft, MarkingRubric, RubricContent } from './types';
@@ -133,6 +135,22 @@ describe('Assessment-linked marking integrity', () => {
     expect(await db.markingCommits.count()).toBe(0);
   });
 
+  it('rejects independently rehashed marking text that differs from its retained DOCX without writing records', async () => {
+    const bytes = zipSync({
+      '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+      '_rels/.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'),
+      'word/document.xml': strToU8('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Original fictional work.</w:t></w:r></w:p></w:body></w:document>'),
+    });
+    const parsed = await parseMarkingFiles([new File([new Uint8Array(bytes)], 'fictional.docx')]);
+    expect(parsed.errors).toEqual([]);
+    const document = parsed.documents[0];
+    document.text = 'Different fictional work.';
+    document.hash = hash(document.text);
+    const before = await snapshot();
+    await expect(makeAttempt(enrollments[0].id, [document])).rejects.toThrow('normalized marking text do not match');
+    expect(await snapshot()).toEqual(before);
+  });
+
   it('isolates drafts for two students and protects a newer autosave from a stale workspace', async () => {
     const first = await savedDraft();
     const second = await savedDraft(enrollments[1].id);
@@ -166,6 +184,32 @@ describe('Assessment-linked marking integrity', () => {
       const audit = await db.auditEntries.where('entityId').equals(result.id).first();
       expect(audit).toMatchObject({ userId: TEACHER, action: 'INSERT' });
     }
+  });
+
+  it.each(['missing', 'excused'] as const)('preserves the draft and official records until the teacher resolves %s completion policy', async completionStatus => {
+    const markbook = new MarkbookDomainService(db);
+    await markbook.saveMarkbookCell({ assessmentId: ASSESSMENT, classSectionId: SECTION, classEnrollmentId: enrollments[0].id, completionStatus, userId: actor.userId, deviceId: actor.deviceId });
+    const { session } = await savedDraft();
+    const before = await snapshot();
+    await expect(service.finalize(session.id, session.version, actor)).rejects.toThrow('Review and update its completion status');
+    expect(await snapshot()).toEqual(before);
+
+    // Completion is a separate teacher choice, and changing it still requires
+    // accepting the newer baseline before the saved judgments may be committed.
+    await markbook.saveMarkbookCell({ assessmentId: ASSESSMENT, classSectionId: SECTION, classEnrollmentId: enrollments[0].id, completionStatus: 'complete', userId: actor.userId, deviceId: actor.deviceId });
+    await expect(service.finalize(session.id, session.version, actor)).rejects.toThrow(ConcurrencyConflictError);
+    const refreshed = await service.refreshBaseline(session.id, session.version, actor);
+    await service.finalize(refreshed.id, refreshed.version, actor);
+    const { studentAssessment, results } = await official();
+    expect(studentAssessment?.completionStatus).toBe('complete');
+    expect(results.find(r => r.assessmentCategoryId === 'fictional-category-K')?.normalizedPercentage).toBe(95);
+  });
+
+  it('allows assessed judgments for a not-assessed completion status that does not override category results', async () => {
+    await new MarkbookDomainService(db).saveMarkbookCell({ assessmentId: ASSESSMENT, classSectionId: SECTION, classEnrollmentId: enrollments[0].id, completionStatus: 'not_assessed', userId: actor.userId, deviceId: actor.deviceId });
+    const { session } = await savedDraft();
+    await service.finalize(session.id, session.version, actor);
+    expect((await official()).results).toHaveLength(2);
   });
 
   it('keeps the finalized snapshot official while revising and reuses grade IDs on successful re-finalization', async () => {

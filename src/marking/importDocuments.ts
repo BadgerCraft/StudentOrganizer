@@ -154,6 +154,23 @@ async function docxText(bytes: Uint8Array): Promise<string> {
   return result.value;
 }
 
+/** Apply the same retained-file contract before an import and before a restore. */
+export async function validateRetainedOriginal(document: MarkingDocument): Promise<void> {
+  if (!document.original) return;
+  const original = document.original;
+  validateName(original.name);
+  if (original.name !== document.name) throw new Error('Original filename does not match the document.');
+  const bytes = Uint8Array.from(atob(original.base64), character => character.charCodeAt(0));
+  if (bytes.length !== original.size || bytes.length > MARKING_LIMITS.fileBytes) throw new Error('Original file size does not match its bytes or exceeds 2 MB.');
+  if (await sha256(bytes) !== original.hash.toLowerCase()) throw new Error('Original file content does not match its retained hash.');
+  let text: string;
+  if (original.mime === 'text/plain' && /\.txt$/i.test(original.name)) {
+    try { text = utf8.decode(bytes); } catch { throw new Error('Original text file must use valid UTF-8 encoding.'); }
+  } else if (original.mime === DOCX_MIME && /\.docx$/i.test(original.name)) text = await docxText(bytes);
+  else throw new Error('Original file type is unsupported.');
+  if (normalizeMarkingText(text) !== document.text) throw new Error('Original file and normalized marking text do not match.');
+}
+
 export async function createPastedDocument(name: string, text: string): Promise<MarkingDocument> {
   validateName(name);
   const normalized = normalizeMarkingText(text);

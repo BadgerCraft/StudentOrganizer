@@ -146,12 +146,8 @@ export class MarkingService {
       if (doc.original) {
         const bytes = Uint8Array.from(atob(doc.original.base64), c => c.charCodeAt(0));
         if (await digest(bytes) !== doc.original.hash.toLowerCase()) throw new ValidationError('Original file content does not match its hash.');
-        const { normalizeMarkingText, validateDocxArchive } = await import('./importDocuments');
-        if (doc.original.mime === 'text/plain') {
-          let originalText: string;
-          try { originalText = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw new ValidationError('Original file must be valid UTF-8 text.'); }
-          if (normalizeMarkingText(originalText) !== doc.text) throw new ValidationError('Original file and normalized marking text do not match.');
-        } else await validateDocxArchive(bytes);
+        const { validateRetainedOriginal } = await import('./importDocuments');
+        await validateRetainedOriginal(doc);
       }
     }
     return this.transaction(actor, true, async () => {
@@ -284,6 +280,12 @@ export class MarkingService {
       if (session.draft.pending) throw new ValidationError('Save or explicitly discard the pending comment before finalization.');
       if (session.baseline !== await this.baseline(assessment, categories, attempt.classEnrollmentId)) throw new ConcurrencyConflictError('The official mark or assessment settings changed. Review the current result, then explicitly accept the newer baseline before finalizing.');
       let sa = await this.db.studentAssessments.where({ assessmentId: assessment.id, classEnrollmentId: attempt.classEnrollmentId }).first();
+      // Missing/excused completion policies override category scores in course
+      // calculations. Require the teacher to resolve that policy explicitly
+      // rather than finalize a report whose scores cannot become official evidence.
+      if (session.draft.judgments.some(j => j.assessed) && sa && (sa.completionStatus === 'missing' || sa.completionStatus === 'excused')) {
+        throw new ValidationError('This assessment is marked missing or excused in Organizer. Review and update its completion status there, then accept the newer official baseline before finalizing assessed judgments. Your marking draft is preserved.');
+      }
       const oldResults: CategoryResult[] = sa ? await this.db.categoryResults.where('studentAssessmentId').equals(sa.id).toArray() : [];
       for (const judgment of session.draft.judgments) {
         if (judgment.assessed && !judgment.rawScore.trim()) throw new ValidationError('Enter an official judgment for every category marked assessed.');

@@ -80,6 +80,14 @@ try {
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional manual descriptor matrix');
   await page.getByLabel('Criterion 1 name', { exact: true }).fill('Evidence');
   await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+  await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
+  assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), 'Fictional manual descriptor matrix');
+  assert.equal(await page.getByLabel('Criterion 1 name', { exact: true }).inputValue(), 'Evidence');
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await page.getByLabel('Rubric title', { exact: true }).waitFor();
+
   await page.getByRole('button', { name: 'Add criterion', exact: true }).click();
   await page.getByLabel('Criterion 2 name', { exact: true }).fill('Organization');
   await page.getByLabel('Criterion 2 KTAC mapping').selectOption('C');
