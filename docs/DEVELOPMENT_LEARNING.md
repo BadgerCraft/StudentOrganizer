@@ -263,6 +263,12 @@ DEV018 introduced: an update lookup compares release versions; it cannot establi
 
 Separate schedule task: no task-management or scheduled-run inspection tools exist here. The current manually launched checkout is evidence for this task only; scheduled-run inheritance remains unverified. Primary coordination and no replacement-before-readback rule are persisted. No schedule/notification/continued-background activity claimed.
 
+## October 6 afternoon results and optional terminology review
+
+Inspected mainaa64da1b, coherent open PR17 merge/results records and PR19 latest bug-only scope. PR18 merged by explicit13:29 “Yes”; no release or recall answer inferred. Post-merge Windows run37504031116 package passed/release skipped. Markinator checkpointb27954a reports256 tests/build/Chromium; acceptance incomplete. DraftPR20 created and existing CI started; neither PR creation nor CI proves continued Cloud coding.
+
+Rotate to DEV017, explained October5 and dueOctober6. Fresh prompt for Tyler's optional next response: “In your own words, describe what the native bridge does when StudentOrganizer opens Files, and how that relates to where its classroom records are stored.” Answer withheld for recall. No answer received; stage0/dueOctober6 unchanged. Do not repeat older unanswered branch/commit, checkout/CI, applicability, provisioning or central-receipt prompts. DEV018 remains dueOctober7. Optional deeper F007 support identity/acting teacher and receipt documentation remains available; no reading choice/defer or service approval invented. Results/continuation: docs/work-orders/RESULTS-2026-10-06.md. Learning does not block authorized work.
+
 ## October 8 — database changes and verification scope
 
 Actual Tyler reply: “Okay cool, so making changes to the shipped database is always a careful decision and ensuring that the tests do enough to ensure user satisfaction is important.” He then asked how to remove repeated authorization for routine verification/publication and instructed “continue”.
