@@ -1,5 +1,15 @@
 # Daily development workflow
 
+## Authoritative current queue — October 7 cleanup
+
+Tyler approved reconciliation with “Clean it up” after reviewing the single-queue proposal. Start and resume project work from `docs/FEATURE_QUEUE.md`. While PR19 is open, read its latest planning revision on `codex/bug-report-scope-20261006` alongside current main and active feature PRs; do not assume main's older queue is current.
+- The queue owns current priorities, status, approval evidence, blockers and next actions. Roadmap, bug ledger and checkpoints provide details; historical archives cannot reset active state.
+- “Go next” means choose the first eligible already approved action, check its actual evidence and active writer, and continue through repairs/verification/review preparation. Do not ask again for existing approval or duplicate an active coding session.
+- Carry every substantive user request into the queue with stable ID and explicit disposition. Preserve requested versus approved; complete means measured acceptance, with merge/release/install stated separately.
+- Before ending a batch, reconcile changed statuses and next actions in the queue. If a device/CI/merge gate blocks one item, perform independent authorized work.
+- Fresh PR/commit/CI evidence supersedes dated snapshots; update the queue when it changes. Pending planning instructions are not merged main policy.
+- This correction does not establish automatic dispatch, schedule changes, cross-chat execution, or global memory/skill changes. Workflow validation remains pending until a fresh resume and useful approved batch are observed.
+
 ## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
 
 Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.
