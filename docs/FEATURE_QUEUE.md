@@ -1,13 +1,13 @@
 # Feature and decision queue
 
-Updated: October 7, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
+Updated: October 8, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Current planning revision: `codex/bug-report-scope-20261006`, [PR19](https://github.com/BadgerCraft/StudentOrganizer/pull/19), pending merge. Read this revision while the cleanup PR is open; main's older queue is stale. Refresh the branch/PR before relying on a recorded head.
 
 ## How to use “go next”
 
 1. Read this queue and refresh the evidence for the first eligible approved item. Check for an active writer before taking ownership.
-2. Continue existing approval through implementation, repairs, verification and review preparation. Approval does not expire at a turn or milestone.
+2. Continue existing approval through implementation, repairs, verification, commits, normal isolated-branch pushes, related PR creation/updates and review preparation. Approval does not expire at a turn or milestone. Application release/distribution and main merge remain separate.
 3. A pending CI job, unavailable device or reserved merge decision does not block independent authorized work. Move to the next eligible item; do not duplicate a running writer.
 4. Requested items remain visible, but are not blanket implementation approval. Finish investigation/plan preparation needed to present a concrete scope; ask only for an unresolved consequential judgment.
 5. Before ending a batch, update status, exact source/evidence, blocker, next action and owner here. Mark a feature complete only when its stated acceptance passes; distinguish merged, released and installed.
@@ -16,12 +16,18 @@ Current planning revision: `codex/bug-report-scope-20261006`, [PR19](https://git
 Status vocabulary: requested, approved, underway, blocked, ready-for-review, completed, deliberately-deferred.
 Workflow-only WF items remain in the separate workflow plan; this queue links them for coordination without importing that backlog.
 
+## Standing authorization recorded — October 8
+
+Tyler asked “How can we change the repeated authorization for routine verification or publication of already approved work?” and instructed “continue”. The plan-approval boundary now explicitly includes routine branch publication and PR preparation, as defined in AGENTS.md/CODING_WORKFLOW.md. Scope changes, force/destructive operations, access/spending, main merge, releases/distribution and real-student use remain reserved. A platform rejection must be reported faithfully and cannot be bypassed. This is project authorization, not proof of automatic Cloud dispatch or guaranteed skill invocation.
+
+Current concrete application: the October8 database-upgrade verification is carried through tests/build, commit, normal feature-branch push and PR20 update without another approval question. Update new CI evidence before a merge verdict. Preserve Tyler's actual learning reply; no general test count guarantees classroom satisfaction.
+
 ## Next approved batch
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
 | --- | --- | --- | --- |
-| 0 / Queue reconciliation | Ready-for-review; Tyler “Clean it up”, October 7, after approving the single-queue proposal | PR19; this cleanup coordinator | Current records and routing reconciled; ten-ID coverage and historical preservation structurally checked. Publication readback completes this batch; documentation merge is reserved. Fresh-session behavior remains unverified. |
-| 2 / F-008 Markinator acceptance | Underway; October 6 integration work order; October 7 review approval and “Gogo” for packaged tests | PR20; active integration/runtime coordinator. Verified repair source d6d996c: 287 tests/build and browser/native generic CI passed. Runtime source 88681b1 adds packaged marking tests | Refresh current PR20 head/writer and actual CI. Windows run37723212890 failed “Test actual portable and installed apps”; diagnose exact logs and repair without weakening acceptance. Mac/browser run37723212872 was in progress at this snapshot. Reuse passing evidence for unchanged behavior. After gates pass, prepare merge/pilot review; do not merge/release automatically. |
+| 0 / Queue reconciliation and authorization continuity | Implemented in open PR19; Tyler “Clean it up”, then October8 “continue” after asking to remove routine reauthorization | PR19; current coordinator | One current queue and explicit approval-through-branch-publication policy in AGENTS/workflow. Existing approval covers ordinary tests, scoped CI harness/evidence changes, commits, fast-forward feature pushes and PR updates. Main documentation merge remains reserved; future-session behavior remains pending. |
+| 2 / F-008 Markinator acceptance | Desktop review prepared; October6 integration order, October7 review/runtime approvals; October8 routine verification/publication continuation | PR20; latest prior head bf1eed0 passed Windows37724345910 and Mac/browser37724345920. Existing runtime race repaired; current coordinator adds focused database-upgrade regressions | v3-to-v4 tests now preserve every legacy collection/index plus reopen and rubric use: 9 focused tests/build pass locally; test/evidence follow-up d491775 published to the same branch, new CI must be observed. Application unchanged. Then present only the reserved main-merge decision; iPad/dialog/installer checks stay separately unverified. |
 | 3 / F-006 installed iPad | Blocked native interaction; preparation approved October 5 | PR18 merged aa64da1; native project, asset checks and unsigned SDK compile exist | Finish available matrix/documentation while device work is blocked. Actual simulator/physical Files, touch selection, background/resume, offline/storage, export and free-signing renewal require Mac/Xcode/device access. Browser or compilation results do not prove these. |
 | 4 / F-007 central bug receipt | Requested receiver adoption; local draft implementation completed | PR19 receiver decision packet; no deployed receiver or verified receipt | Reconcile actual dashboard/access and Tyler replies before repeating a decision. Prepare concrete bug-only receiver setup; adoption/support-sign-in/access remains unresolved in the records. Do not transmit classroom records or invent provider approval. |
 | 5 / UI QA remaining items | Requested / scoped review; only QA02/03 implementation was approved and merged | Ten-item table below; coordinator owns diagnosis/planning | Prepare a coherent next repair proposal from actual reproduction and teacher workflow risk. Keep all eight remaining requests visible; do not treat the seating approval as approval for unrelated features. |
