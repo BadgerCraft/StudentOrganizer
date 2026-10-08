@@ -278,3 +278,14 @@ Feedback: this correctly recognizes existing-record preservation and useful test
 Introduced distinction: opening an existing v3 database with v4 code is a schema-upgrade check; restoring an older backup and installing an updated executable are different checks. New focused tests compare all 35 legacy collections/indexes, then reopen and use Markinator; these are Dexie/fake-indexeddb checks, not a real installer upgrade or physical-device result.
 
 DEV-020, stage0, first review due October9 America/Toronto after this explanation. Actual high-level statement recorded; no specific upgrade-versus-restore recall response was supplied. Prepared question for later, not asked now: how does opening an existing database with new code differ from restoring a backup? Prior unanswered questions remain unpassed. Learning does not delay the authorized branch push/PR update.
+
+
+## October 8 afternoon — trial results and optional term recall
+
+Current source: open PR19/codex/bug-report-scope-20261006; current PR20 source30a13dd. Both desktop/browser Actions runs completed SUCCESS; trial recommendation and remaining verification limits are in the existing batch work order. Current queue supersedes the historical “Current step and direction” snapshot above.
+
+Rotate to DEV018 (update lookup versus installation), stage0, dueOctober7; its prompt was previously prepared but no actual offer/answer is recorded in the available conversation. Optional activity offered with the answer withheld: “Explain what an update lookup does and what installing an update does, using the button at the bottom of StudentOrganizer Settings as your example.” This is terminology recall for a later user response, not an implementation approval or mandatory assignment. No response received; stage0 and overdue date unchanged. Provide specific feedback and schedule3 days after actual successful first recall; clarify gaps and revisit the next day. No previous unanswered native-bridge, applicability, provisioning or central-receipt question is repeated.
+
+DEV020 (schema upgrade versus backup restore versus installer update) was introduced today; first review remainsOctober9. Do not bring it forward or mark Tyler's high-level test-preservation explanation as specific recall. DEV007's previously successful stop rule is not repeated.
+
+No new deeper-reading packet is assigned. The existing optional upgrade/recovery explanation can be requested in an interactive reply; no defer, reading choice, feature approval or major decision is inferred from silence. Learning does not block independent authorized work.
