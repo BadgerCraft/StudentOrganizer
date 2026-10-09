@@ -4,6 +4,16 @@ Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent main
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
 
+## Current delivery priority — October 9, 17:53 Toronto
+
+Tyler declined moving straight to an unsigned pilot: “I think the unsigned feature needs to be figured out first. Further, it doesn't sound like the replacement when updating/installing is figured out.” **Hold QA release/distribution until publisher signing and actual old-to-new replacement are resolved.** This is authorization for investigation and a concrete delivery plan, not spending, account/service creation, or an approved automatic-installer implementation.
+
+Coordinator inspected main source: no code-signing configuration/publisher, no updater download/install bridge or electron-updater dependency. The Windows packaged harness installs one current build into a disposable directory and reopens it; it does not install version A, populate records, then replace it with B. Database fixture migration and same-version restart are not upgrade evidence.
+
+Next judgment: select direct signed Windows delivery (recommended Azure Artifact Signing, Microsoft quotes approximately $9.99/month; Canadian checkout/tax and identity eligibility require confirmation) versus a free Microsoft Store MSIX route with additional packaging/data-path/distribution investigation. Do not provision either without actual approval. Signing identifies the publisher; it does not guarantee no SmartScreen or school-policy warning.
+
+Next engineering proposal: preserve app identity and user-data path; establish signed first install and A-to-B replacement before adding user-clicked update installation. Verify backup, originals, rubric/feedback/marks/history and pending drafts, failed/cancelled updates and recovery. Installed NSIS is the proposed integrated-update path; portable replacement is a separate deliberate flow. No silent switch between them. See [Windows delivery plan](WINDOWS_MANUAL_UPDATES.md). No code, release or purchase is performed by this plan. Bug-receiver adoption remains separate and does not interrupt this priority.
+
 ## Current recovery checkpoint — October 9, 17:10 Toronto
 
 Tyler deleted the Daily checkins conversation and instructed: “Make this the new one with scheduled checkins. Pick up where it left off.” The replacement coordination chat has two scheduler-confirmed, enabled daily check-ins, starting October 10: 08:15 morning batch and 16:00 results/learning, America/Toronto. Both were read back with the same current conversation binding before old schedule state was checked. Old morning/afternoon schedules are disabled; 20:15 continuation remains paused. Other usage-review schedules were unchanged. See [schedule migration record](work-orders/SCHEDULE-MIGRATION-2026-10-06.md). Scheduled execution/tool inheritance still needs an actual scheduled run.
