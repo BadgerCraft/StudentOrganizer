@@ -2,6 +2,17 @@
 
 Prepared October 6, 2026. Recommendation, not adopted service. No account, deployment, report transmission or application change performed.
 
+## Decision learning brief — assigned October 9, 2026
+
+Follow-up due October10, America/Toronto. This is knowledge for Tyler's consequential choice, not outsourced technical research.
+
+- **Receiver:** the small internet-facing endpoint that accepts a deliberately sent report and returns a receipt ID.
+- **Authentication:** the service proving which support account submitted it; the classroom's local teacher selector is attribution inside the app, not online identity.
+- **Row-level security (RLS):** database rules ensuring a teacher can submit without reading Tyler's inbox or another teacher's reports.
+- **StudentOrganizer example:** Teacher A previews a sanitized report, signs in only to the support channel, presses Send, and receives a report ID. Classes, essays, marks, photos and local backups are never read for the payload.
+- **Options:** Supabase Free plus support accounts (recommended; managed identity/permissions, but provider/account dependence); custom per-device invite tokens (less conventional sign-in, but custom credential/revocation/abuse work); manual copy/download to an existing private channel (least infrastructure, but no integrated receipt/status/control panel).
+- **Approval consequence:** approving the recommended design authorizes a bug-only fictional-data implementation and verification path. Spending, teacher invitations, real data, production deployment, merge and release remain separate.
+
 ## Key points for Tyler
 
 - Recommend a small Supabase Free backend for support identities, registered devices and private bug reports, with a minimal owner inbox.
