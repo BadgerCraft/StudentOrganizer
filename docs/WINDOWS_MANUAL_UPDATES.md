@@ -1,5 +1,13 @@
 # Manual Windows update check — October 6, 2026
 
+## Privacy verification — October 9, 2026
+
+Current main `b9a8790` passed a scoped student-data egress review, 58 focused tests and a fresh production build/CSP inspection. Its exact-source Windows package already passed runtime renderer/session network-blocking and real manual-update IPC checks in run37973955991/job113967364555. The fixed GitHub metadata check sends no student content and neither downloads nor installs. No production cloud sync/AI/telemetry/bug receiver was found. This supports the current local-only app boundary, not a Store acceptance claim.
+
+No MSIX/Store package exists. Before calling Store delivery verified: inspect the actual package identity/capabilities and shipped code/CSP; run the same installed-package boundary tests, plus observe actual process outbound destinations during fictional-data launch/marking/import/export/update; distinguish Store service traffic from app traffic; prove legacy profile migration and Store A-to-B preservation/restart/failed-update recovery; measure uninstall behavior and warn/protect data where needed. OS diagnostics/managed-device/cloud-backup configuration needs its own review. Optional Windows crash diagnostics may include user content, and app database/full backups are not app-encrypted. A user-selected synced export folder can upload a backup independently of our app. Do not promise zero Microsoft access from a source-only audit.
+
+Full evidence and official policy references: [current privacy record](work-orders/SECURITY-2026-10-02-RESULTS.md#current-source-and-store-privacy-verification--october-9-2026). Existing free-only and release/account approval boundaries remain.
+
 ## Superseding free-only requirement — October 9, 18:05 Toronto
 
 Tyler explicitly rejects all spending. Paid Azure Artifact Signing and commercial certificates are not approved options. Preserve the signing/distribution hold and upgrade acceptance matrix below; its paid-route recommendation is historical and superseded.
