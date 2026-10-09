@@ -1,5 +1,17 @@
 # Working rules for Ontario Teacher Assessment
 
+## Approval must lead to execution — October 9, 2026
+
+Tyler explicitly requested a concrete handoff after approval: “Good, you approved what needed to be done. Now paste this to Codex.”
+
+- After actual approval, name the action approved and execute the next necessary step immediately when the current session has sufficient tools. Record observed execution rather than promising a start.
+- If execution requires another Codex conversation/workspace, use that exact sentence and immediately provide one complete copyable instruction for the primary StudentOrganizer Codex conversation. Include repository, current branch/work-order, actual approval evidence, first action, authorised scope, preservation constraints, completion checks and reserved decisions.
+- The receiving coordinator recovers current source/approval/writer state, executes every unblocked approved milestone through verification, commit/push and review preparation, and continues independent approved work around a genuine blocker. Do not ask Tyler to repeat routine approval.
+- Provide the complete handoff without asking whether Tyler wants a prompt. Do not merely suggest opening Codex, claim the paste/launch occurred, or create an unnecessary handoff when execution can proceed here.
+- Keep the action approved precise: approving a plan/review is not automatically approving main merge, release, spending or new scope. If a real approval remains missing, ask one specific decision rather than claiming “you approved”.
+- Completion evidence is either an observed action with its source/result, or a delivered execution instruction with the exact missing capability and next step. Saved rules/prompt text alone do not prove coding execution.
+
+
 ## Approved work includes review publication — October 8, 2026
 
 Tyler asked how to remove repeated authorization for routine verification/publication of approved work, then instructed “continue”. This is standing authorization for StudentOrganizer work within an explicitly approved plan and the existing repository.
