@@ -1,5 +1,18 @@
 # Manual Windows update check — October 6, 2026
 
+## Superseding free-only requirement — October 9, 18:05 Toronto
+
+Tyler explicitly rejects all spending. Paid Azure Artifact Signing and commercial certificates are not approved options. Preserve the signing/distribution hold and upgrade acceptance matrix below; its paid-route recommendation is historical and superseded.
+
+Free candidate: Microsoft Store MSIX. Official current onboarding describes no registration fee; Microsoft's signing guidance states the Store re-signs MSIX packages. Publishing an MSI/EXE to the Store does not provide this re-signing, so our existing NSIS artifact is not a free signing shortcut. Current repository inspection found no appx/MSIX configuration, Store-assigned package identity or legacy-to-Store upgrade test. Registration involves owner identity verification and publication remains a separate decision.
+
+Before recommending adoption, assess: package identity/publisher/assets and Electron compatibility; Store-managed update behavior versus click-only updates; MSIX file-system redirection/legacy profile discovery; verified UI export/import as a recoverable migration option if same-profile reuse is not proven; uninstall/data retention; and restricted pilot availability/device policy. Existing local data must not be silently moved/deleted and no Store app is published as part of investigation. Microsoft Store signing covers the Store package, not the direct portable executable.
+
+Alternative free signing: SignPath Foundation requires an OSI-approved license, no proprietary components, maintenance, already released artifacts, code-signing policy, roles/MFA and discretionary project acceptance/reputation. No LICENSE file is present in the inspected source. Public GitHub visibility is not evidence of an accepted open-source license. Do not adopt a license, apply/enroll, contact the foundation or promise eligibility without the required actual user decision/authorization.
+
+Sources checked October9: [free Store onboarding](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account), [Store MSIX signing versus MSI/EXE](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options), [MSIX desktop runtime/data redirection](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes), [SignPath eligibility](https://signpath.org/terms). No new prototype, upgrade pass or guaranteed acceptance is claimed.
+
+
 ## Delivery hold and proposed completion plan — October 9
 
 Status: investigation/planning, implementation and paid signing adoption not yet approved. Tyler instructed publisher signing and data-preserving replacement be figured out before an unsigned QA release. No QA tag/release/distribution, signing account, certificate purchase or installer launch is authorized by that instruction.
