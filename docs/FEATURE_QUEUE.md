@@ -4,7 +4,19 @@ Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent main
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
 
-## Current approved merge sequence — October 9
+## Current recovery checkpoint — October 9, 17:10 Toronto
+
+Tyler deleted the Daily checkins conversation and instructed: “Make this the new one with scheduled checkins. Pick up where it left off.” The replacement coordination chat has two scheduler-confirmed, enabled daily check-ins, starting October 10: 08:15 morning batch and 16:00 results/learning, America/Toronto. Both were read back with the same current conversation binding before old schedule state was checked. Old morning/afternoon schedules are disabled; 20:15 continuation remains paused. Other usage-review schedules were unchanged. See [schedule migration record](work-orders/SCHEDULE-MIGRATION-2026-10-06.md). Scheduled execution/tool inheritance still needs an actual scheduled run.
+
+**PR19/PR20 merge sequence is completed, not underway.** Live PR20 metadata confirms merge at 14:32:05 Toronto to `b9a8790f4841fa9fd5057e7cfef097f619cbac4a`; final tree matches tested source `4c00a046b965eddcfe25c13730d16b243c6689a6`. Fresh merged-main [Windows run 37973955991](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37973955991) completed SUCCESS. Its `OntarioTeacherAssessment-Windows-1.0.0-qa.185.1` artifact is available, not expired, and expires January 7, 2027. This is build availability, not a release or distribution. PR20 records 289 tests/build plus desktop/browser acceptance and the explicit native-device/upgrade limitations. Do not repeat either approved merge.
+
+Recovery owner: the coordinator in the replacement check-in chat. A fresh clean checkout of main was obtained here; GitHub reads and shell execution work. No new production change or ongoing worker from the deleted chat is proven. A bounded read-only delivery/prerequisite investigation runs separately; the coordinator alone owns these records. The interrupted chat's unsaved work is not recoverable from repository evidence and is not assumed completed.
+
+Next actions: prepare combined-app Windows delivery from the verified build and the exact release boundary; inspect bug-only receiver prerequisites against the existing F-007 recommendation and actual authorization/access. Installer download/install/reopen remains unfinished and its trusted channel/publisher and authentic old/new acceptance remain unresolved. F-007 provider adoption and private receipt are not established. Continue concrete preparation; do not invent service/release approvals. Physical iPad remains access-blocked. Eight remaining UI requests and marking modes/photo work remain requested scope.
+
+The historical pre-merge snapshots below retain their original evidence. This recovery checkpoint and current PR metadata supersede their “underway” and schedule-unavailable claims.
+
+## Historical approved merge sequence — October 9
 
 Tyler replied **“Yes, continue.”** at14:14 America/Toronto after the explicit proposal to merge PR19, reconcile PR20 against updated main, rerun its checks and merge PR20 if clean. Actual merge approval covers that sequence; it is not a recall answer or release approval.
 
@@ -59,8 +71,8 @@ Tyler asked for the explicit post-approval instruction “Good, you approved wha
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
 | --- | --- | --- | --- |
-| 0 / Queue reconciliation and authorization continuity | Completed source merge; October9 “Yes, continue.” | PR19 merged a1d985e; PR17 closed superseded; coordinator | Canonical policy/queue on main. Actual schedule migration/automatic launch/cross-agent continuation remains unverified. |
-| 2 / F-008 Markinator acceptance | Underway: main merge approved October9 conditional on clean reconciliation/checks | PR20; coordinator | Preserve application/test bytes and planning/learning history while merging maina1d985e into PR20. Observe fresh Windows/Mac/browser checks, then execute approved merge. Prior source30a13dd passed289 tests and desktop/browser acceptance. Physical iPad/dialog/old-new installer upgrade unverified; release separate. Current PR20 metadata/work order hold completion evidence. |
+| 0 / Queue reconciliation and authorization continuity | Completed source merge; October9 “Yes, continue.” | PR19 merged a1d985e; PR17 closed superseded; coordinator | Canonical policy/queue on main. Replacement check-in schedules are confirmed October 9; actual scheduled execution/automatic launch/cross-agent continuation remains unverified. |
+| 2 / F-008 Markinator acceptance | Completed development merge; PR20 merged October 9 at 14:32:05 | main b9a8790; PR20 exact-source acceptance and merged-main Windows37973955991 SUCCESS | Prepare combined-app pilot delivery. Physical iPad/dialog/old-new installer upgrade remain unverified; release/distribution separate. Do not repeat merge. |
 | 3 / F-006 installed iPad | Blocked native interaction; preparation approved October 5 | PR18 merged aa64da1; native project, asset checks and unsigned SDK compile exist | Finish available matrix/documentation while device work is blocked. Actual simulator/physical Files, touch selection, background/resume, offline/storage, export and free-signing renewal require Mac/Xcode/device access. Browser or compilation results do not prove these. |
 | 4 / F-007 central bug receipt | Requested receiver adoption; local draft implementation completed | PR19 receiver decision packet; no deployed receiver or verified receipt | Reconcile actual dashboard/access and Tyler replies before repeating a decision. Prepare concrete bug-only receiver setup; adoption/support-sign-in/access remains unresolved in the records. Do not transmit classroom records or invent provider approval. |
 | 5 / UI QA remaining items | Requested / scoped review; only QA02/03 implementation was approved and merged | Ten-item table below; coordinator owns diagnosis/planning | Prepare a coherent next repair proposal from actual reproduction and teacher workflow risk. Keep all eight remaining requests visible; do not treat the seating approval as approval for unrelated features. |
@@ -98,7 +110,7 @@ Source: direct conversation, fictional Windows QA; screenshot unavailable. Detai
 | F-009 exemplar repository | Deliberately deferred by Tyler October 6 | Revisit after bug-report transfer works; deliberate selected essay/feedback sharing only. |
 | Marking extensions | Deliberately deferred by current work order | Full annotated-essay reports, file-based rubric input, PDF/OCR, legacy Markinator JSON, scratch marking. Revisit on concrete demand after core acceptance. |
 | Live sync/cloud backup, voice/AI, general redo, purge policy | Not implemented; no current implementation authorization | Keep as possibilities only; propose separate concrete scope if requested. |
-| WF-002 workflow reliability / automatic launch / schedule migration | Incomplete; separate workflow priority #1 remains in its workflow plan | This cleanup fixes queue routing only. No scheduler change, automatic Cloud launch, global memory or skill modification claimed. Observe fresh-session resume and completed batch before calling workflow reliability verified. |
+| WF-002 workflow reliability / automatic launch / schedule migration | Incomplete; separate workflow priority #1 remains in its workflow plan | October 9 replacement schedules and fresh-checkout recovery are observed. Actual scheduled execution/automatic Cloud launch remain unverified; verify the first replacement run. This recovery makes no global-memory/skill change. |
 
 ## Completion handoff for this cleanup
 
