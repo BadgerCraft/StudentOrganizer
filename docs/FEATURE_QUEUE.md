@@ -4,6 +4,12 @@ Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent main
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
 
+## Current privacy verification — October 9, 2026
+
+Tyler asked to verify the student-privacy consequences of Microsoft Store updates now. Current main `b9a8790f4841fa9fd5057e7cfef097f619cbac4a` has no active student-content network sender: local IndexedDB/storage and marking/import/export; no production cloud-sync worker, remote AI, telemetry or bug-report receiver. The only app-controlled outbound exception is the explicitly clicked Windows release metadata GET to fixed GitHub, with no student payload. Production CSP and Electron session guards block renderer network access. Fresh focused tests: 58/4 PASS; production typecheck/build PASS and built CSP inspected. Exact-source Windows run37973955991/job113967364555 already passed its packaged network-boundary smoke with zero collector requests; this is existing CI evidence, not a fresh local Windows launch.
+
+Store/MSIX is **UNVERIFIED**: no package/configuration/identity exists yet. Current findings do not establish Store-package privacy, old-to-new preservation, uninstall retention, Windows diagnostics or device cloud-backup settings. App data/full JSON backups are not app-encrypted; a deliberately exported backup in a synced folder can be uploaded outside the app. Microsoft states optional Windows crash diagnostics may contain user content; do not repeat an absolute “Microsoft cannot see student data” guarantee. Details and acceptance gates: [privacy verification record](work-orders/SECURITY-2026-10-02-RESULTS.md#current-source-and-store-privacy-verification--october-9-2026). No app code, account, release, spending or real-student use was introduced.
+
 ## Free-only delivery constraint — October 9, 18:05 Toronto
 
 Tyler: “Yeah I'm not paying for anything.” No paid signing, subscriptions, certificates, account fees or paid services. The earlier paid-Azure recommendation is rejected and must not be presented again as the default. Keep unsigned release/distribution on hold and the real old-to-new preservation requirements intact.
