@@ -4,6 +4,16 @@ Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent main
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
 
+## Free-only delivery constraint — October 9, 18:05 Toronto
+
+Tyler: “Yeah I'm not paying for anything.” No paid signing, subscriptions, certificates, account fees or paid services. The earlier paid-Azure recommendation is rejected and must not be presented again as the default. Keep unsigned release/distribution on hold and the real old-to-new preservation requirements intact.
+
+Current free-route investigation: Microsoft documents free Store developer onboarding and Store signing for MSIX packages; this is the leading candidate, not adopted/published. Existing code has NSIS/portable only, no Store package identity/configuration and no migration acceptance. MSIX can redirect app-data access and uses Store-managed delivery/update behavior; evaluate both against legacy `%APPDATA%` records and Tyler's deliberate-click update requirement before an implementation proposal. Do not assume Store packaging automatically preserves existing records or an unsigned EXE becomes trusted outside the Store.
+
+Alternative: SignPath Foundation free signing requires an OSI-approved open-source license, existing release/reputation, approval and signing policy. No LICENSE file was found in the current checkout. A public repository alone does not meet this requirement; changing licensing/rights is Tyler's consequential judgment and is not authorized to obtain free signing. Acceptance is discretionary. No application, license change, account or subscription was created.
+
+Next authorized work is a free Store compatibility/migration/update-control plan; retain SignPath as an alternative with explicit eligibility/licensing limits. Once concrete, ask only for the actual distribution/account/licensing choice needed. No paid fallback without Tyler changing this constraint. Source and remaining acceptance: WINDOWS_MANUAL_UPDATES.md.
+
 ## Current delivery priority — October 9, 17:53 Toronto
 
 Tyler declined moving straight to an unsigned pilot: “I think the unsigned feature needs to be figured out first. Further, it doesn't sound like the replacement when updating/installing is figured out.” **Hold QA release/distribution until publisher signing and actual old-to-new replacement are resolved.** This is authorization for investigation and a concrete delivery plan, not spending, account/service creation, or an approved automatic-installer implementation.
