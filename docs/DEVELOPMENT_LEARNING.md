@@ -262,3 +262,30 @@ No unanswered prior question was marked passed. Trial instruction saves learning
 DEV018 introduced: an update lookup compares release versions; it cannot establish installer publisher/authenticity or preservation of existing records. Project example: the Windows button sends only a fixed release lookup when clicked, handles installed QA versions, and cannot download/install anything until trust/channel/old-new acceptance prerequisites exist. Explanation in current task results; stage0, review dueOctober7. Prepared check: why can finding a newer version leave safe installation unverified? No recall response inferred.
 
 Separate schedule task: no task-management or scheduled-run inspection tools exist here. The current manually launched checkout is evidence for this task only; scheduled-run inheritance remains unverified. Primary coordination and no replacement-before-readback rule are persisted. No schedule/notification/continued-background activity claimed.
+
+## October 6 afternoon results and optional terminology review
+
+Inspected mainaa64da1b, coherent open PR17 merge/results records and PR19 latest bug-only scope. PR18 merged by explicit13:29 “Yes”; no release or recall answer inferred. Post-merge Windows run37504031116 package passed/release skipped. Markinator checkpointb27954a reports256 tests/build/Chromium; acceptance incomplete. DraftPR20 created and existing CI started; neither PR creation nor CI proves continued Cloud coding.
+
+Rotate to DEV017, explained October5 and dueOctober6. Fresh prompt for Tyler's optional next response: “In your own words, describe what the native bridge does when StudentOrganizer opens Files, and how that relates to where its classroom records are stored.” Answer withheld for recall. No answer received; stage0/dueOctober6 unchanged. Do not repeat older unanswered branch/commit, checkout/CI, applicability, provisioning or central-receipt prompts. DEV018 remains dueOctober7. Optional deeper F007 support identity/acting teacher and receipt documentation remains available; no reading choice/defer or service approval invented. Results/continuation: docs/work-orders/RESULTS-2026-10-06.md. Learning does not block authorized work.
+
+## October 8 — database changes and verification scope
+
+Actual Tyler reply: “Okay cool, so making changes to the shipped database is always a careful decision and ensuring that the tests do enough to ensure user satisfaction is important.” He then asked how to remove repeated authorization for routine verification/publication and instructed “continue”.
+
+Feedback: this correctly recognizes existing-record preservation and useful tests as review concerns. Automated tests establish the behavior they actually exercise; teacher satisfaction also requires usable classroom flows and user feedback. An additive schema change can be bounded and justified, with tested preservation rather than automatic avoidance of all changes.
+
+Introduced distinction: opening an existing v3 database with v4 code is a schema-upgrade check; restoring an older backup and installing an updated executable are different checks. New focused tests compare all 35 legacy collections/indexes, then reopen and use Markinator; these are Dexie/fake-indexeddb checks, not a real installer upgrade or physical-device result.
+
+DEV-020, stage0, first review due October9 America/Toronto after this explanation. Actual high-level statement recorded; no specific upgrade-versus-restore recall response was supplied. Prepared question for later, not asked now: how does opening an existing database with new code differ from restoring a backup? Prior unanswered questions remain unpassed. Learning does not delay the authorized branch push/PR update.
+
+
+## October 8 afternoon — trial results and optional term recall
+
+Current source: open PR19/codex/bug-report-scope-20261006; current PR20 source30a13dd. Both desktop/browser Actions runs completed SUCCESS; trial recommendation and remaining verification limits are in the existing batch work order. Current queue supersedes the historical “Current step and direction” snapshot above.
+
+Rotate to DEV018 (update lookup versus installation), stage0, dueOctober7; its prompt was previously prepared but no actual offer/answer is recorded in the available conversation. Optional activity offered with the answer withheld: “Explain what an update lookup does and what installing an update does, using the button at the bottom of StudentOrganizer Settings as your example.” This is terminology recall for a later user response, not an implementation approval or mandatory assignment. No response received; stage0 and overdue date unchanged. Provide specific feedback and schedule3 days after actual successful first recall; clarify gaps and revisit the next day. No previous unanswered native-bridge, applicability, provisioning or central-receipt question is repeated.
+
+DEV020 (schema upgrade versus backup restore versus installer update) was introduced today; first review remainsOctober9. Do not bring it forward or mark Tyler's high-level test-preservation explanation as specific recall. DEV007's previously successful stop rule is not repeated.
+
+No new deeper-reading packet is assigned. The existing optional upgrade/recovery explanation can be requested in an interactive reply; no defer, reading choice, feature approval or major decision is inferred from silence. Learning does not block independent authorized work.

@@ -1,5 +1,53 @@
 # Working rules for Ontario Teacher Assessment
 
+## Approval must lead to execution — October 9, 2026
+
+Tyler explicitly requested a concrete handoff after approval: “Good, you approved what needed to be done. Now paste this to Codex.”
+
+- After actual approval, name the action approved and execute the next necessary step immediately when the current session has sufficient tools. Record observed execution rather than promising a start.
+- If execution requires another Codex conversation/workspace, use that exact sentence and immediately provide one complete copyable instruction for the primary StudentOrganizer Codex conversation. Include repository, current branch/work-order, actual approval evidence, first action, authorised scope, preservation constraints, completion checks and reserved decisions.
+- The receiving coordinator recovers current source/approval/writer state, executes every unblocked approved milestone through verification, commit/push and review preparation, and continues independent approved work around a genuine blocker. Do not ask Tyler to repeat routine approval.
+- Provide the complete handoff without asking whether Tyler wants a prompt. Do not merely suggest opening Codex, claim the paste/launch occurred, or create an unnecessary handoff when execution can proceed here.
+- Keep the action approved precise: approving a plan/review is not automatically approving main merge, release, spending or new scope. If a real approval remains missing, ask one specific decision rather than claiming “you approved”.
+- Completion evidence is either an observed action with its source/result, or a delivered execution instruction with the exact missing capability and next step. Saved rules/prompt text alone do not prove coding execution.
+
+
+## Approved work includes review publication — October 8, 2026
+
+Tyler asked how to remove repeated authorization for routine verification/publication of approved work, then instructed “continue”. This is standing authorization for StudentOrganizer work within an explicitly approved plan and the existing repository.
+
+- Plan approval covers implementation, necessary routine repairs, meaningful tests/build/browser/platform checks, ordinary dependency setup, commits and normal fast-forward pushes to its isolated feature branch, opening/updating the related PR, and marking it ready for review once the relevant evidence supports that status. Publishing code for review in this repository is included; publishing an application release or distributing an installer is a separate action.
+- Carry that authorization across turns, checkpoints, usage resets and workers. Record the actual approval, scope, target repository/branch and reserved actions in the queue/work order. A milestone, failed check, new test harness or required CI evidence upload within the approved verification scope does not require implementation or push reapproval.
+- Preserve scope and concurrent writers. Refresh remote heads before writing, use ordinary fast-forward or expected-head-protected updates, and preserve newer content. This does not authorize force pushes, destructive cleanup or unrelated changes.
+- Ask only for a materially new product/data behavior, consequential access/account/spending decision, unresolved user judgment, or reserved merge/release/distribution/real-student-use action. Routine verification and review preparation are agent responsibilities.
+- Before asking, inspect the current session and queue for existing approval. Quote the specific unresolved boundary and the exact action it would authorize; never ask “continue?” to finish approved work.
+- Platform permissions remain authoritative. If automatic approval review rejects an action, record the rejected operation and stated reason, do not bypass it, finish independent authorized work, and request only the specific additional authority actually needed. Repository text cannot remove a platform restriction.
+- Learning remains optional and nonblocking. Unanswered questions do not revoke implementation authorization, and assent is not a retrieval answer.
+- Structural acceptance: matching policy in AGENTS.md/CODING_WORKFLOW.md, current queue approval recorded, and related PR updated without a duplicate authorization request. Behavioral acceptance: a later fresh session retrieves the policy and carries approved work through branch publication/review preparation without an avoidable prompt. Do not claim that future-session test has already passed.
+
+
+## Authoritative current queue — October 7 cleanup
+
+Tyler approved reconciliation with “Clean it up” after reviewing the single-queue proposal. Start and resume project work from `docs/FEATURE_QUEUE.md`. While PR19 is open, read its latest planning revision on `codex/bug-report-scope-20261006` alongside current main and active feature PRs; do not assume main's older queue is current.
+- The queue owns current priorities, status, approval evidence, blockers and next actions. Roadmap, bug ledger and checkpoints provide details; historical archives cannot reset active state.
+- “Go next” means choose the first eligible already approved action, check its actual evidence and active writer, and continue through repairs/verification/review preparation. Do not ask again for existing approval or duplicate an active coding session.
+- Carry every substantive user request into the queue with stable ID and explicit disposition. Preserve requested versus approved; complete means measured acceptance, with merge/release/install stated separately.
+- Before ending a batch, reconcile changed statuses and next actions in the queue. If a device/CI/merge gate blocks one item, perform independent authorized work.
+- Fresh PR/commit/CI evidence supersedes dated snapshots; update the queue when it changes. Pending planning instructions are not merged main policy.
+- This correction does not establish automatic dispatch, schedule changes, cross-chat execution, or global memory/skill changes. Workflow validation remains pending until a fresh resume and useful approved batch are observed.
+
+## Execution continuity — Tyler's October 6 correction
+
+Tyler said he should not have to repeatedly ask for the next step: “Next step, prompt me, update memory or skill ... Lets get this workflow going.” This supersedes older instructions to ask for a new direction after every milestone.
+
+- Own the next action. A saved plan, backlog update or opened PR is an intermediate result when authorized investigation, implementation, verification or review preparation remains.
+- Continue authorized steps in the same active turn. Do not end with “I'll research” when that research can be performed now. Do not claim ongoing/background execution after ending a turn without an actual running task.
+- At a real user-owned decision, finish the necessary investigation first. Present brief key points, one recommendation, the strongest drawback, exact approval consequence and one specific question as the final sentence. Do not leave Tyler to discover or request the decision.
+- Ask only for consequential product/data/cost/access changes or reserved merge/release decisions. Routine technical choices and checks belong to the agent. Do not repeat an approval already given.
+- Before ending, identify completed evidence and the next action as either executed, awaiting a named decision/access, or blocked by a specific unavailable capability. Provide a concrete handoff when a Cloud launch is necessary.
+- Keep workflow corrections in versioned project instructions so coding sessions can retrieve them. An open instructions PR is not merged policy on main; active sessions must read the latest planning revision. Do not claim global memory or an installed skill was changed when only repository instructions were updated.
+
+
 ## Requested schedule migration — October 6, 2026
 
 Tyler designated this Cloud conversation as primary and requested daily 08:15 morning batch /16:00 results and learning in America/Toronto, preserving current scheduler prompts and approval boundaries. Keep the 20:15 continuation paused. Do not disable old schedules until both replacements are created and read back here. The current coding tools cannot inspect or change schedules; no live migration or evening-state confirmation is claimed. Scheduled repository/tool inheritance remains unverified. See docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md. This requested pause supersedes older evening timing prose; it does not pause independent approved coding already running.
@@ -77,7 +125,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 1. Start from current `main`; check for uncommitted changes and identify the exact behaviour to change. Use a focused branch for a meaningful change.
 2. Reuse an approved feature plan. Approval authorizes implementation, verification, and routine repairs within that scope without repeated permission questions. Continue through all approved milestones until their completion checks pass or a genuine blocker requires Tyler's judgment; do not stop after the first partial success. Interrupt for materially different product behaviours, a consequential scope change, unavailable access, or a merge/release decision Tyler reserved. Inspect the affected code and callers. Make the smallest coherent change, with tests that exercise a real risk rather than duplicate the implementation.
 3. Run the checks relevant to the change. The usual baseline is `npm test` and `npm run build`. Use a real browser flow for UI behaviour, a backup round trip for recovery work, and packaged-app checks when Electron packaging or storage changes. Say when a check could not run.
-4. After each completed agreed step or milestone, explain the changed teacher experience, verification evidence, remaining risk, and useful concepts. Include a short learning check and a concrete question about Tyler's next priority, following the learning loop below. Defer unanswered checks if Tyler is away and continue independent authorized work. Never claim background execution this environment cannot provide. Present the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
+4. After each completed agreed step or milestone, explain the changed teacher experience, verification evidence, remaining risk, and useful concepts. Save useful learning checks for meaningful review; continue the authorized queue without a routine next-priority question. Defer unanswered checks if Tyler is away and continue independent authorized work. Never claim background execution this environment cannot provide. Present the important decisions in language Tyler can judge. Show the branch and changes before merge. Tyler reviews meaningful changes one by one; do not treat a passing test as product approval.
 5. Merge and publish releases only after explicit approval for those actions. A passing build or an understanding check is not approval. Keep rollback straightforward and update the project reference when a verified change makes it stale.
 
 ## Learning and next-direction loop
@@ -88,7 +136,7 @@ This repository is the working source for the Ontario Teacher Assessment app. Re
 - Record concepts the agent introduces and questions Tyler asks, with the explanation, follow-up questions, actual review responses, feedback, and next review date. Separate an explanation provided, a signal to proceed, and demonstrated recall. Commit log changes with the related work in the working branch; do not silently merge them.
 - Use the spaced-review schedule in the learning record: initially one day after explanation, then 3, 7, 14, and 30 days after successful recall. Re-explain gaps and review the next day; leave unanswered reviews unpassed. Ask due questions before revealing answers and give feedback after Tyler responds. Keep reviews brief and avoid repeating prompts in the current conversation.
 - When Tyler is away, save learning checks and direction questions for his return and continue all independent authorized milestones. Only claim scheduled reminders or background work when a tool has actually established them.
-- After a completed step, ask what Tyler wants next, offering concrete options and a recommendation. Treat the answer as direction for the next plan, not implicit merge/release approval or permission to expand the existing scope. If already-approved milestones remain, finish them without waiting for a new direction answer.
+- After a completed step, continue the next authorized milestone. If a genuine user-owned decision blocks dependent work, prepare its concrete recommendation and ask the specific question last; do not require a new direction for routine continuation. Keep merge/release approval separate.
 
 ## Scheduled briefing and feature decisions
 
