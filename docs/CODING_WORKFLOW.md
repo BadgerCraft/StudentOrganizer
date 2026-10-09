@@ -1,5 +1,41 @@
 # Daily development workflow
 
+## Approval must lead to execution — October 9, 2026
+
+Tyler explicitly requested a concrete handoff after approval: “Good, you approved what needed to be done. Now paste this to Codex.”
+
+- After actual approval, name the action approved and execute the next necessary step immediately when the current session has sufficient tools. Record observed execution rather than promising a start.
+- If execution requires another Codex conversation/workspace, use that exact sentence and immediately provide one complete copyable instruction for the primary StudentOrganizer Codex conversation. Include repository, current branch/work-order, actual approval evidence, first action, authorised scope, preservation constraints, completion checks and reserved decisions.
+- The receiving coordinator recovers current source/approval/writer state, executes every unblocked approved milestone through verification, commit/push and review preparation, and continues independent approved work around a genuine blocker. Do not ask Tyler to repeat routine approval.
+- Provide the complete handoff without asking whether Tyler wants a prompt. Do not merely suggest opening Codex, claim the paste/launch occurred, or create an unnecessary handoff when execution can proceed here.
+- Keep the action approved precise: approving a plan/review is not automatically approving main merge, release, spending or new scope. If a real approval remains missing, ask one specific decision rather than claiming “you approved”.
+- Completion evidence is either an observed action with its source/result, or a delivered execution instruction with the exact missing capability and next step. Saved rules/prompt text alone do not prove coding execution.
+
+
+## Approved work includes review publication — October 8, 2026
+
+Tyler asked how to remove repeated authorization for routine verification/publication of approved work, then instructed “continue”. This is standing authorization for StudentOrganizer work within an explicitly approved plan and the existing repository.
+
+- Plan approval covers implementation, necessary routine repairs, meaningful tests/build/browser/platform checks, ordinary dependency setup, commits and normal fast-forward pushes to its isolated feature branch, opening/updating the related PR, and marking it ready for review once the relevant evidence supports that status. Publishing code for review in this repository is included; publishing an application release or distributing an installer is a separate action.
+- Carry that authorization across turns, checkpoints, usage resets and workers. Record the actual approval, scope, target repository/branch and reserved actions in the queue/work order. A milestone, failed check, new test harness or required CI evidence upload within the approved verification scope does not require implementation or push reapproval.
+- Preserve scope and concurrent writers. Refresh remote heads before writing, use ordinary fast-forward or expected-head-protected updates, and preserve newer content. This does not authorize force pushes, destructive cleanup or unrelated changes.
+- Ask only for a materially new product/data behavior, consequential access/account/spending decision, unresolved user judgment, or reserved merge/release/distribution/real-student-use action. Routine verification and review preparation are agent responsibilities.
+- Before asking, inspect the current session and queue for existing approval. Quote the specific unresolved boundary and the exact action it would authorize; never ask “continue?” to finish approved work.
+- Platform permissions remain authoritative. If automatic approval review rejects an action, record the rejected operation and stated reason, do not bypass it, finish independent authorized work, and request only the specific additional authority actually needed. Repository text cannot remove a platform restriction.
+- Learning remains optional and nonblocking. Unanswered questions do not revoke implementation authorization, and assent is not a retrieval answer.
+- Structural acceptance: matching policy in AGENTS.md/CODING_WORKFLOW.md, current queue approval recorded, and related PR updated without a duplicate authorization request. Behavioral acceptance: a later fresh session retrieves the policy and carries approved work through branch publication/review preparation without an avoidable prompt. Do not claim that future-session test has already passed.
+
+
+## Authoritative current queue — October 7 cleanup
+
+Tyler approved reconciliation with “Clean it up” after reviewing the single-queue proposal. Start and resume project work from `docs/FEATURE_QUEUE.md`. While PR19 is open, read its latest planning revision on `codex/bug-report-scope-20261006` alongside current main and active feature PRs; do not assume main's older queue is current.
+- The queue owns current priorities, status, approval evidence, blockers and next actions. Roadmap, bug ledger and checkpoints provide details; historical archives cannot reset active state.
+- “Go next” means choose the first eligible already approved action, check its actual evidence and active writer, and continue through repairs/verification/review preparation. Do not ask again for existing approval or duplicate an active coding session.
+- Carry every substantive user request into the queue with stable ID and explicit disposition. Preserve requested versus approved; complete means measured acceptance, with merge/release/install stated separately.
+- Before ending a batch, reconcile changed statuses and next actions in the queue. If a device/CI/merge gate blocks one item, perform independent authorized work.
+- Fresh PR/commit/CI evidence supersedes dated snapshots; update the queue when it changes. Pending planning instructions are not merged main policy.
+- This correction does not establish automatic dispatch, schedule changes, cross-chat execution, or global memory/skill changes. Workflow validation remains pending until a fresh resume and useful approved batch are observed.
+
 ## Batch execution trial — October 6–8, 2026 (supersedes older daily-rhythm rules)
 
 Tyler approved this trial on October 5 with “Yeah let's get things moving” in response to the batch-work proposal. This authorizes workflow/schedule updates, queue reconciliation and carrying existing approved work through implementation, verification, routine repairs and review preparation. It does not authorize new product scope, spending, accounts, real-student use, merges or releases.

@@ -1,5 +1,9 @@
 # Markinator integration — resumable checkpoint, October 7, 2026
 
+## October 9 — current approved merge reconciliation
+
+Tyler's14:14 Toronto “Yes, continue.” approves PR19 merge, PR20 reconciliation/fresh checks, then PR20 main merge if clean. Release stays separate. PR19 merged maina1d985e; PR17 closed superseded. Coordinator owns PR20 reconciliation; application/tests/workflows/dependencies retain exact source30a13dd bytes, canonical planning and both learning histories retained. See [current queue](../FEATURE_QUEUE.md), [merge work order](../work-orders/PR20-MERGE-2026-10-09.md) and actual [PR20](https://github.com/BadgerCraft/StudentOrganizer/pull/20) state for completion. Older pending publication/access instructions below are historical. Physical iPad, OS dialogs/printing/Gatekeeper and actual old/new installer upgrade remain unverified.
+
 ## October 8 follow-through — existing-database upgrade evidence
 
 Tyler asked to remove repeated authorization for routine verification/publication of already approved work and instructed “continue”. Standing project policy on PR19 now explicitly includes commits, normal feature-branch pushes and related PR updates in approved work. Merge/release remain reserved. This continuation adds tests and evidence only; application/schema/dependencies/workflow configuration are unchanged from bf1eed0 / tested application5443e15.
@@ -69,7 +73,7 @@ Temporary artifacts: `/tmp/markinator-expanded-tests.json`, `/tmp/markinator-exp
 
 ## Requested future features — October 7, 2026
 
-The [StudentOrganizer product roadmap](../PRODUCT_ROADMAP.md#markinator-follow-up-backlog--requested-october-7-2026) records Tyler's two future Markinator requests: a starting screen with essay markup + rubric, oral presentation checklist + rubric, and rubric-only modes; and on-device photograph/import plus annotation of handwritten work through the essay-style rubric/feedback process. These belong to StudentOrganizer's backlog. Finish and verify the existing integration first; do not add them to the remaining batches below. Implementation planning/approval is pending; this request does not approve OCR, remote processing, merge or release.
+The [StudentOrganizer product roadmap](../PRODUCT_ROADMAP.md#markinator-follow-up--requested-october-7) records Tyler's two future Markinator requests: a starting screen with essay markup + rubric, oral presentation checklist + rubric, and rubric-only modes; and on-device photograph/import plus annotation of handwritten work through the essay-style rubric/feedback process. These belong to StudentOrganizer's backlog. Finish and verify the existing integration first; do not add them to the remaining batches below. Implementation planning/approval is pending; this request does not approve OCR, remote processing, merge or release.
 
 ## Resume here — separate remaining batches in order
 
