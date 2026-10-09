@@ -1,6 +1,6 @@
 # Feature and decision queue
 
-Updated: October 8, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
+Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Current planning revision: `codex/bug-report-scope-20261006`, [PR19](https://github.com/BadgerCraft/StudentOrganizer/pull/19), pending merge. Read this revision while the cleanup PR is open; main's older queue is stale. Refresh the branch/PR before relying on a recorded head.
 
@@ -31,6 +31,18 @@ Freshly fetched current PR20 source30a13dd/test merged41f1fc: Windows37780989087
 Trial friction: at least one documented avoidable reauthorization, plus a distinct later automatic approval-review interruption; no total intervention count across conversations is invented. Keep routine publication authorized, preserve platform enforcement and reserve actual main merge/release decisions. Remaining eight UI requests are not approved implementation, and device/access gates are explicit. No schedule, service or release change is performed.
 
 Optional DEV018 term review is offered for a later response, with answer withheld; no recall supplied or stage advanced. DEV020 first review remains October9. Next action: review reserved PR19/PR20 main merges, keeping release/distribution separate.
+
+## October 9 morning decisions and execution order
+
+Fresh evidence: main `aa64da1b`; PR19 head `fd5ef399`, open/non-draft/mergeable, 17 ahead/0 behind, exact-head Windows [37837242064](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37837242064) and Mac/browser [37837242066](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37837242066) SUCCESS; PR20 head `30a13ddd`, open/non-draft/mergeable, 14 ahead/0 behind, exact-source Windows [37780989087](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989087) and Mac/browser [37780989028](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989028) SUCCESS. Neither PR has submitted reviews or inline review threads. No live coding worker/task ID is observed by this coordinator.
+
+Decision order:
+
+1. **PR19 documentation/workflow merge.** Recommendation: approve. It makes this single queue and authorization-through-review-publication policy canonical on main and supersedes divergent/nonmergeable PR17. Strongest drawback: a large documentation rewrite with dated operating history in AGENTS.md. Approval consequence: merge documentation only; then close PR17 as superseded without merging after confirming PR19 landed. No application/release/service behavior changes.
+2. **PR20 Markinator merge after PR19.** Recommendation: approve as a verified development checkpoint, not a release. It is a large, high-impact 49-file change (+5,116/-28) affecting persistent marking/grade data, so human review remains required. Current protection is strong for changed paths but partial for rollout:289 tests/32 files, desktop packages/restart, browser marking/recovery and additive v3-to-v4 preservation pass; actual old/new installer upgrade, physical iPad and native-dialog checks remain unverified. Approval consequence: after PR19 merges, reconcile PR20's overlapping DEVELOPMENT_LEARNING/PRODUCT_ROADMAP records against new main, rerun exact-source checks, and merge PR20 only if that protected result remains clean. The installed app and release remain unchanged.
+3. **F-007 bug receiver architecture.** A decision learning brief is assigned today with follow-up due October10. Recommendation remains Supabase Free with separate support accounts and a Tyler-only inbox. Strongest drawback: a hosted provider/account dependency, manual enrollment and possible free-project sleep. Alternatives are per-device invite tokens (more custom security/maintenance) or manual copy/export (no integrated receipt/status). Approval would authorize bug-only implementation/verification with fictional data; it would not authorize spending, real teacher invitations, student content, deployment, merge or release.
+
+Execution ownership: current coordinator owns administrative reconciliation. No production work starts before the reserved decisions. If PR19/PR20 merges are approved together, execute them in the protected order above without a second routine-authorization prompt; stop only for a changed head, failed check or new consequential conflict. F-006 physical acceptance remains blocked by Mac/Xcode/device access and does not block these decisions.
 
 ## Next approved batch
 
