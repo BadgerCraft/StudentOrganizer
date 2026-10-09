@@ -1,6 +1,23 @@
 # Windows fictional-data QA
 
-This is a small colleague testing pilot. Use fictional students, marks, notes, and photos only. Real-student use and Mac packaging require separate decisions.
+This is a small colleague testing pilot. Use fictional students, marks, notes, and photos only. Real-student use and application release/distribution require separate decisions. Mac packaging has separate verified development evidence; physical device policy remains unverified.
+
+## Current combined-app delivery candidate — October 9
+
+Preparation only; release and distribution are not performed. The merged Organizer/Markinator source is `b9a8790f4841fa9fd5057e7cfef097f619cbac4a`. Its [Windows run 37973955991](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37973955991) completed successfully. GitHub lists the not-expired artifact `OntarioTeacherAssessment-Windows-1.0.0-qa.185.1`, expiring January 7, 2027. Inspect the bundle's build identity, smoke report, checksums and publisher report before actual delivery; this recovery confirmed availability and CI outcome, not a fresh independent execution of those binary bytes.
+
+PR20's exact-source acceptance also records marking, backup/restore and restart checks. Physical Windows download warnings/managed-device policy and an authentic old/new installer upgrade remain separate acceptance. Back up fictional QA data before changing an existing copy.
+
+A reviewed `qa-v` tag triggers a rebuild and lasting QA prerelease; its own identity and hashes must be checked after that run. Do not equate a rebuilt release with the existing artifact's executable bytes. Settings checks stable releases and rejects QA/prereleases, so a QA prerelease is deliberately installed/tested by the user and will not appear as an available Settings update. Automatic installer download/install/reopen remains unfinished.
+
+### Combined marking route for fictional QA
+
+1. Select a fictional teacher and create/open an assessment. Enter or paste a rubric and explicitly confirm its K/T/C/A mapping.
+2. Import a fictional pasted, TXT or DOCX submission and confirm the student match; verify the retained original and preview.
+3. Add a passage comment and save a marking draft. Confirm draft work alone leaves official marks unchanged.
+4. Reopen the draft after an app restart, finalize explicit category judgments, and confirm the Organizer markbook agrees.
+5. Export a full backup. On a separate fictional test profile, restore it and compare original work, passage comments, rubric, final category marks and history.
+6. Record build ID, expected/actual behavior and reproduction steps in the local bug-report draft. Central receipt is not connected; copy/download alone is not a sent report.
 
 ## Choose and identify your copy
 
