@@ -4,6 +4,8 @@ This is a small colleague testing pilot. Use fictional students, marks, notes, a
 
 ## Current combined-app delivery candidate — October 9
 
+**Delivery hold, October 9:** Tyler requires publisher signing and a verified old-to-new replacement path before QA release/distribution. The unsigned candidate below remains historical build evidence, not an approved download. See [the completion plan](WINDOWS_MANUAL_UPDATES.md).
+
 Preparation only; release and distribution are not performed. The merged Organizer/Markinator source is `b9a8790f4841fa9fd5057e7cfef097f619cbac4a`. Its [Windows run 37973955991](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37973955991) completed successfully. GitHub lists the not-expired artifact `OntarioTeacherAssessment-Windows-1.0.0-qa.185.1`, expiring January 7, 2027. Inspect the bundle's build identity, smoke report, checksums and publisher report before actual delivery; this recovery confirmed availability and CI outcome, not a fresh independent execution of those binary bytes.
 
 PR20's exact-source acceptance also records marking, backup/restore and restart checks. Physical Windows download warnings/managed-device policy and an authentic old/new installer upgrade remain separate acceptance. Back up fictional QA data before changing an existing copy.
