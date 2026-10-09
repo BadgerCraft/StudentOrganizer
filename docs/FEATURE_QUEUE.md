@@ -44,6 +44,10 @@ Decision order:
 
 Execution ownership: current coordinator owns administrative reconciliation. No production work starts before the reserved decisions. If PR19/PR20 merges are approved together, execute them in the protected order above without a second routine-authorization prompt; stop only for a changed head, failed check or new consequential conflict. F-006 physical acceptance remains blocked by Mac/Xcode/device access and does not block these decisions.
 
+## October 9 approval-to-execution correction
+
+Tyler asked for the explicit post-approval instruction “Good, you approved what needed to be done. Now paste this to Codex.” This request authorizes the workflow update. AGENTS.md/CODING_WORKFLOW.md now require immediate execution with sufficient tools, or a complete primary-Codex work instruction when another workspace is required; no extra prompt-request round trip. The reusable drive-approved-work skill was updated and structurally validated; push status is recorded separately. No main merge, release, receiver adoption or task launch is inferred from this workflow approval.
+
 ## Next approved batch
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
