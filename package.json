@@ -22,7 +22,13 @@
     "ios:prepare": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
     "test:ipad:browser": "tsx scripts/nativePilotSmoke.ts",
-    "test:ipad:assets": "tsx scripts/auditNativePilot.ts"
+    "test:ipad:assets": "tsx scripts/auditNativePilot.ts",
+    "test:marking:browser": "tsx scripts/markingWorkflowSmoke.ts",
+    "test:marking:category-recovery": "tsx scripts/markingCategoryRecoverySmoke.ts",
+    "test:marking:inputs": "tsx scripts/markingInputAcceptanceSmoke.ts",
+    "test:marking:authority": "tsx scripts/markingAuthorityAcceptanceSmoke.ts",
+    "test:marking:portability": "tsx scripts/markingPortabilityAcceptanceSmoke.ts",
+    "test:marking:acceptance": "npm run test:marking:inputs && npm run test:marking:authority && npm run test:marking:portability"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
@@ -30,9 +36,12 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.7",
     "dexie-react-hooks": "^1.1.7",
+    "fflate": "0.8.3",
     "lucide-react": "^0.439.0",
+    "mammoth": "1.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "saxes": "6.0.0",
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {

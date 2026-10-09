@@ -2,7 +2,14 @@
 
 Updated: October 9, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
-Current planning revision: `codex/bug-report-scope-20261006`, [PR19](https://github.com/BadgerCraft/StudentOrganizer/pull/19), pending merge. Read this revision while the cleanup PR is open; main's older queue is stale. Refresh the branch/PR before relying on a recorded head.
+Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
+
+## Current approved merge sequence — October 9
+
+Tyler replied **“Yes, continue.”** at14:14 America/Toronto after the explicit proposal to merge PR19, reconcile PR20 against updated main, rerun its checks and merge PR20 if clean. Actual merge approval covers that sequence; it is not a recall answer or release approval.
+
+PR19 merged at14:14:34; exact-head Windows37948151985 and Mac/browser37948151977 passed. PR17 closed at14:17:36 without merging/deleting its source. Coordinator owns PR20 reconciliation: canonical planning plus both learning histories; application/test/workflow/dependency bytes stay source30a13dd. Fresh exact-source checks gate the approved main merge; old-main passes are historical. Status is underway until actual PR20 metadata/body records completion. [Merge work order](work-orders/PR20-MERGE-2026-10-09.md) records scope/checks. Do not repeat this approval. A source merge leaves installed copies unchanged; release/distribution/services/access/spending/real-student use/new scope remain reserved.
+
 
 ## How to use “go next”
 
@@ -32,7 +39,7 @@ Trial friction: at least one documented avoidable reauthorization, plus a distin
 
 Optional DEV018 term review is offered for a later response, with answer withheld; no recall supplied or stage advanced. DEV020 first review remains October9. Next action: review reserved PR19/PR20 main merges, keeping release/distribution separate.
 
-## October 9 morning decisions and execution order
+## Historical October 9 morning decisions and execution order
 
 Fresh evidence: main `aa64da1b`; PR19 head `fd5ef399`, open/non-draft/mergeable, 17 ahead/0 behind, exact-head Windows [37837242064](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37837242064) and Mac/browser [37837242066](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37837242066) SUCCESS; PR20 head `30a13ddd`, open/non-draft/mergeable, 14 ahead/0 behind, exact-source Windows [37780989087](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989087) and Mac/browser [37780989028](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989028) SUCCESS. Neither PR has submitted reviews or inline review threads. No live coding worker/task ID is observed by this coordinator.
 
@@ -52,13 +59,13 @@ Tyler asked for the explicit post-approval instruction “Good, you approved wha
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
 | --- | --- | --- | --- |
-| 0 / Queue reconciliation and authorization continuity | Implemented in open PR19; Tyler “Clean it up”, then October8 “continue” after asking to remove routine reauthorization | PR19; current coordinator | One current queue and explicit approval-through-branch-publication policy in AGENTS/workflow. Existing approval covers ordinary tests, scoped CI harness/evidence changes, commits, fast-forward feature pushes and PR updates. Main documentation merge remains reserved. October8 fresh-session retrieval and bounded review work were observed; cross-agent/scheduled continuation remains unverified. |
-| 2 / F-008 Markinator acceptance | Ready-for-review; October6 integration order, October7 review/runtime approvals; October8 routine verification/publication continuation | PR20 head30a13dd; Windows37780989087 and Mac/browser37780989028 both SUCCESS, refreshed October8. Runtime race and upgrade regressions included | v3-to-v4 tests preserve all 35 legacy collections/indexes, reopen and rubric use: 9 focused tests/build PASS locally. Published source30a13dd; [Windows37780989087](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989087) and [Mac/browser37780989028](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/37780989028) observed COMPLETED/SUCCESS. 289 tests/32 files, actual Windows portable/installed checks, ARM/Intel Mac packages/restart, Chromium/WebKit classroom/recovery/Markinator and unsigned iOS compile PASS. Production unchanged. Then present the reserved main-merge decision; physical iPad/dialog/old-new installer upgrade stays unverified. |
+| 0 / Queue reconciliation and authorization continuity | Completed source merge; October9 “Yes, continue.” | PR19 merged a1d985e; PR17 closed superseded; coordinator | Canonical policy/queue on main. Actual schedule migration/automatic launch/cross-agent continuation remains unverified. |
+| 2 / F-008 Markinator acceptance | Underway: main merge approved October9 conditional on clean reconciliation/checks | PR20; coordinator | Preserve application/test bytes and planning/learning history while merging maina1d985e into PR20. Observe fresh Windows/Mac/browser checks, then execute approved merge. Prior source30a13dd passed289 tests and desktop/browser acceptance. Physical iPad/dialog/old-new installer upgrade unverified; release separate. Current PR20 metadata/work order hold completion evidence. |
 | 3 / F-006 installed iPad | Blocked native interaction; preparation approved October 5 | PR18 merged aa64da1; native project, asset checks and unsigned SDK compile exist | Finish available matrix/documentation while device work is blocked. Actual simulator/physical Files, touch selection, background/resume, offline/storage, export and free-signing renewal require Mac/Xcode/device access. Browser or compilation results do not prove these. |
 | 4 / F-007 central bug receipt | Requested receiver adoption; local draft implementation completed | PR19 receiver decision packet; no deployed receiver or verified receipt | Reconcile actual dashboard/access and Tyler replies before repeating a decision. Prepare concrete bug-only receiver setup; adoption/support-sign-in/access remains unresolved in the records. Do not transmit classroom records or invent provider approval. |
 | 5 / UI QA remaining items | Requested / scoped review; only QA02/03 implementation was approved and merged | Ten-item table below; coordinator owns diagnosis/planning | Prepare a coherent next repair proposal from actual reproduction and teacher workflow risk. Keep all eight remaining requests visible; do not treat the seating approval as approval for unrelated features. |
 
-No production-code work is started by this documentation batch. Refresh PR20 before any handoff because another coding conversation owns its runtime work.
+No production-code change in reconciliation. Coordinator owns this approved PR20 merge sequence; check actual source/writers before competing publication.
 
 ## Tyler’s October 5 UI findings
 
@@ -100,8 +107,8 @@ Changes: one current queue; ten QA dispositions; update lookup versus installati
 Verification required: all ten QA IDs occur once in the current table; every open item has next action/dependency; links resolve; preserved historical bytes; reviewed source/PR evidence. Documentation-only: no application build/test required.
 October8 reconciliation: Tyler explicitly approved publication of the prepared five-file correction with “Go for it”. Both PR20 runs succeeded for source30a13dd, tested as synthetic merge d41f1fc into main aa64da1; release remained skipped. This planning branch preserves PR17's newer batch/PR18-merge evidence, October6 learning entry, PR18 review and afternoon results. Historical archives remain unchanged. Fresh-session queue retrieval and approved review preparation were observed; automatic dispatch and cross-agent behavior remain unverified.
 
-Next reserved decisions: review main merges for PR19 documentation and PR20 Markinator; release/distribution remains separate. PR10/13/15 are overlapping source proposals retained via merged PR18, not additional merges to perform blindly. PR17 remains open pending the consolidated documentation merge and a supersession decision. Physical iPad, native dialogs/printing/Gatekeeper and actual old/new installer upgrade remain unverified. Eight UI requests and future marking modes/photo workflow remain requested; central bug receipt remains unresolved.
-Reserved: documentation/application merges, releases, spending, service adoption, real student use and external distribution.
+Current approved merge sequence: PR19 landed, PR17 closed superseded, PR20 proceeds through fresh checks and authorized merge. Release/distribution remains separate. PR10/13/15 are overlapping source proposals retained via merged PR18, not additional merges to perform blindly. Physical iPad, native dialogs/printing/Gatekeeper and actual old/new installer upgrade remain unverified. Eight UI requests and future marking modes/photo workflow remain requested; central bug receipt remains unresolved.
+Reserved beyond this sequence: other main merges, releases, spending, service adoption, real student use and external distribution.
 
 ## Historical records
 

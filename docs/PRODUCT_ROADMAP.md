@@ -1,15 +1,15 @@
 # Product roadmap
 
-Updated October 8, 2026, America/Toronto.
+Updated October 9, 2026, America/Toronto.
 **Execution, approvals and next actions are owned by [FEATURE_QUEUE.md](FEATURE_QUEUE.md).**
-This file describes product scope. Current planning source is PR19 / `codex/bug-report-scope-20261006`; preserve this revision until reconciled/merged.
+This file describes product scope. Canonical planning is on main after merged PR19 a1d985e. PR20 development merge approved October9, conditional on fresh checks against this main. Current PR20 metadata/queue hold completion evidence; release is separate.
 
 ## Current application
 
 | Area | Implemented capability | Delivery limit |
 | --- | --- | --- |
 | Organizer classroom | Classes/dashboard, student profiles/local photos, seating/attendance/date navigation, configurable participation/Levels1–4 and history, assessments, markbook/category policy, CSV roster/import/export, full validated backup/restore | Base and retained platform/seating fixes merged PR18. Remaining Tyler UI findings are itemized in queue, not assumed delivered. |
-| Markinator essay workflow | Versioned manual/pasted rubric and confirmed KTAC mapping; paste/TXT/DOCX batch import/matching; retained originals; passage annotations/comments; queue/drafts/revisions; guarded explicit finalization into Organizer; local summary/quotation reports and full backup | Ready for merge review in PR20 at30a13dd, unmerged. Exact-source Windows37780989087 and Mac/browser37780989028 both passed:289 tests, build, actual desktop marking/recovery/restart and browser acceptance. Physical iPad and actual old/new installer upgrades remain unverified; no release or installed-copy delivery inferred. |
+| Markinator essay workflow | Versioned manual/pasted rubric and confirmed KTAC mapping; paste/TXT/DOCX batch import/matching; retained originals; passage annotations/comments; queue/drafts/revisions; guarded explicit finalization into Organizer; local summary/quotation reports and full backup | Prior verified source30a13dd. October9 PR20 merge approved; coordinator reconciles documentation against maina1d985e and requires fresh checks before merging. Read current PR20 metadata for actual completion. Exact-source Windows37780989087 and Mac/browser37780989028 both passed:289 tests, build, actual desktop marking/recovery/restart and browser acceptance. Physical iPad and actual old/new installer upgrades remain unverified; no release or installed-copy delivery inferred. |
 | Windows/Mac | Packaging and generic actual app restart/recovery checks | Combined marking runtime, signing/device policy, release and installed-copy update remain separate. |
 | Installed iPad | Bundled native project/assets and unsigned SDK compilation | Actual device/simulator interaction and free-signing renewal remain unverified; no operational website/PWA is the intended product. |
 | Bug reporting | Editable local draft, preview, copy/download and error preservation | Central receipt/control panel not configured or verified. |

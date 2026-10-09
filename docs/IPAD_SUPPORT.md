@@ -36,3 +36,15 @@ Requires macOS, Xcode 26 or later, iOS 15+ runtime, and a compatible simulator. 
 ## Platform evidence
 
 See [execution evidence](work-orders/F-006-2026-10-05.md). Existing Mac packaging and security-repaired desktop configuration are preserved. Current Windows/Mac package checks require their actual supported runners; neither shared UI tests nor prior PR #13 checks validate this new commit's packages. PR #10/#11 reconciliation and main integration remain separate review work.
+
+## Markinator native acceptance — pending October 7, 2026
+
+The integrated marking source now has independent review and real Chromium acceptance. Existing unsigned iOS compile and asset checks pass in CI; neither establishes this matrix. This Linux workspace has no Xcode/simulator/device interaction capability. Run on an installed fictional iPad/simulator profile with bundled current source:
+
+1. Create an assessment, paste a descriptor-complete rubric and confirm KTAC mapping. Select local TXT and DOCX using the Files input, preview normalized text and explicitly match two fictional students. Verify no remote input or parser requests. Retained originals must appear byte-identically in the full backup.
+2. With touch selection, annotate the second occurrence of repeated text and an overlapping passage; enter an unfinished comment. Navigate between students, switch teacher while edits are pending, background/resume and force-close/reopen. Verify saved and pending feedback stays with the intended teacher/student and official results remain unchanged. Use hardware keyboard selection separately.
+3. Finalize an explicit supported KTAC judgment, verify markbook feedback, reopen a draft revision and preserve the previous official result. Resolve a newer manual-mark conflict explicitly. Missing/excused completion must prevent scored finalization until the teacher resolves completion in Organizer.
+4. Export the actual inert HTML report via native Files to On My iPad, cancel once then save, open locally and check literal malicious text remains escaped. Verify Files/read/write failure leaves saved records intact. System print/PDF interaction remains a separate observed check.
+5. Export a full backup, restore into a separate clean fictional installation, compare original file bytes/hashes, rubric versions, pending annotation, finalized receipt/official marks and revision. Preview/cancel must not replace records. Restart simulator/device and update the same app identity without uninstalling; verify unchanged records.
+
+Record source/build, runtime/device type, steps actually observed and exact failures. Do not publish device identifiers. No physical-device, native Files, touch, renewal or zero-traffic result is claimed until executed.

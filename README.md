@@ -41,3 +41,7 @@ F-006 now prepares a bundled Capacitor iPad app; Home Screen/PWA delivery is ret
 See [the Windows QA guide](docs/WINDOWS_QA.md) for exact-package checks, build identification, publisher status, colleague feedback, and lasting downloads. Regular builds prepare QA bundles; only an explicitly reviewed QA tag publishes a prerelease.
 
 See [our coding workflow](docs/CODING_WORKFLOW.md) for feature plans, review boundaries, and the reusable cloud workspace setup.
+
+## Markinator integration checkpoint
+
+The isolated implementation adds assessment-linked local marking. See [the checkpoint and next actions](docs/markinator/CHECKPOINT.md), [connection map](docs/markinator/CONNECTIONS.md), and [authorized work order](docs/markinator/APPROVED_WORK_ORDER.md). After `npm ci` and `npm run build`, `npm run test:marking:browser` runs a fictional Chromium workflow (set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Chromium is not `/usr/bin/chromium`). This development checkpoint is not platform pilot or release acceptance.

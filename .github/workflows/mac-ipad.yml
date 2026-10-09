@@ -108,6 +108,12 @@ jobs:
           node -e "const { version } = require('playwright/package.json'); if (version !== '1.63.0') throw new Error('Update browser image and lockfile together'); const fs = require('node:fs'); const { chromium, webkit } = require('playwright'); [chromium, webkit].forEach(engine => fs.accessSync(engine.executablePath()));"
       - name: Check bundled classroom and recovery flows in Chromium
         run: node --import tsx scripts/nativePilotSmoke.ts
+      - name: Check Markinator production and expanded acceptance
+        run: |
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          npm run test:marking:browser
+          npm run test:marking:category-recovery
+          npm run test:marking:acceptance
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/nativePilotSmoke.ts

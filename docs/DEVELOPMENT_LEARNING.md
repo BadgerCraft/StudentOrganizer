@@ -269,6 +269,22 @@ Inspected mainaa64da1b, coherent open PR17 merge/results records and PR19 latest
 
 Rotate to DEV017, explained October5 and dueOctober6. Fresh prompt for Tyler's optional next response: “In your own words, describe what the native bridge does when StudentOrganizer opens Files, and how that relates to where its classroom records are stored.” Answer withheld for recall. No answer received; stage0/dueOctober6 unchanged. Do not repeat older unanswered branch/commit, checkout/CI, applicability, provisioning or central-receipt prompts. DEV018 remains dueOctober7. Optional deeper F007 support identity/acting teacher and receipt documentation remains available; no reading choice/defer or service approval invented. Results/continuation: docs/work-orders/RESULTS-2026-10-06.md. Learning does not block authorized work.
 
+### DEV-019 — Saving a draft versus reconciling changed categories
+
+- Date/source: October 7, 2026, America/Toronto; introduced during the approved Markinator category-recovery fix.
+- Explanation: a saved snapshot keeps the category definitions that the teacher actually used. Reconciliation is a separate, explicit decision about how those saved judgments relate to the assessment's current categories. Saving feedback must remain possible while that decision is unresolved.
+- StudentOrganizer example: replacing a T category no longer blocks a pending comment from being saved. The teacher reviews the pinned rubric and chooses whether to retain a compatible judgment or keep the original in recovery history. Both choices leave official marks unchanged. If storage fails, the app must say the pending edits are not saved; an attempted write is not evidence of recovery.
+- Evidence: fictional UI save/reconciliation failures, reload/reopen, unchanged existing official marks, and full-backup recovery tests. Browser results do not establish native storage readiness.
+- Prepared review question for Tyler's return: how does a saved category snapshot let feedback survive before the teacher has decided how to reconcile it?
+- Stage 0; no answer or demonstrated recall recorded. Next review October 8. The requested bounded batch finishes without a learning question or direction request blocking delivery.
+- October 7 expanded-acceptance follow-up: the same snapshot rule applies to an already finalized report. Browser testing reproduced a report download failure after an unassessed category was removed; export now reads the finalized session's saved category definitions through the authorized service. The report remains byte-for-byte identical after category removal and full backup/restore. A successful save followed by a failed UI confirmation was also retried without duplicating marks or audit records. Prior learning questions remain unanswered; no additional approval was required to verify or repair these existing workflows.
+
+### October 7 — independent integration review follow-through
+
+A stored score and completion status both affect the official calculation. Review reproduced 80% feedback/results with missing/excused status causing 0/exclusion; finalization now requires explicit status resolution rather than silently converting it. Original-file consistency means the saved DOCX actually produces the text being annotated, beyond each value having its own valid hash. Fresh 287 tests/build pass; updated UI acceptance remains pending CI. Prepared learning check: why can a saved 80% still fail to contribute 80% to the course grade? No answer or successful recall recorded.
+
+October7 native follow-through: actual Windows portable/installed and both Mac architectures' DMG/ZIP Markinator core workflows passed at5443e15. The test initially observed a still-mounted previous-student document during navigation; waiting for expected text, draft state and enabled controls distinguished rendering readiness from DOM presence. No production delay was introduced. iOS compilation passed but actual iPad interaction remains unverified. Prepared review check: why does a visible document node alone fail to prove a student switch is finished? No answer/recall inferred.
+
 ## October 8 — database changes and verification scope
 
 Actual Tyler reply: “Okay cool, so making changes to the shipped database is always a careful decision and ensuring that the tests do enough to ensure user satisfaction is important.” He then asked how to remove repeated authorization for routine verification/publication and instructed “continue”.

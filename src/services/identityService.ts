@@ -14,6 +14,21 @@ const STORAGE_DEVICE_ID_KEY = 'ontario_teacher_device_id';
 
 let inMemoryActiveUserId: UUID | null = null;
 let inMemoryDeviceId: UUID | null = null;
+let identityEpoch = 0;
+const identityListeners = new Set<() => void>();
+
+/** A stale asynchronous task cannot regain authority after switching away and back. */
+export function getIdentityEpoch(): number { return identityEpoch; }
+export function subscribeIdentityChange(listener: () => void): () => void {
+  identityListeners.add(listener);
+  return () => { identityListeners.delete(listener); };
+}
+function invalidateIdentity(): void {
+  identityEpoch++;
+  for (const listener of identityListeners) {
+    try { listener(); } catch { /* An observer must not prevent revocation. */ }
+  }
+}
 
 /**
  * Resolves the active teacher identity strictly from the current session:
@@ -76,6 +91,7 @@ export function setActiveTeacherId(userId: UUID): void {
       localStorage.removeItem(STORAGE_ACTIVE_USER_KEY);
     }
   } catch (_) {}
+  invalidateIdentity();
 }
 
 /**
@@ -105,6 +121,7 @@ export function clearActiveTeacherId(): void {
       localStorage.removeItem(STORAGE_ACTIVE_USER_KEY);
     }
   } catch (_) {}
+  invalidateIdentity();
 }
 
 /**

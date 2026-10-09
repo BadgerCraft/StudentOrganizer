@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { MarkingRubric, MarkingAttempt, MarkingSession, MarkingCommit } from '../marking/types';
 import type {
   Organization,
   User,
@@ -79,6 +80,11 @@ export class OntarioTeacherDB extends Dexie {
   auditEntries!: Table<AuditEntry, string>;
   syncMutations!: Table<SyncMutation, string>;
   syncCursors!: Table<SyncCursor, string>;
+
+  markingRubrics!: Table<MarkingRubric, string>;
+  markingAttempts!: Table<MarkingAttempt, string>;
+  markingSessions!: Table<MarkingSession, string>;
+  markingCommits!: Table<MarkingCommit, string>;
 
   constructor(databaseName = 'OntarioTeacherAssessmentDB') {
     super(databaseName);
@@ -360,6 +366,13 @@ export class OntarioTeacherDB extends Dexie {
       for (let i = 0; i < rebuiltSummaries.length; i += CHUNK_SIZE) {
         await tx.table('participationDailySummaries').bulkAdd(rebuiltSummaries.slice(i, i + CHUNK_SIZE));
       }
+    });
+    // Additive: existing records and all v1–v3 recovery paths remain intact.
+    this.version(4).stores({
+      markingRubrics: 'id, assessmentId, classSectionId, createdBy, deletedAt',
+      markingAttempts: 'id, assessmentId, classSectionId, classEnrollmentId, rubricId, previousAttemptId, createdBy, deletedAt',
+      markingSessions: 'id, assessmentId, attemptId, rubricId, createdBy, status, &[attemptId+createdBy+revision], deletedAt',
+      markingCommits: 'id, assessmentId, &sessionId, attemptId, studentAssessmentId, createdBy, deletedAt'
     });
   }
 }

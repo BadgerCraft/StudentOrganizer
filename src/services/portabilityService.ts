@@ -1,3 +1,4 @@
+import { normalizeLegacyMarkingTables, validateMarkingBackup, validateMarkingBackupFiles } from '../marking/portabilityValidation';
 import { isLocalPhoto } from '../utils/localPhoto';
 import type { OntarioTeacherDB } from '../db/database';
 import { calculateOverallCourseGrade } from './calculationEngine';
@@ -801,14 +802,14 @@ export class PortabilityService {
   async createFullBackupJSON(): Promise<string> {
     const backup: Record<string, any> = {
       version: 2,
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       tables: {}
     };
 
-    for (const table of this.db.tables) {
-      backup.tables[table.name] = await table.toArray();
-    }
+    await this.db.transaction('r', this.db.tables, async () => {
+      for (const table of this.db.tables) backup.tables[table.name] = await table.toArray();
+    });
 
     return JSON.stringify(backup, null, 2);
   }
@@ -834,16 +835,20 @@ export class PortabilityService {
       throw new Error('Invalid backup file format: Root must be a JSON object.');
     }
 
-    // Require compatible schemaVersion (2 or 3)
-    if (typeof data.schemaVersion !== 'number' || data.schemaVersion < 2 || data.schemaVersion > 3) {
+    // v4 adds marking records; old v2/v3 backups migrate to empty additive tables.
+    if (!Number.isInteger(data.schemaVersion) || data.schemaVersion < 2 || data.schemaVersion > 4) {
       throw new Error(
-        `Invalid backup file: Unsupported or missing schemaVersion (${data.schemaVersion}). Supported versions are 2 and 3.`
+        `Invalid backup file: Unsupported or missing schemaVersion (${data.schemaVersion}). Supported versions are 2, 3 and 4.`
       );
     }
 
     if (!data.tables || typeof data.tables !== 'object' || Array.isArray(data.tables)) {
       throw new Error('Invalid backup file format: Missing "tables" dictionary.');
     }
+
+    normalizeLegacyMarkingTables(data.tables, data.schemaVersion);
+    const knownTables = new Set(this.db.tables.map(t => t.name));
+    for (const name of Object.keys(data.tables)) if (!knownTables.has(name)) throw new Error(`Invalid backup file: Unknown table ${name}.`);
 
     // Require complete backup: EVERY database table must be present as an array
     for (const table of this.db.tables) {
@@ -1348,6 +1353,8 @@ export class PortabilityService {
       }
     }
 
+    validateMarkingBackup(data.tables);
+
     return {
       version: typeof data.version === 'number' ? data.version : 1,
       exportedAt: data.exportedAt || new Date().toISOString(),
@@ -1365,6 +1372,8 @@ export class PortabilityService {
     // 1. Pre-validation: halts before modifying or clearing any table
     const metadata = this.validateBackupJSON(jsonString);
     const data = JSON.parse(jsonString);
+    normalizeLegacyMarkingTables(data.tables, data.schemaVersion);
+    await validateMarkingBackupFiles(data.tables);
 
     // 2. Backfill legacy participationEventTypes
     if (Array.isArray(data.tables.participationEventTypes)) {

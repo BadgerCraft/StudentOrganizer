@@ -39,6 +39,7 @@ interface MarkbookViewProps {
   userId?: UUID;
   deviceId?: UUID;
   onOpenStudentProfile: (enrollmentId: UUID) => void;
+  onOpenMarking?: (assessmentId: string, enrollmentId: string) => void;
   onRefresh: () => void;
 }
 
@@ -56,7 +57,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   userId,
   deviceId,
   onOpenStudentProfile,
-  onRefresh
+  onRefresh,
+  onOpenMarking
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'summative' | 'formative'>('all');
@@ -504,6 +506,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                       return (
                         <td
                           key={`${assessment.id}-${category.id}`}
+                          data-testid={`markbook-cell-${enr.id}-${category.id}`}
                           onClick={() => handleCellClick(enr.id, assessment, category, `${std.preferredName || std.firstName} ${std.lastName}`)}
                           className="px-3 py-2 text-center border-r border-slate-200 hover:bg-blue-100/40 cursor-pointer transition select-none group"
                         >
@@ -677,6 +680,12 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                 </div>
               </div>
 
+              <div className="rounded-lg bg-blue-50 p-3 text-sm">
+                <p className="font-semibold">Official assessment feedback</p>
+                <p className="whitespace-pre-wrap">{studentAssessments.find(sa => sa.assessmentId === activeCell.assessmentId && sa.classEnrollmentId === activeCell.enrollmentId && sa.deletedAt === null)?.overallFeedback || 'No overall assessment feedback saved.'}</p>
+                <button type="button" className="mt-2 text-blue-700 underline" onClick={() => { onOpenMarking?.(activeCell.assessmentId, activeCell.enrollmentId); setActiveCell(null); }}>Open marking and feedback</button>
+                <p className="mt-1 text-xs">Marking owns draft feedback. Finalizing replaces official feedback after checking for newer manual changes.</p>
+              </div>
               {/* Feedback Note */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
