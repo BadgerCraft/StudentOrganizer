@@ -1,5 +1,10 @@
 # Daily development workflow
 
+## Current check-in destination — October 9, 2026
+
+Tyler deleted Daily checkins and explicitly designated its replacement chat as the new scheduled coordination conversation. Daily 08:15 and 16:00 America/Toronto replacement schedules were created and independently read back bound to that chat, starting October 10. Old morning/afternoon schedules are disabled; evening continuation stays paused. This supersedes historical schedule-unavailable/destination statements below. Preserve actual approvals and read current FEATURE_QUEUE.md plus live PR evidence; PR19/PR20 are already merged. A scheduled run's checkout/tools and automatic execution remain unverified until observed. Current recovery owner and evidence: docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md and the queue's current recovery checkpoint.
+
+
 ## Approval must lead to execution — October 9, 2026
 
 Tyler explicitly requested a concrete handoff after approval: “Good, you approved what needed to be done. Now paste this to Codex.”
