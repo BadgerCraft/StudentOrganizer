@@ -104,6 +104,68 @@ async function download(app: ElectronApplication, trigger: () => Promise<void>, 
   }
 }
 
+/** Observe the real status invocation without changing its event, arguments or result. */
+async function observeStatusBoundary(app: ElectronApplication) {
+  await app.evaluate(({ ipcMain, BrowserWindow }) => {
+    const handlers = (ipcMain as any)._invokeHandlers;
+    const original = handlers?.get?.('installer-update:status');
+    if (typeof original !== 'function' || typeof handlers?.set !== 'function') return;
+    (globalThis as any).__upgradeStatusCalls = [];
+    handlers.set('installer-update:status', (event: any, ...args: any[]) => {
+      const frame = event.senderFrame;
+      const sender = event.sender;
+      const windows = BrowserWindow.getAllWindows();
+      const calls = (globalThis as any).__upgradeStatusCalls as any[];
+      calls.push({
+        argLength: args.length, senderId: sender?.id,
+        senderFrameRoutingId: frame?.routingId, senderFrameProcessId: frame?.processId,
+        senderFrameURL: frame?.url, senderFrameIsMainFrame: frame === sender?.mainFrame,
+        ownerWindowIds: windows.filter(window => window.webContents === sender).map(window => window.id),
+        windowWebContentsIds: windows.map(window => ({ windowId: window.id, webContentsId: window.webContents.id }))
+      });
+      if (calls.length > 3) calls.shift();
+      return original(event, ...args);
+    });
+  });
+}
+
+/** Read-only diagnostics in the disposable main process; never relaxes IPC authorization. */
+async function boundaryDiagnostics(app: ElectronApplication, page: Page) {
+  const main = await app.evaluate(({ app, BrowserWindow }) => {
+    const path = (process as any).getBuiltinModule('path');
+    const fs = (process as any).getBuiltinModule('fs');
+    const { pathToFileURL, fileURLToPath } = (process as any).getBuiltinModule('url');
+    const index = path.join(app.getAppPath(), 'dist', 'index.html');
+    const canonical = (file: string) => {
+      try { return fs.realpathSync.native(file); } catch (error) { return String(error); }
+    };
+    const expected = pathToFileURL(index).href;
+    return {
+      appPath: app.getAppPath(), exePath: app.getPath('exe'), userData: app.getPath('userData'),
+      expectedIndexURL: expected, expectedCanonicalFile: canonical(index),
+      statusCalls: (globalThis as any).__upgradeStatusCalls || [],
+      windows: BrowserWindow.getAllWindows().map(window => {
+        const contents = window.webContents;
+        const frame = contents.mainFrame;
+        const withoutHash = frame.url.split('#')[0];
+        let frameFile = '';
+        try { frameFile = fileURLToPath(withoutHash); } catch { /* Record the URL without coercion. */ }
+        return {
+          windowId: window.id, webContentsId: contents.id, webContentsURL: contents.getURL(),
+          mainFrameURL: frame.url, mainFrameRoutingId: frame.routingId, mainFrameProcessId: frame.processId,
+          mainFrameHasParent: frame.parent !== null, exactExpectedURL: withoutHash === expected,
+          mainFrameFile: frameFile, mainFrameCanonicalFile: frameFile ? canonical(frameFile) : '',
+          destroyed: contents.isDestroyed()
+        };
+      })
+    };
+  });
+  const renderer = await page.evaluate(() => ({ href: location.href, origin: location.origin,
+    isTopFrame: window === window.top, bridgePlatform: window.desktopUpdates?.platform,
+    bridgeMethods: Object.keys(window.desktopUpdates || {}) })).catch(error => ({ error: String(error) }));
+  return { main, renderer };
+}
+
 async function configureFixtureFeed(app: ElectronApplication, feed: string) {
   return app.evaluate(({ app }, url) => {
       const { createRequire } = (process as any).getBuiltinModule('module');
@@ -214,7 +276,10 @@ async function main() {
     await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
     let updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
-    await state(running.page); // Initializes installed updater without network.
+    await observeStatusBoundary(running.app);
+    const initialBoundary = await boundaryDiagnostics(running.app, running.page);
+    fs.writeFileSync(path.join(evidenceDir, 'initial-ipc-boundary.json'), JSON.stringify(initialBoundary, null, 2) + '\n');
+    await state(running.page); // Reads installed updater state without network.
     const metadata = await configureFixtureFeed(running.app, feed);
     assert.deepEqual(metadata, { autoDownload: false, autoInstallOnAppQuit: false });
     assert.equal(requests.length, 0, 'Startup/opening settings must not check or download');
@@ -321,6 +386,11 @@ async function main() {
     fs.writeFileSync(path.join(evidenceDir, 'upgrade-results.json'), JSON.stringify({ versions, installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])), reopened, profilePreserved: true, tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), checks: ['actual installed A', 'production Settings/preload/IPC check-download-install', 'no startup/quit-time automatic download/install', 'real corrupted-byte checksum rejection and retry', 'real download cancellation and retry', 'unsaved Settings install guard and safe Later deferral', 'explicit unsigned approval', 'actual safety backup before quit', 'real pending-update ordinary quit/restart leaves A unchanged', 'real NSIS A-to-B replacement', 'actual automatic visible B reopen', 'identical all-table data and marking report after upgrade', 'second B restart preservation'], requests, requestHeaders, metadataRequests, checksumErrors: errors, marking }, null, 2) + '\n');
     console.log('PASS: Real installed A upgraded through production IPC/download/hash/signature/backup/NSIS installer to B, automatically reopened, and preserved every record, original, rubric, pending feedback, official mark and report across another restart; corrupt/cancel/retry paths also passed.');
   } catch (error) {
+    if (running) {
+      const boundary = await boundaryDiagnostics(running.app, running.page).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
+      fs.writeFileSync(path.join(evidenceDir, 'failed-ipc-boundary.json'), JSON.stringify(boundary, null, 2) + '\n');
+      console.error('UPGRADE IPC BOUNDARY:', JSON.stringify(boundary));
+    }
     await running?.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
     fs.writeFileSync(path.join(evidenceDir, 'failure.json'), JSON.stringify({ error: String(error), requests, versions, marking }, null, 2));
     throw error;
