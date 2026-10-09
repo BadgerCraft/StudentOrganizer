@@ -13,7 +13,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -36,6 +36,12 @@ jobs:
         run: npx tsx src/benchmarks/assessmentDesktopSmoke.ts
       - name: Check local resource policy and authorized profile save
         run: npx tsx src/benchmarks/securityDesktopSmoke.ts
+      - name: Build isolated stable A and B installers for replacement acceptance
+        run: |
+          npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-A --config.extraMetadata.version=1.0.1
+          npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-B --config.extraMetadata.version=1.0.2
+      - name: Test production download, backup, installer replacement and reopen
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts
       - name: Record checksums and Windows publisher status
         shell: pwsh
         run: |
@@ -58,6 +64,8 @@ jobs:
           name: OntarioTeacherAssessment-Windows-${{ env.QA_VERSION }}
           path: |
             release/*.exe
+            release/*.yml
+            release/*.blockmap
             release/qa-build.json
             release/windows-files.json
             release/SHA256SUMS.txt
