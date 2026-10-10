@@ -216,18 +216,72 @@ async function configureFixtureFeed(app: ElectronApplication, feed: string) {
   }, feed);
 }
 
+const canonicalPaths = new Map<string, string>();
+function canonicalExecutable(executable: string) {
+  const saved = canonicalPaths.get(executable);
+  if (saved) return saved;
+  try { const value = fs.realpathSync.native(executable); canonicalPaths.set(executable, value); return value; }
+  catch {
+    try { return path.join(fs.realpathSync.native(path.dirname(executable)), path.basename(executable)); }
+    catch { return path.resolve(executable); }
+  }
+}
+function writeEvidence(name: string, value: unknown) {
+  try { fs.writeFileSync(path.join(evidenceDir, name), JSON.stringify(value, null, 2) + '\n'); }
+  catch (error) { console.warn(`Evidence write failed (${name}): ${String(error)}`); }
+}
+function cleanupDirectory(directory: string) {
+  try { fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); }
+  catch (error) {
+    const warning = { directory, error: String(error) };
+    writeEvidence('cleanup-warning.json', warning);
+    console.warn('UPGRADE CLEANUP WARNING:', JSON.stringify(warning));
+  }
+}
+async function windowsPowerShell(script: string, values: Record<string, string>) {
+  // GitHub starts commands in PowerShell 7; these helpers deliberately run
+  // Windows PowerShell 5 with matching built-in modules, including CimCmdlets.
+  const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+  const executable = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'));
+  const result = await execFileAsync(executable, ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; " + script], {
+    timeout: 15000, maxBuffer: 65536, env: { ...environment, ...values,
+      PSModulePath: path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules') }
+  });
+  if (result.stderr.trim()) throw new Error(`Native PowerShell helper failed: ${result.stderr.slice(0, 2000)}`);
+  return result;
+}
+
+async function nativeInstallDiagnostics(executable: string) {
+  const script = `$target=$env:OTA_UPGRADE_EXECUTABLE
+    $fileVersion=$null
+    if (Test-Path -LiteralPath $target) { $fileVersion=(Get-Item -LiteralPath $target).VersionInfo.ProductVersion }
+    $rows=@(Get-CimInstance Win32_Process | Where-Object {
+      $_.Name -like 'OntarioTeacherAssessment*' -or $_.Name -eq 'Ontario Teacher Assessment.exe' -or
+      $_.CommandLine -like ('*' + $env:OTA_UPGRADE_DIRECTORY + '*')
+    } | Select-Object -First 20 | ForEach-Object {
+      $p=Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+      $v=$null
+      if ($_.ExecutablePath -and (Test-Path -LiteralPath $_.ExecutablePath)) { $v=(Get-Item -LiteralPath $_.ExecutablePath).VersionInfo.ProductVersion }
+      [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; name=$_.Name; path=$_.ExecutablePath;
+        commandLine=$_.CommandLine; version=$v; title=$p.MainWindowTitle; matchesExpected=($_.ExecutablePath -eq $target) }
+    })
+    [pscustomobject]@{ expectedExecutable=$target; installedFileVersion=$fileVersion; processes=$rows } | ConvertTo-Json -Depth 5 -Compress`;
+  const result = await windowsPowerShell(script, { OTA_UPGRADE_EXECUTABLE: canonicalExecutable(executable), OTA_UPGRADE_DIRECTORY: path.dirname(canonicalExecutable(executable)) });
+  return { time: new Date().toISOString(), rawExecutable: executable, ...JSON.parse(result.stdout.trim()) };
+}
 async function installedProcess(executable: string) {
   // Values are passed in an environment variable, never interpolated as code.
   const script = `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE -and $_.CommandLine -notmatch '--type=' } | ForEach-Object {
     $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
     [pscustomobject]@{ pid = $_.ProcessId; path = $_.ExecutablePath; version = (Get-Item $_.ExecutablePath).VersionInfo.ProductVersion; title = $p.MainWindowTitle }
   } | ConvertTo-Json -Compress`;
-  const result = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, OTA_UPGRADE_EXECUTABLE: executable } });
+  const result = await windowsPowerShell(script, { OTA_UPGRADE_EXECUTABLE: canonicalExecutable(executable) });
   const parsed = result.stdout.trim() ? JSON.parse(result.stdout.trim()) : [];
   return (Array.isArray(parsed) ? parsed : [parsed]) as { pid: number; path: string; version: string; title: string }[];
 }
 async function closeRelaunched(pid: number) {
-  await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$p=Get-Process -Id $env:OTA_UPGRADE_PID -ErrorAction Stop; if (-not $p.CloseMainWindow()) { throw "Reopened app has no closable visible window" }; $p.WaitForExit(30000); if (-not $p.HasExited) { throw "Reopened app did not close" }'], { env: { ...process.env, OTA_UPGRADE_PID: String(pid) } });
+  await windowsPowerShell('$p=Get-Process -Id $env:OTA_UPGRADE_PID -ErrorAction Stop; if (-not $p.CloseMainWindow()) { throw "Reopened app has no closable visible window" }; $p.WaitForExit(10000); if (-not $p.HasExited) { throw "Reopened app did not close" }', { OTA_UPGRADE_PID: String(pid) });
 }
 
 async function main() {
@@ -268,7 +322,7 @@ async function main() {
       console.log('PASS: Real installed QA binary authorizes only its owned main-frame status IPC.');
     } catch (error) {
       if (launched) {
-        const diagnostic = await boundaryDiagnostics(launched.app, launched.page);
+        const diagnostic = await boundaryDiagnostics(launched.app, launched.page).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
         fs.writeFileSync(path.join(evidenceDir, 'installed-ipc-failure.json'), JSON.stringify(diagnostic, null, 2));
         console.error('INSTALLED IPC BOUNDARY:', JSON.stringify(diagnostic));
       }
@@ -276,7 +330,7 @@ async function main() {
     } finally {
       await launched?.app.close().catch(() => {});
       killOwned(setup);
-      fs.rmSync(directory, { recursive: true, force: true });
+      cleanupDirectory(directory);
     }
     return;
   }
@@ -325,10 +379,12 @@ async function main() {
   let running: Awaited<ReturnType<typeof launchInstalled>> | undefined;
   let setup: ChildProcess | undefined;
   let marking: MarkingDesktopEvidence | undefined;
+  const installTimeline: unknown[] = [];
   try {
     setup = spawn(installers.A, ['/S', '/currentuser', `/D=${installDir}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
     await waitForExit(setup, 120000);
     assert.ok(fs.existsSync(executable));
+    canonicalExecutable(executable); // Cache while A exists; replacement may temporarily remove this file.
     assert.ok(fs.existsSync(path.join(installDir, 'Uninstall Ontario Teacher Assessment.exe')), 'Actual NSIS installed identity required');
     running = await launchInstalled(executable, versions.A);
     await openHub(running.page);
@@ -415,11 +471,26 @@ async function main() {
     assert.equal(await confirm.isEnabled(), true);
     assert.deepEqual(await snapshotAll(running.page), before, 'Opening installation confirmation must not modify classroom records');
     const exit = new Promise<void>(resolve => running!.app.process().once('exit', () => resolve()));
+    installTimeline.push({ phase: 'before-confirm', ...await nativeInstallDiagnostics(executable).catch(error => ({ diagnosticError: String(error) })) });
+    writeEvidence('install-timeline.json', installTimeline);
     await confirm.click();
     await Promise.race([exit, delay(60000).then(() => { throw new Error('Production updater did not close A'); })]);
+    installTimeline.push({ phase: 'A-exited', exitCode: running.app.process().exitCode, signalCode: running.app.process().signalCode,
+      ...await nativeInstallDiagnostics(executable).catch(error => ({ diagnosticError: String(error) })) });
+    writeEvidence('install-timeline.json', installTimeline);
     assert.deepEqual(running.errors, []);
     // Observe a genuinely installer-reopened B, before any instrumented relaunch.
-    const reopened = await waitUntil(async () => (await installedProcess(executable)).find(row => row.pid !== processA && row.version.startsWith(versions.B) && row.title.includes('Ontario Teacher Assessment')), 'installer replacement and automatic visible B reopen', 120000);
+    let nextNativeSample = 0;
+    const reopened = await waitUntil(async () => {
+      const processes = await installedProcess(executable);
+      if (Date.now() >= nextNativeSample) {
+        installTimeline.push({ phase: 'waiting-for-B', ...await nativeInstallDiagnostics(executable).catch(error => ({ diagnosticError: String(error) })) });
+        writeEvidence('install-timeline.json', installTimeline);
+        nextNativeSample = Date.now() + 8000;
+      }
+      return processes.find(row => row.pid !== processA && row.version.startsWith(versions.B) && row.title.includes('Ontario Teacher Assessment'));
+    }, 'installer replacement and automatic visible B reopen', 120000);
+    writeEvidence('reopened-process.json', reopened);
     await closeRelaunched(reopened.pid);
     running = undefined;
     running = await launchInstalled(executable, versions.B);
@@ -446,15 +517,22 @@ async function main() {
     fs.writeFileSync(path.join(evidenceDir, 'upgrade-results.json'), JSON.stringify({ versions, installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])), reopened, profilePreserved: true, tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), checks: ['actual installed A', 'production Settings/preload/IPC check-download-install', 'no startup/quit-time automatic download/install', 'real corrupted-byte checksum rejection and retry', 'real download cancellation and retry', 'unsaved Settings install guard and safe Later deferral', 'explicit unsigned approval', 'actual safety backup before quit', 'real pending-update ordinary quit/restart leaves A unchanged', 'real NSIS A-to-B replacement', 'actual automatic visible B reopen', 'identical all-table data and marking report after upgrade', 'second B restart preservation'], requests, requestHeaders, metadataRequests, checksumErrors: errors, marking }, null, 2) + '\n');
     console.log('PASS: Real installed A upgraded through production IPC/download/hash/signature/backup/NSIS installer to B, automatically reopened, and preserved every record, original, rubric, pending feedback, official mark and report across another restart; corrupt/cancel/retry paths also passed.');
   } catch (error) {
+    // Save the primary error before touching a possibly installer-closed app.
+    writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined, requests, versions, marking });
+    console.error('UPGRADE PRIMARY FAILURE:', error);
+    const native = await nativeInstallDiagnostics(executable).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
+    writeEvidence('failed-native-install.json', native);
+    console.error('UPGRADE NATIVE INSTALL:', JSON.stringify(native));
     if (running) {
       const boundary = await boundaryDiagnostics(running.app, running.page).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
-      fs.writeFileSync(path.join(evidenceDir, 'failed-ipc-boundary.json'), JSON.stringify(boundary, null, 2) + '\n');
+      writeEvidence('failed-ipc-boundary.json', boundary);
       console.error('UPGRADE IPC BOUNDARY:', JSON.stringify(boundary));
-      const verification = await running.app.evaluate(() => ({ errors: (globalThis as any).__upgradeErrors || [], downloaded: (globalThis as any).__upgradeDownloaded || [] }));
+      const verification = await running.app.evaluate(() => ({ errors: (globalThis as any).__upgradeErrors || [], downloaded: (globalThis as any).__upgradeDownloaded || [] }))
+        .catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
+      writeEvidence('failed-verification.json', verification);
       console.error('UPGRADE VERIFICATION:', JSON.stringify(verification));
     }
     await running?.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
-    fs.writeFileSync(path.join(evidenceDir, 'failure.json'), JSON.stringify({ error: String(error), requests, versions, marking }, null, 2));
     throw error;
   } finally {
     await running?.app.close().catch(() => {});
@@ -462,8 +540,9 @@ async function main() {
     for (const process of await installedProcess(executable).catch(() => [])) {
       try { execFileSync('taskkill', ['/PID', String(process.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* Already closed. */ }
     }
+    server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
-    fs.rmSync(installDir, { recursive: true, force: true });
+    cleanupDirectory(installDir);
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
