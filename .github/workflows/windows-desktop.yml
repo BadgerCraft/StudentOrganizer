@@ -30,6 +30,8 @@ jobs:
         run: node scripts/prepare-qa-build.cjs
       - name: Build Windows installer and portable app
         run: npm run package:win -- --publish never "--config.extraMetadata.version=$env:QA_VERSION"
+      - name: Check actual installed update IPC boundary before replacement builds
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts --ipc-boundary-only
       - name: Test actual portable and installed apps
         run: npx tsx src/benchmarks/windowsPackagesSmoke.ts
       - name: Check assessment creation in packaged app

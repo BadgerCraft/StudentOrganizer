@@ -136,13 +136,12 @@ async function boundaryDiagnostics(app: ElectronApplication, page: Page) {
     const fs = (process as any).getBuiltinModule('fs');
     const { pathToFileURL, fileURLToPath } = (process as any).getBuiltinModule('url');
     const index = path.join(app.getAppPath(), 'dist', 'index.html');
-    const canonical = (file: string) => {
-      try { return fs.realpathSync.native(file); } catch (error) { return String(error); }
-    };
+    let expectedCanonicalFile = '';
+    try { expectedCanonicalFile = fs.realpathSync.native(index); } catch (error) { expectedCanonicalFile = String(error); }
     const expected = pathToFileURL(index).href;
     return {
       appPath: app.getAppPath(), exePath: app.getPath('exe'), userData: app.getPath('userData'),
-      expectedIndexURL: expected, expectedCanonicalFile: canonical(index),
+      expectedIndexURL: expected, expectedCanonicalFile,
       statusCalls: (globalThis as any).__upgradeStatusCalls || [],
       windows: BrowserWindow.getAllWindows().map(window => {
         const contents = window.webContents;
@@ -150,11 +149,15 @@ async function boundaryDiagnostics(app: ElectronApplication, page: Page) {
         const withoutHash = frame.url.split('#')[0];
         let frameFile = '';
         try { frameFile = fileURLToPath(withoutHash); } catch { /* Record the URL without coercion. */ }
+        let frameCanonicalFile = '';
+        if (frameFile) {
+          try { frameCanonicalFile = fs.realpathSync.native(frameFile); } catch (error) { frameCanonicalFile = String(error); }
+        }
         return {
           windowId: window.id, webContentsId: contents.id, webContentsURL: contents.getURL(),
           mainFrameURL: frame.url, mainFrameRoutingId: frame.routingId, mainFrameProcessId: frame.processId,
           mainFrameHasParent: frame.parent !== null, exactExpectedURL: withoutHash === expected,
-          mainFrameFile: frameFile, mainFrameCanonicalFile: frameFile ? canonical(frameFile) : '',
+          mainFrameFile: frameFile, mainFrameCanonicalFile: frameCanonicalFile,
           destroyed: contents.isDestroyed()
         };
       })
@@ -220,6 +223,41 @@ async function main() {
     throw new Error('Real installer replacement may run only on a disposable Windows GitHub Actions runner.');
   }
   fs.mkdirSync(evidenceDir, { recursive: true });
+  // Fail early on an installed IPC boundary problem, before building the A/B
+  // pair. This also verifies the released QA installer exposes real status IPC.
+  if (process.argv.includes('--ipc-boundary-only')) {
+    const installer = fs.readdirSync('release').filter(name => name.endsWith('-nsis.exe'));
+    assert.equal(installer.length, 1);
+    const expectedVersion = process.env.QA_VERSION;
+    assert.ok(expectedVersion);
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fictional-ota-boundary-'));
+    let launched: Awaited<ReturnType<typeof launchInstalled>> | undefined;
+    const setup = spawn(path.resolve('release', installer[0]), ['/S', '/currentuser', `/D=${directory}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
+    try {
+      await waitForExit(setup, 120000);
+      launched = await launchInstalled(path.join(directory, 'Ontario Teacher Assessment.exe'), expectedVersion);
+      await observeStatusBoundary(launched.app);
+      const before = await boundaryDiagnostics(launched.app, launched.page);
+      fs.writeFileSync(path.join(evidenceDir, 'installed-ipc-before.json'), JSON.stringify(before, null, 2));
+      const actual = await state(launched.page);
+      assert.equal(actual.installationAvailable, true);
+      const after = await boundaryDiagnostics(launched.app, launched.page);
+      fs.writeFileSync(path.join(evidenceDir, 'installed-ipc-after.json'), JSON.stringify(after, null, 2));
+      console.log('PASS: Real installed QA binary authorizes only its owned main-frame status IPC.');
+    } catch (error) {
+      if (launched) {
+        const diagnostic = await boundaryDiagnostics(launched.app, launched.page);
+        fs.writeFileSync(path.join(evidenceDir, 'installed-ipc-failure.json'), JSON.stringify(diagnostic, null, 2));
+        console.error('INSTALLED IPC BOUNDARY:', JSON.stringify(diagnostic));
+      }
+      throw error;
+    } finally {
+      await launched?.app.close().catch(() => {});
+      killOwned(setup);
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+    return;
+  }
   const installers = Object.fromEntries(Object.entries(versions).map(([key, version]) => {
     const directory = path.resolve(`release/upgrade-${key}`);
     const names = fs.readdirSync(directory).filter(name => name.endsWith('-nsis.exe'));
