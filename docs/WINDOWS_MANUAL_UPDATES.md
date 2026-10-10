@@ -12,7 +12,7 @@ All Mac/browser regression jobs are now green: unchanged Intel retry job11421116
 
 Deployment is still separate: current installers are NotSigned/publisher null, checksum integrity is not publisher identity, and no stable release/latest.yml was published. Existing copies need one manual bootstrap installation of the updater-enabled version. Public unsigned delivery, app-specific trusted signing, physical/managed Windows/UAC, post-launch interruption recovery and future-schema compatibility remain unverified/reserved. No spending, account/license/service adoption, main merge, public release or real-student use occurred. Store work below is dormant until Tyler chooses it or a free trusted-publisher route is needed.
 
-The earlier native failures are traceable in the current queue: bundled file URL tilde representation, incompatible inherited PowerShell modules, and canonical native process observation were repaired without weakening sender/signature/actual-reopen assertions. Shared UPD-003/UPD-004 lessons are saved in indexv9/desktop-updatesv3; source work record remains on PR22.
+The earlier native failures are traceable in the current queue: bundled file URL tilde representation, incompatible inherited PowerShell modules, and canonical native process observation were repaired without weakening sender/signature/actual-reopen assertions. Shared UPD-003/UPD-004/UPD-005 and PKG-004 lessons are saved in indexv10/desktop-updatesv4/packagingv3 at d74a6e6, including actual replacement/reopen and preserved-data evidence; source work record remains on PR22.
 
 ## Privacy verification — October 9, 2026
 
