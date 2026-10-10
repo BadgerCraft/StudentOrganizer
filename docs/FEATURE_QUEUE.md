@@ -2,7 +2,7 @@
 
 Updated: October 10, 2026, America/Toronto. Owner: Tyler; coordinating agent maintains this record.
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
-Canonical planning is on main after merged PR19 at `a1d985ea2e7597cf86b119eec0d925370097f883`. PR17 closed unmerged as superseded; its source/history remain. Refresh actual PR20 head/check/merge state before acting.
+Main remains b9a8790 after completed PR19/PR20 merges. The latest authoritative recovery/installer status is on open PR21 (codex/checkin-recovery-20261009) until its documentation is merged. PR17 is closed unmerged as superseded; never revive it.
 
 ## Installer implementation is current priority — October 9, 19:29 Toronto
 
@@ -14,7 +14,7 @@ Implementation owns a complete39-table validated backup saved/read back before r
 
 [Updater PR22](https://github.com/BadgerCraft/StudentOrganizer/pull/22) at c6eebf7fe2567d0183b42b0d61389eab349a2b40 now has actual full Windows acceptance PASS: [run38009698834](https://github.com/BadgerCraft/StudentOrganizer/actions/runs/38009698834), job114086591336, completed October10 00:42UTC (October9 20:42Toronto). It passed313 tests/33 files, production build, actual installed/portable/assessment/network checks and the complete production A1.0.1 -> B1.0.2 update path. Real corrupted bytes were rejected; real cancellation/retry passed; pending-download ordinary quit/restart left A unchanged; unsaved Settings blocked installation; Later retained the download and reset unsigned acknowledgement. Actual signature inspection, local safety backup, NSIS replacement and a genuinely automatic visible B reopen were observed before any instrumented relaunch. Every39-table record, original, rubric, official/pending feedback and report bytes matched after replacement and another B restart. QA artifact11652033786 contains upgrade-results.json/native timeline and the actual build; it is retained evidence, not a public release. The executable signatures are NotSigned/publisher null; checksum integrity does not establish trusted publisher identity.
 
-Regression run38009698857 passed Apple Silicon native and browser jobs; Intel Mac job114086591663 failed a student-seat-card visibility assertion after ZIP-app restart. Earlier app-identical Mac/browser38008976542 passed all3 jobs. Coordinator is examining the failed native screenshot and exact restart harness rather than treating the failed job as PASS. PR22 stays draft until this regression is resolved. No parallel writer was active when the October10 morning coordinator resumed; a bounded read-only Mac reviewer owns investigation while root owns integration/records. Source publication/review remains authorized; main merge and installer distribution remain reserved.
+All regression jobs in Mac/browser run38009698857 are now SUCCESS. Apple Silicon native and browser passed initially; unchanged Intel Mac retry job114211167253 passed313 tests/build and exact DMG/ZIP backup/recovery/restart at October10 12:23UTC (08:23Toronto). The original Intel ZIP restart seat-visibility failure is preserved as an intermittent observation: downloaded backup seats/student references were intact, no root cause or production fix is claimed. Follow-up on recurrence must capture persisted/index-query/renderer state without weakening seat assertions. PR22 is now READY FOR REVIEW; GitHub reports the source head mergeable/clean. No active writer was duplicated during morning recovery. Root inspected actual successful Windows artifact and bounded reviewer inspected the Intel failure. Shared measured lessons now indexv10/desktop-updatesv4/packagingv3 saved d74a6e6, including actual replacement acceptance. Main merge and installer distribution remain reserved.
 
 Earlier native failures are preserved below as historical evidence, not current blockers: Node's RUNNER%7E1 versus Chromium's RUNNER~1 caused owned-frame IPC denial; the guard now compares exact decoded local files while retaining sender/frame/protocol/host/query restrictions. Windows PowerShell signature inspection failed module autoload under inherited PowerShell7 PSModulePath; fixed matching system interpreter/modules fail closed and passed actual inspection. A later native observation used the raw short path and inherited module environment; canonical executable capture, strict helper failures and primary-error-safe diagnostics resolved it. See the retained prior run history and shared lessons UPD-003/UPD-004 (indexv9/desktop-updatesv3, saved2d0059e); no failure is retroactively relabelled successful.
 
@@ -35,6 +35,8 @@ Store/MSIX is **UNVERIFIED**: no package/configuration/identity exists yet. Curr
 
 ## Free-only delivery constraint — October 9, 18:05 Toronto
 
+Cost constraint remains current. The investigation order recorded below is historical and superseded by the 19:29 installer instruction; Store is dormant.
+
 Tyler: “Yeah I'm not paying for anything.” No paid signing, subscriptions, certificates, account fees or paid services. The earlier paid-Azure recommendation is rejected and must not be presented again as the default. Keep unsigned release/distribution on hold and the real old-to-new preservation requirements intact.
 
 Current free-route investigation: Microsoft documents free Store developer onboarding and Store signing for MSIX packages; this is the leading candidate, not adopted/published. Existing code has NSIS/portable only, no Store package identity/configuration and no migration acceptance. MSIX can redirect app-data access and uses Store-managed delivery/update behavior; evaluate both against legacy `%APPDATA%` records and Tyler's deliberate-click update requirement before an implementation proposal. Do not assume Store packaging automatically preserves existing records or an unsigned EXE becomes trusted outside the Store.
@@ -43,7 +45,7 @@ Alternative: SignPath Foundation free signing requires an OSI-approved open-sour
 
 Next authorized work is a free Store compatibility/migration/update-control plan; retain SignPath as an alternative with explicit eligibility/licensing limits. Once concrete, ask only for the actual distribution/account/licensing choice needed. No paid fallback without Tyler changing this constraint. Source and remaining acceptance: WINDOWS_MANUAL_UPDATES.md.
 
-## Current delivery priority — October 9, 17:53 Toronto
+## Historical delivery priority — October 9, 17:53 Toronto (superseded for implementation)
 
 Tyler declined moving straight to an unsigned pilot: “I think the unsigned feature needs to be figured out first. Further, it doesn't sound like the replacement when updating/installing is figured out.” **Hold QA release/distribution until publisher signing and actual old-to-new replacement are resolved.** This is authorization for investigation and a concrete delivery plan, not spending, account/service creation, or an approved automatic-installer implementation.
 
@@ -53,7 +55,7 @@ Next judgment: select direct signed Windows delivery (recommended Azure Artifact
 
 Next engineering proposal: preserve app identity and user-data path; establish signed first install and A-to-B replacement before adding user-clicked update installation. Verify backup, originals, rubric/feedback/marks/history and pending drafts, failed/cancelled updates and recovery. Installed NSIS is the proposed integrated-update path; portable replacement is a separate deliberate flow. No silent switch between them. See [Windows delivery plan](WINDOWS_MANUAL_UPDATES.md). No code, release or purchase is performed by this plan. Bug-receiver adoption remains separate and does not interrupt this priority.
 
-## Current recovery checkpoint — October 9, 17:10 Toronto
+## Historical recovery checkpoint — October 9, 17:10 Toronto
 
 Tyler deleted the Daily checkins conversation and instructed: “Make this the new one with scheduled checkins. Pick up where it left off.” The replacement coordination chat has two scheduler-confirmed, enabled daily check-ins, starting October 10: 08:15 morning batch and 16:00 results/learning, America/Toronto. Both were read back with the same current conversation binding before old schedule state was checked. Old morning/afternoon schedules are disabled; 20:15 continuation remains paused. Other usage-review schedules were unchanged. See [schedule migration record](work-orders/SCHEDULE-MIGRATION-2026-10-06.md). Scheduled execution/tool inheritance still needs an actual scheduled run.
 
@@ -120,13 +122,14 @@ Tyler asked for the explicit post-approval instruction “Good, you approved wha
 
 | Order / ID | Status and existing authority | Evidence / owner | Next action and dependency |
 | --- | --- | --- | --- |
-| 0 / Queue reconciliation and authorization continuity | Completed source merge; October9 “Yes, continue.” | PR19 merged a1d985e; PR17 closed superseded; coordinator | Canonical policy/queue on main. Replacement check-in schedules are confirmed October 9; actual scheduled execution/automatic launch/cross-agent continuation remains unverified. |
-| 2 / F-008 Markinator acceptance | Completed development merge; PR20 merged October 9 at 14:32:05 | main b9a8790; PR20 exact-source acceptance and merged-main Windows37973955991 SUCCESS | Prepare combined-app pilot delivery. Physical iPad/dialog/old-new installer upgrade remain unverified; release/distribution separate. Do not repeat merge. |
+| 0 / Queue reconciliation and authorization continuity | Completed PR19/PR20 merges; recovery docs ready in PR21 | Main b9a8790; PR17 closed superseded; root | First replacement morning used current GitHub records, usable checkout, bounded review, CI rerun and PR preparation; this proves this scheduled tool/work continuation, not universal automatic Cloud task dispatch. Recovery documentation main merge remains reserved. |
+| 1 / Windows installer updates | Development ready-for-review; implementation authorized October9 19:29 | PR22 c6eebf7; Windows38009698834 full A-to-B PASS; Mac/browser38009698857 all3 green on Intel retry | Reserved decision: merge source PR22, with recovery documentation PR21 reconciled against it. This does not install/release anything. Existing copies need one manual bootstrap; unsigned publisher, stable feed/public release and managed-device/interruption limits remain separate. |
+| 2 / F-008 Markinator acceptance | Completed development merge; PR20 merged October 9 at 14:32:05 | main b9a8790; PR20 exact-source acceptance and merged-main Windows37973955991 SUCCESS | Current per-user Windows NSIS old/new upgrade now passed in PR22; signed/public pilot delivery, physical iPad/dialog/managed-device and future-schema/interruption remain separate. Do not repeat PR20 merge. |
 | 3 / F-006 installed iPad | Blocked native interaction; preparation approved October 5 | PR18 merged aa64da1; native project, asset checks and unsigned SDK compile exist | Finish available matrix/documentation while device work is blocked. Actual simulator/physical Files, touch selection, background/resume, offline/storage, export and free-signing renewal require Mac/Xcode/device access. Browser or compilation results do not prove these. |
 | 4 / F-007 central bug receipt | Requested receiver adoption; local draft implementation completed | PR19 receiver decision packet; no deployed receiver or verified receipt | Reconcile actual dashboard/access and Tyler replies before repeating a decision. Prepare concrete bug-only receiver setup; adoption/support-sign-in/access remains unresolved in the records. Do not transmit classroom records or invent provider approval. |
 | 5 / UI QA remaining items | Requested / scoped review; only QA02/03 implementation was approved and merged | Ten-item table below; coordinator owns diagnosis/planning | Prepare a coherent next repair proposal from actual reproduction and teacher workflow risk. Keep all eight remaining requests visible; do not treat the seating approval as approval for unrelated features. |
 
-No production-code change in reconciliation. Coordinator owns this approved PR20 merge sequence; check actual source/writers before competing publication.
+PR19/PR20 merge sequence is complete. Root owns current installer/recovery review preparation; check actual heads/writers before publication. Source/recovery main merges and release stay reserved.
 
 ## Tyler’s October 5 UI findings
 
@@ -151,7 +154,8 @@ Source: direct conversation, fictional Windows QA; screenshot unavailable. Detai
 | --- | --- | --- |
 | F-002 Windows/Mac preparation | Completed within PR18 preparation scope, merged; actual generic package/restart checks passed | Colleague download, managed-device/publisher/Gatekeeper checks, release and real-student use are separate. Markinator-specific package acceptance stays F-008. |
 | Windows update lookup | Completed, tested and merged PR18; Tyler approved bottom-of-Settings, click-only check | No launch polling. Installed copy changes only after deliberate package delivery. |
-| Windows update installation | Blocked / unfinished; not delivered by lookup | Establish concrete trusted installer/publisher/channel and old/new record-preservation acceptance before download/install/reopen. Do not assume spending, unsigned release or executable installation approval. |
+| Windows update installation | Ready for review in PR22; actual current-schema NSIS replacement/reopen/data acceptance PASS | Merge decision reserved. Publish/bootstrap/stable GitHub delivery and trusted publisher remain separate; no paid or public unsigned route is adopted. |
+| QA-20261010-RESTART | Observed intermittent Intel ZIP restart seating visibility failure; unchanged retry passed | Preserve original run38009698857 failure and intact backup evidence. If repeated, capture actual postrestart tables/index queries/live renderer inputs; never weaken visible-seat acceptance or invent a production fix. |
 | F-004 Assessment Hub/Markbook | Requested | Incorporate QA06/08/09/10 into a concrete workflow plan; general assessment/category editing remains a gap. |
 | F-003 date/scale browser fixtures | Historical proposed follow-up; current reproduction unverified | Check actual current failures before scheduling; do not perpetuate a historical blocker after repaired fixtures. |
 | F-008-MODES | Requested October 7; future scope | After current integration: essay + rubric, oral checklist + rubric, rubric only, all linked to existing KTAC finalization. Prepare plan before implementation. |
@@ -159,7 +163,7 @@ Source: direct conversation, fictional Windows QA; screenshot unavailable. Detai
 | F-009 exemplar repository | Deliberately deferred by Tyler October 6 | Revisit after bug-report transfer works; deliberate selected essay/feedback sharing only. |
 | Marking extensions | Deliberately deferred by current work order | Full annotated-essay reports, file-based rubric input, PDF/OCR, legacy Markinator JSON, scratch marking. Revisit on concrete demand after core acceptance. |
 | Live sync/cloud backup, voice/AI, general redo, purge policy | Not implemented; no current implementation authorization | Keep as possibilities only; propose separate concrete scope if requested. |
-| WF-002 workflow reliability / automatic launch / schedule migration | Incomplete; separate workflow priority #1 remains in its workflow plan | October 9 replacement schedules and fresh-checkout recovery are observed. Actual scheduled execution/automatic Cloud launch remain unverified; verify the first replacement run. This recovery makes no global-memory/skill change. |
+| WF-002 workflow reliability / automatic launch / schedule migration | Partly verified: first replacement morning continued approved work October10 | Current GitHub/checkout/tool inheritance, CI retry, bounded review and ready PR are observed in this run. Universal scheduling continuity/automatic separate Cloud task dispatch remains unproved; evening continuation remains paused. |
 
 ## Completion handoff for this cleanup
 
