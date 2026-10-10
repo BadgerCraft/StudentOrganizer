@@ -252,7 +252,8 @@ async function main() {
         const { createRequire } = (process as any).getBuiltinModule('module');
         const require = createRequire(app.getAppPath() + '/package.json');
         try { return { result: await require('./electron/windowsInstallerUpdate.cjs').inspectSignature(installerPath) }; }
-        catch (error: any) { return { error: String(error), code: error.code, stdout: error.stdout, stderr: error.stderr }; }
+        catch (error: any) { return { error: String(error), code: error.code, stdout: error.stdout, stderr: error.stderr,
+          inheritedPSModulePath: process.env.PSModulePath }; }
       }, path.resolve('release', installer[0]));
       console.log('ACTUAL SIGNATURE INSPECTOR:', JSON.stringify(signatureProbe));
       fs.writeFileSync(path.join(evidenceDir, 'signature-inspector.json'), JSON.stringify(signatureProbe, null, 2));

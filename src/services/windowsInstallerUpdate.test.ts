@@ -6,7 +6,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 const { CancellationToken } = require('builder-util-runtime');
-const { TABLES, validateBackup, saveBackup, assertWritableInstallation, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, installAndReopen, createInstallerUpdate } = require('../../electron/windowsInstallerUpdate.cjs');
+const { TABLES, validateBackup, saveBackup, assertWritableInstallation, inspectSignature, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, installAndReopen, createInstallerUpdate } = require('../../electron/windowsInstallerUpdate.cjs');
 const { NsisUpdater } = require('electron-updater/out/NsisUpdater');
 const sha512 = Buffer.alloc(64, 7).toString('base64');
 const manifest = { version: '1.0.1', files: [{ url: 'OntarioTeacherAssessment-1.0.1-x64-nsis.exe', sha512 }] };
@@ -226,5 +226,37 @@ describe('native installer launch bridge using pinned NsisUpdater install/doInst
     expect(process.kill).toHaveBeenCalled(); expect(app.quit).not.toHaveBeenCalled();
     process.emit('spawn'); await new Promise(resolve => setImmediate(resolve));
     expect(app.quit).not.toHaveBeenCalled(); expect(updater.quitAndInstallCalled).toBe(false);
+  });
+});
+describe('Windows PowerShell signature subprocess contract', () => {
+  it('uses matching system modules despite inherited PowerShell7 module paths and passes the filename as data', async () => {
+    const file = "C:\\teacher's folder\\installer [1]; $(untrusted).exe";
+    const execute = vi.fn(async () => ({ stdout: '{"status":"NotSigned","publisher":null}', stderr: '' }));
+    expect(await inspectSignature(file, { execute, environment: {
+      SystemRoot: 'C:\\Windows', PSModulePath: 'C:\\Program Files\\PowerShell\\7\\Modules',
+      PSMODULEPATH: 'another incompatible module path', psmodulepath: 'third incompatible path',
+      studentorganizer_signature_file: 'old file', PATH: 'existing path'
+    } })).toEqual({ signature: 'unsigned' });
+    const [command, args, options] = execute.mock.calls[0] as any;
+    expect(command).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+    expect(path.win32.isAbsolute(command)).toBe(true);
+    expect(args.slice(0, 4)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']);
+    expect(args[4]).toContain("$ErrorActionPreference = 'Stop'");
+    expect(args[4]).toContain('-LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE');
+    expect(args[4]).not.toContain(file);
+    expect(options).toMatchObject({ windowsHide: true, timeout: 15000, maxBuffer: 16384 });
+    expect(options.env).toEqual({ SystemRoot: 'C:\\Windows', PATH: 'existing path',
+      PSModulePath: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules', STUDENTORGANIZER_SIGNATURE_FILE: file });
+    expect(Object.keys(options.env).filter(key => key.toLowerCase() === 'psmodulepath')).toHaveLength(1);
+  });
+  it('accepts a valid native signature and fails closed on subprocess, JSON or signature errors', async () => {
+    const environment = { SYSTEMROOT: 'C:\\Windows' };
+    expect(await inspectSignature('C:\\installer.exe', { environment,
+      execute: async () => ({ stdout: ' {"status":"Valid","publisher":"CN=Publisher"}\r\n' }) })).toEqual({ signature: 'valid', publisher: 'CN=Publisher' });
+    const subprocessError = Object.assign(new Error('CouldNotAutoloadMatchingModule'), { code: 1 });
+    await expect(inspectSignature('C:\\installer.exe', { environment, execute: async () => { throw subprocessError; } })).rejects.toBe(subprocessError);
+    for (const stdout of ['not JSON', '{}', '{"status":null}', '{"status":"HashMismatch"}', '{"status":"NotTrusted"}', '{"status":"UnknownError"}']) {
+      await expect(inspectSignature('C:\\installer.exe', { environment, execute: async () => ({ stdout }) })).rejects.toThrow();
+    }
   });
 });

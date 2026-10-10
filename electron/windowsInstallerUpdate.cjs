@@ -58,12 +58,20 @@ async function assertWritableInstallation(directory) {
     if (handle) { await handle.close(); await fs.rm(probe, { force: true }); }
   }
 }
-async function inspectSignature(file) {
+async function inspectSignature(file, { execute = promisify(execFile), environment = process.env } = {}) {
   // The path is data in an environment variable, never PowerShell source or a renderer argument.
-  const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const { stdout } = await promisify(execFile)(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-    "$s = Get-AuthenticodeSignature -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE; @{status=$s.Status.ToString();publisher=$s.SignerCertificate.Subject} | ConvertTo-Json -Compress"],
-  { windowsHide: true, timeout: 15000, maxBuffer: 16384, env: { ...process.env, STUDENTORGANIZER_SIGNATURE_FILE: file } });
+  const systemRoot = Object.entries(environment).find(([key]) => key.toLowerCase() === 'systemroot')?.[1] || 'C:\\Windows';
+  const powershell = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  // A parent running PowerShell 7 can pass its incompatible Security module path to
+  // Windows PowerShell 5.1. Use the matching built-in module directory, including
+  // removing differently cased duplicate keys from Windows' case-insensitive env.
+  const signatureEnv = Object.fromEntries(Object.entries(environment).filter(([key]) =>
+    !['psmodulepath', 'studentorganizer_signature_file'].includes(key.toLowerCase())));
+  signatureEnv.PSModulePath = path.win32.join(path.win32.dirname(powershell), 'Modules');
+  signatureEnv.STUDENTORGANIZER_SIGNATURE_FILE = file;
+  const { stdout } = await execute(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+    "$ErrorActionPreference = 'Stop'; $s = Get-AuthenticodeSignature -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE; @{status=$s.Status.ToString();publisher=$s.SignerCertificate.Subject} | ConvertTo-Json -Compress"],
+  { windowsHide: true, timeout: 15000, maxBuffer: 16384, env: signatureEnv });
   const result = JSON.parse(stdout.trim());
   if (result.status === 'NotSigned') return { signature: 'unsigned' };
   if (result.status !== 'Valid') throw new Error('Windows rejected the installer signature.');
