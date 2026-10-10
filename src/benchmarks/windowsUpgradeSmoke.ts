@@ -40,7 +40,12 @@ async function state(page: Page): Promise<State> {
   return page.evaluate(() => (window as any).desktopUpdates.status());
 }
 async function waitState(page: Page, allowed: string[]) {
-  return waitUntil(async () => { const current = await state(page); return allowed.includes(current.status) ? current : undefined; }, `updater state ${allowed.join('/')}`);
+  return waitUntil(async () => {
+    const current = await state(page);
+    if (allowed.includes(current.status)) return current;
+    if (['error', 'cancelled', 'current', 'unsupported'].includes(current.status)) throw new Error(`Unexpected updater state: ${JSON.stringify(current)}`);
+    return undefined;
+  }, `updater state ${allowed.join('/')}`);
 }
 async function openHub(page: Page) {
   page.setDefaultTimeout(30000);
@@ -182,7 +187,14 @@ async function configureFixtureFeed(app: ElectronApplication, feed: string) {
       // classroom renderer partition and production payload guards untouched.
       require('electron').session.fromPartition('electron-updater').webRequest.onBeforeRequest(null);
       (globalThis as any).__upgradeErrors = [];
+      (globalThis as any).__upgradeDownloaded = [];
       updater.on('error', (error: any) => (globalThis as any).__upgradeErrors.push({ code: error.code, message: error.message }));
+      updater.on('update-downloaded', (event: any) => {
+        const fs = (process as any).getBuiltinModule('fs');
+        const crypto = (process as any).getBuiltinModule('crypto');
+        (globalThis as any).__upgradeDownloaded.push({ file: event.downloadedFile, installerPath: updater.installerPath,
+          expectedSha512: event.files?.[0]?.sha512, actualSha512: crypto.createHash('sha512').update(fs.readFileSync(event.downloadedFile)).digest('base64') });
+      });
       const https = (process as any).getBuiltinModule('https');
       const { EventEmitter } = (process as any).getBuiltinModule('events');
       (globalThis as any).__upgradeMetadataRequests = [];
@@ -236,6 +248,15 @@ async function main() {
     try {
       await waitForExit(setup, 120000);
       launched = await launchInstalled(path.join(directory, 'Ontario Teacher Assessment.exe'), expectedVersion);
+      const signatureProbe = await launched.app.evaluate(async ({ app }, installerPath) => {
+        const { createRequire } = (process as any).getBuiltinModule('module');
+        const require = createRequire(app.getAppPath() + '/package.json');
+        try { return { result: await require('./electron/windowsInstallerUpdate.cjs').inspectSignature(installerPath) }; }
+        catch (error: any) { return { error: String(error), code: error.code, stdout: error.stdout, stderr: error.stderr }; }
+      }, path.resolve('release', installer[0]));
+      console.log('ACTUAL SIGNATURE INSPECTOR:', JSON.stringify(signatureProbe));
+      fs.writeFileSync(path.join(evidenceDir, 'signature-inspector.json'), JSON.stringify(signatureProbe, null, 2));
+      assert.deepEqual(signatureProbe, { result: { signature: 'unsigned' } }, 'Production signature inspector must classify the actual unsigned QA executable');
       await observeStatusBoundary(launched.app);
       const before = await boundaryDiagnostics(launched.app, launched.page);
       fs.writeFileSync(path.join(evidenceDir, 'installed-ipc-before.json'), JSON.stringify(before, null, 2));
@@ -428,6 +449,8 @@ async function main() {
       const boundary = await boundaryDiagnostics(running.app, running.page).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
       fs.writeFileSync(path.join(evidenceDir, 'failed-ipc-boundary.json'), JSON.stringify(boundary, null, 2) + '\n');
       console.error('UPGRADE IPC BOUNDARY:', JSON.stringify(boundary));
+      const verification = await running.app.evaluate(() => ({ errors: (globalThis as any).__upgradeErrors || [], downloaded: (globalThis as any).__upgradeDownloaded || [] }));
+      console.error('UPGRADE VERIFICATION:', JSON.stringify(verification));
     }
     await running?.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
     fs.writeFileSync(path.join(evidenceDir, 'failure.json'), JSON.stringify({ error: String(error), requests, versions, marking }, null, 2));
