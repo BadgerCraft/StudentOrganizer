@@ -1,5 +1,21 @@
 # StudentOrganizer schedule migration handoff — October 6, 2026
 
+## Confirmed replacement — October 9, 2026
+
+Tyler explicitly deleted Daily checkins and requested the current chat become the replacement, with scheduled check-ins and resumed work. This supersedes the historical blocked handoff below.
+
+- Successfully created enabled daily 08:15 morning and 16:00 results/learning schedules in America/Toronto, starting October 10.
+- Independently read back both saved objects: matching replacement conversation binding, exact daily recurrence, named timezone and enabled state.
+- Old morning and afternoon objects were read back disabled and unbound after deletion; the old morning disabled state was reaffirmed. Evening continuation was read back paused and unbound. No active evening replacement was created. Unrelated usage review schedules were left unchanged.
+- New prompts preserve substantive execution/verification, optional learning, local student data, fictional-data checks, current-writer coordination, actual approval and merge/release/service boundaries. They replace obsolete one-time October 6 reminders and expired trial instructions with current queue/PR recovery, so they are intentionally updated instructions rather than byte-for-byte copies of old prompts.
+- A clean shell checkout of current main b9a8790 was obtained in this recovery session, and GitHub connector reads succeeded. That proves current interactive capabilities, not future scheduled inheritance or automatic Cloud dispatch.
+- First actual replacement run must record tools/checkout/runtime and observed work, or deliver a concrete handoff if execution is unavailable. Do not equate the confirmed schedule with running application development.
+
+Scheduler IDs and conversation binding were verified privately through scheduler readback; they are not placed in this public repository. Current project coordination is described by the queue recovery checkpoint. No source merge, application release, distribution or service adoption was performed by migration.
+
+## Historical blocked migration handoff
+
+
 Status: blocked on unavailable scheduler access; no schedules created, changed, disabled, resumed, or moved by this task.
 
 ## Authorized destination and desired timing
