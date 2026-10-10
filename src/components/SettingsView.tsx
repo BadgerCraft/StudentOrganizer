@@ -58,6 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [excludeFormative, setExcludeFormative] = useState(policy?.excludeFormative ?? true);
   const [missingPolicy, setMissingPolicy] = useState(policy?.missingWorkPolicy ?? 'exclude');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
 
   // Event Type Management State
   const eventTypeService = useMemo(() => new ParticipationEventTypeService(db), []);
@@ -97,6 +98,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
 
     setEventTypeErrorMessage(null);
+    setPendingWrites(count => count + 1);
     try {
       const identity = await getIdentity();
       await new ClassSettingsService(db).updateGradingPolicy(policy.id, policy.version, {
@@ -108,6 +110,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (error) {
       setSavedSuccess(false);
       setEventTypeErrorMessage(error instanceof Error ? error.message : 'Grading policy could not be saved.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
@@ -137,6 +141,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
     setEventTypeErrorMessage(null);
 
+    setPendingWrites(count => count + 1);
     try {
       const id = await getIdentity();
       await eventTypeService.createEventType({
@@ -155,6 +160,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setTimeout(() => setEventTypeSuccessMessage(null), 3000);
     } catch (err: any) {
       setEventTypeErrorMessage(err.message || 'Failed to create button.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
@@ -172,6 +179,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!editingType || !activeSectionId) return;
     setEventTypeErrorMessage(null);
 
+    setPendingWrites(count => count + 1);
     try {
       const id = await getIdentity();
       await eventTypeService.updateEventType({
@@ -192,11 +200,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setTimeout(() => setEventTypeSuccessMessage(null), 3000);
     } catch (err: any) {
       setEventTypeErrorMessage(err.message || 'Failed to update button.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
   const handleArchive = async (et: ParticipationEventType) => {
     if (!activeSectionId) return;
+    setPendingWrites(count => count + 1);
     try {
       const id = await getIdentity();
       await eventTypeService.archiveEventType({
@@ -211,11 +222,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setTimeout(() => setEventTypeSuccessMessage(null), 3000);
     } catch (err: any) {
       setEventTypeErrorMessage(err.message || 'Failed to archive button.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
   const handleRestore = async (et: ParticipationEventType) => {
     if (!activeSectionId) return;
+    setPendingWrites(count => count + 1);
     try {
       const id = await getIdentity();
       await eventTypeService.restoreEventType({
@@ -229,16 +243,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setTimeout(() => setEventTypeSuccessMessage(null), 3000);
     } catch (err: any) {
       setEventTypeErrorMessage(err.message || 'Failed to restore button.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
   const handleReorder = async (et: ParticipationEventType, direction: 'up' | 'down') => {
     if (!activeSectionId) return;
+    setPendingWrites(count => count + 1);
     try {
       const id = await getIdentity();
       await eventTypeService.moveEventType(activeSectionId, et.id, direction, id.userId, id.deviceId);
     } catch (err: any) {
       setEventTypeErrorMessage(err.message || 'Failed to reorder button.');
+    } finally {
+      setPendingWrites(count => count - 1);
     }
   };
 
@@ -755,7 +774,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      <ManualWindowsUpdate />
+      <ManualWindowsUpdate installationBlocked={pendingWrites > 0 || showCreateModal || !!editingType || !!confirmArchiveType ||
+        (!!policy && (weightK !== policy.weightK || weightT !== policy.weightT || weightC !== policy.weightC || weightA !== policy.weightA ||
+          excludeFormative !== policy.excludeFormative || missingPolicy !== policy.missingWorkPolicy))} />
 
       {/* Create Button Modal */}
       <ModalDialog

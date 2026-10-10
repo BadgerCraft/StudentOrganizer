@@ -1,5 +1,6 @@
 // Manual metadata lookup only. No installer download/execution or renderer-selected URLs.
 const https = require('node:https');
+const { fileURLToPath } = require('node:url');
 const ENDPOINT = 'https://api.github.com/repos/BadgerCraft/StudentOrganizer/releases/latest';
 const LIMIT = 128 * 1024;
 function version(value) {
@@ -30,8 +31,16 @@ function parseRelease(data, current) {
     installationAvailable: false };
 }
 function trustedCaller(event, contents, expectedUrl) {
-  return event.sender === contents && event.senderFrame === contents.mainFrame &&
-    event.senderFrame?.url.split('#')[0] === expectedUrl;
+  if (event.sender !== contents || event.senderFrame !== contents.mainFrame) return false;
+  try {
+    // Chromium preserves ~ in Windows short paths, while Node encodes it as %7E.
+    // Compare the exact decoded bundle filename without allowing another origin,
+    // query, window or subframe to acquire installation authority.
+    const actual = new URL(event.senderFrame.url);
+    const expected = new URL(expectedUrl);
+    if (actual.protocol !== 'file:' || actual.hostname || actual.search || actual.username || actual.password) return false;
+    return fileURLToPath(actual) === fileURLToPath(expected);
+  } catch { return false; }
 }
 function requestLatest() {
   return new Promise((resolve, reject) => {
