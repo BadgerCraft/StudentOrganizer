@@ -36,6 +36,20 @@ describe('manual Windows release lookup boundary', () => {
     expect(trustedCaller({ ...event, senderFrame: { ...mainFrame } }, contents, 'file:///bundle/index.html')).toBe(false);
     expect(trustedCaller(event, contents, 'file:///other/index.html')).toBe(false);
   });
+  it('authorizes equivalent tilde encoding in an installed Windows bundle without widening the caller boundary', () => {
+    const actual = 'file:///C:/Users/RUNNER~1/AppData/Local/Temp/app/resources/app.asar/dist/index.html';
+    const expected = actual.replace('RUNNER~1', 'RUNNER%7E1');
+    const mainFrame = { url: actual + '#settings' }, contents = { mainFrame };
+    const event = { sender: contents, senderFrame: mainFrame };
+    expect(trustedCaller(event, contents, expected)).toBe(true);
+    for (const url of [actual + '?install=1', actual.replace('file:', 'https:'), actual.replace('file:///', 'file://foreign/'), actual.replace('index.html', 'other.html'), actual.replace('RUNNER~1', 'RUNNER%2F1')]) {
+      mainFrame.url = url;
+      expect(trustedCaller(event, contents, expected)).toBe(false);
+    }
+    mainFrame.url = actual;
+    expect(trustedCaller({ ...event, sender: {} }, contents, expected)).toBe(false);
+    expect(trustedCaller({ ...event, senderFrame: { url: actual } }, contents, expected)).toBe(false);
+  });
   it('does no lookup during construction or on web/Mac/unpackaged builds', async () => {
     let calls = 0;
     const lookup = async () => { calls++; return release; };
