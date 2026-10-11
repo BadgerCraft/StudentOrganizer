@@ -13,7 +13,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -30,12 +30,20 @@ jobs:
         run: node scripts/prepare-qa-build.cjs
       - name: Build Windows installer and portable app
         run: npm run package:win -- --publish never "--config.extraMetadata.version=$env:QA_VERSION"
+      - name: Check actual installed update IPC boundary before replacement builds
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts --ipc-boundary-only
       - name: Test actual portable and installed apps
         run: npx tsx src/benchmarks/windowsPackagesSmoke.ts
       - name: Check assessment creation in packaged app
         run: npx tsx src/benchmarks/assessmentDesktopSmoke.ts
       - name: Check local resource policy and authorized profile save
         run: npx tsx src/benchmarks/securityDesktopSmoke.ts
+      - name: Build isolated stable A and B installers for replacement acceptance
+        run: |
+          npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-A --config.extraMetadata.version=1.0.1
+          npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-B --config.extraMetadata.version=1.0.2
+      - name: Test production download, backup, installer replacement and reopen
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts
       - name: Record checksums and Windows publisher status
         shell: pwsh
         run: |
@@ -58,6 +66,8 @@ jobs:
           name: OntarioTeacherAssessment-Windows-${{ env.QA_VERSION }}
           path: |
             release/*.exe
+            release/*.yml
+            release/*.blockmap
             release/qa-build.json
             release/windows-files.json
             release/SHA256SUMS.txt
