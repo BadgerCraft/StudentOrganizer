@@ -1,17 +1,40 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
+const { existsSync } = require('node:fs');
+const { createInstallerUpdate, isInstalledNsis, configureUpdaterSession } = require('./windowsInstallerUpdate.cjs');
+
+app.name = 'ontario-teacher-assessment';
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
 
 const { createManualCheck, trustedCaller } = require('./manualUpdater.cjs');
 const manualCheck = createManualCheck({ platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion() });
 let updateWindow;
-ipcMain.handle('manual-update:check', (event, ...args) => {
+let installerUpdates;
+function requireUpdateCaller(event, args, expectedCount) {
   const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
-  if (args.length || !updateWindow || !trustedCaller(event, updateWindow.webContents, indexUrl)) throw new Error('Update check denied');
-  return manualCheck();
+  if (args.length !== expectedCount || !updateWindow || !trustedCaller(event, updateWindow.webContents, indexUrl)) throw new Error('Update action denied');
+}
+ipcMain.handle('manual-update:check', (event, ...args) => {
+  requireUpdateCaller(event, args, 0);
+  return manualCheck().then(result => ({ ...result, installationAvailable: installerUpdates?.status().installationAvailable === true }));
 });
-
-app.name = 'ontario-teacher-assessment';
+for (const method of ['status', 'download', 'cancel']) ipcMain.handle(`installer-update:${method}`, (event, ...args) => {
+  requireUpdateCaller(event, args, 0);
+  return installerUpdates[method]();
+});
+ipcMain.handle('installer-update:install', (event, ...args) => {
+  requireUpdateCaller(event, args, 2);
+  if (typeof args[0] !== 'string' || Buffer.byteLength(args[0]) > 256 * 1024 * 1024 || typeof args[1] !== 'boolean') throw new Error('Update installation denied');
+  return installerUpdates.install(args[0], args[1]);
+});
+app.on('second-instance', () => {
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    if (updateWindow.isMinimized()) updateWindow.restore();
+    updateWindow.show(); updateWindow.focus();
+  }
+});
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -85,6 +108,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!ownsInstance) return;
+  const supported = isInstalledNsis({ platform: process.platform, packaged: app.isPackaged, exePath: app.getPath('exe'), exists: existsSync });
+  const updater = supported ? require('electron-updater').autoUpdater : undefined;
+  if (supported) configureUpdaterSession(session.fromPartition('electron-updater', { cache: false }));
+  installerUpdates = createInstallerUpdate({ supported, currentVersion: app.getVersion(), userData: app.getPath('userData'), updater,
+    installationDirectory: path.dirname(app.getPath('exe')),
+    tokenFactory: () => new (require('builder-util-runtime').CancellationToken)() });
   createWindow();
 
   app.on('activate', () => {
