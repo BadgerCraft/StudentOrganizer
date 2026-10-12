@@ -85,6 +85,51 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # A fresh runner avoids another smoke test's registered app or profile being
+  # mistaken for the actual legacy installation. No release token is supplied.
+  legacy-bootstrap:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out current source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install current dependencies
+        run: npm ci
+      - name: Build current stable bootstrap destination
+        run: |
+          npm run build
+          npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-B --config.extraMetadata.version=1.0.2
+      - name: Check out the actual pre-updater bootstrap source
+        uses: actions/checkout@v4
+        with:
+          ref: b9a8790f4841fa9fd5057e7cfef097f619cbac4a
+          path: .legacy-bootstrap-source
+          persist-credentials: false
+      - name: Build the pinned metadata-only legacy installer
+        working-directory: .legacy-bootstrap-source
+        run: |
+          npm ci
+          npm run build
+          npx electron-builder --win nsis --publish never --config.directories.output=../release/bootstrap-A --config.extraMetadata.version=1.0.0
+      - name: Test deliberate legacy bootstrap and old-backup recovery
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts --legacy-bootstrap --acknowledge-unsigned
+      - name: Retain actual bootstrap evidence and installer hashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-legacy-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/qa-evidence/windows-bootstrap/**
+            release/bootstrap-A/*-nsis.exe
+            release/upgrade-B/*-nsis.exe
+          if-no-files-found: warn
+          retention-days: 90
+
   # Publishing is explicit: only a reviewed QA tag creates a lasting prerelease.
   release:
     if: startsWith(github.ref, 'refs/tags/qa-v')

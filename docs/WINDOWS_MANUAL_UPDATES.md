@@ -1,5 +1,11 @@
 # Manual Windows update check — October 6, 2026
 
+## Current development and legacy bootstrap verification — October 12, 2026
+
+PR22 and PR21 are merged on main1977a12 by Tyler's October11 approval. The measured updater replacement below remains valid; existing metadata-only installations still need one deliberate manual bootstrap. The follow-up branch codex/windows-legacy-bootstrap-20261012 adds verification only: actual pinned old source b9a8790/A1.0.0 versus current B1.0.2, real all39-table UI backup, same per-user destination/profile, visible marking and exact report preservation, actual legacy backup replacing a later B edit, then restart. A fresh Windows runner and explicit unsigned acknowledgement guard fictional-data testing. Native bootstrap acceptance is pending actual CI, not inferred from the harness or earlier same-source A/B pass. No production app/data/schema changes or release occur.
+
+The current queue owns the exact branch/PR/result and shared lesson comparison. Public unsigned distribution remains held; no compatible free publisher route is adopted. Current SignPath eligibility remains conditional on source rights, OSI licensing, released/maintained/documented artifacts, policy/roles/MFA and Foundation acceptance. Its free route is not automatic enrollment or publisher verification. Keep Store dormant and exclude paid signing/services.
+
 ## Installer implementation and measured Windows upgrade — October 10, 2026
 
 Tyler's October9 instruction shelves Store investigation and authorizes implementing the Windows auto-installer. [PR22](https://github.com/BadgerCraft/StudentOrganizer/pull/22), sourcec6eebf7fe2567d0183b42b0d61389eab349a2b40, implements explicit Settings check -> download/cancel -> complete verified local backup -> deliberate install/reopen. No startup check, automatic download, ordinary-quit installation or student upload. The earlier investigation-only hold below is superseded for fictional-data implementation/testing, while free-only and unsigned public distribution holds remain.
