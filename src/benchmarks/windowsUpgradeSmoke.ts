@@ -13,9 +13,11 @@ import { runMarkingDesktopAcceptance, verifyAfterRestart, type MarkingDesktopEvi
 // This deliberately uses the real installed application's normal profile. The
 // guard below limits it to a disposable Windows runner containing fictional QA
 // data; no replacement is attempted against a teacher's installation/profile.
-const evidenceDir = path.resolve('release/qa-evidence/windows-upgrade');
+const legacyBootstrap = process.argv.includes('--legacy-bootstrap');
+const evidenceDir = path.resolve(`release/qa-evidence/${legacyBootstrap ? 'windows-bootstrap' : 'windows-upgrade'}`);
 const execFileAsync = promisify(execFile);
 const versions = { A: '1.0.1', B: '1.0.2' };
+const legacySource = 'b9a8790f4841fa9fd5057e7cfef097f619cbac4a';
 type State = { status: string; version?: string; installationAvailable: boolean; signature?: string; backupPath?: string; error?: string };
 
 function waitForExit(child: ChildProcess, timeout: number): Promise<void> {
@@ -284,11 +286,134 @@ async function closeRelaunched(pid: number) {
   await windowsPowerShell('$p=Get-Process -Id $env:OTA_UPGRADE_PID -ErrorAction Stop; if (-not $p.CloseMainWindow()) { throw "Reopened app has no closable visible window" }; $p.WaitForExit(10000); if (-not $p.HasExited) { throw "Reopened app did not close" }', { OTA_UPGRADE_PID: String(pid) });
 }
 
+/** The old metadata-only copy needs a deliberate manual first installation. */
+async function runLegacyBootstrap() {
+  assert.ok(process.argv.includes('--acknowledge-unsigned'), 'Disposable unsigned bootstrap testing requires explicit acknowledgement');
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: '.legacy-bootstrap-source', encoding: 'utf8' }).trim(), legacySource,
+    'A must be built from the actual pinned pre-updater source, not current code with an older version');
+  const pair = { A: '1.0.0', B: versions.B };
+  const installers = Object.fromEntries(Object.entries(pair).map(([key, version]) => {
+    const directory = path.resolve(`release/${key === 'A' ? 'bootstrap-A' : 'upgrade-B'}`);
+    const names = fs.readdirSync(directory).filter(name => name.endsWith('-nsis.exe'));
+    assert.equal(names.length, 1, `One bootstrap ${key} installer required`);
+    assert.ok(names[0].includes(version));
+    return [key, path.join(directory, names[0])];
+  })) as { A: string; B: string };
+  const signatures: Record<string, unknown> = {};
+  for (const [key, installer] of Object.entries(installers)) {
+    const result = await windowsPowerShell('$s=Get-AuthenticodeSignature -LiteralPath $env:OTA_BOOTSTRAP_INSTALLER; [pscustomobject]@{ status=$s.Status.ToString(); publisher=$s.SignerCertificate.Subject } | ConvertTo-Json -Compress',
+      { OTA_BOOTSTRAP_INSTALLER: installer });
+    const signature = JSON.parse(result.stdout.trim());
+    assert.ok(['NotSigned', 'Valid'].includes(signature.status), 'Actual installer signature errors must fail closed');
+    signatures[key] = signature;
+  }
+  console.log('Disposable fictional-data unsigned bootstrap explicitly acknowledged; checksums do not verify publisher identity.');
+  const installDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fictional-ota-bootstrap-'));
+  const executable = path.join(installDir, 'Ontario Teacher Assessment.exe');
+  let running: Awaited<ReturnType<typeof launchInstalled>> | undefined;
+  let setup: ChildProcess | undefined;
+  let marking: MarkingDesktopEvidence | undefined;
+  try {
+    setup = spawn(installers.A, ['/S', '/currentuser', `/D=${installDir}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
+    await waitForExit(setup, 120000);
+    canonicalExecutable(executable);
+    assert.ok(fs.existsSync(path.join(installDir, 'Uninstall Ontario Teacher Assessment.exe')), 'Actual registered per-user legacy installation required');
+    running = await launchInstalled(executable, pair.A);
+    assert.equal(await running.page.evaluate(() => typeof window.desktopUpdates?.install), 'undefined', 'The actual legacy bridge must have no installer capability');
+    await openHub(running.page);
+    marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
+    const before = await snapshotAll(running.page);
+    assert.equal(Object.keys(before).length, 39, 'Bootstrap acceptance must cover every current-schema table');
+    const backupPath = path.join(evidenceDir, 'legacy-complete-backup.json');
+    await download(running.app, () => running!.page.getByTestId('create-backup-btn').click(), backupPath);
+    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    assert.equal(backup.schemaVersion, 4);
+    assert.deepEqual(Object.keys(backup.tables).sort(), Object.keys(before).sort());
+    for (const [table, rows] of Object.entries(before)) {
+      assert.deepEqual(backup.tables[table].sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))), rows, `Actual legacy full backup must preserve ${table}`);
+    }
+    const profileA = running.userData;
+    await running.page.screenshot({ path: path.join(evidenceDir, 'legacy-A-backed-up.png'), fullPage: true });
+    await running.app.close(); running = undefined;
+    assert.equal((await installedProcess(executable)).length, 0, 'Legacy app must be closed before manual replacement');
+    setup = spawn(installers.B, ['/S', '/currentuser', `/D=${installDir}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
+    await waitForExit(setup, 120000);
+    running = await launchInstalled(executable, pair.B);
+    assert.equal(running.userData, profileA, 'Manual bootstrap must discover the exact legacy profile');
+    assert.deepEqual(await snapshotAll(running.page), before, 'Manual bootstrap must preserve every existing table and record');
+    assert.equal((await state(running.page)).installationAvailable, true, 'The bootstrapped real installed bridge must enable future updates');
+    await openHub(running.page); await verifyAfterRestart(running.page, marking);
+    const reportB = path.join(evidenceDir, 'markinator-report-B.html');
+    await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
+    assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Legacy finalized report bytes must survive the bootstrap');
+    // A no-op restore could pass an equality check against identical data.
+    // Persist a real later edit in B, then require the actual old backup to
+    // replace it while preserving the original official records.
+    await running.page.getByTestId(`marking-session-open-${marking.firstAttemptId}`).click();
+    await waitUntil(async () => {
+      const document = running!.page.getByTestId('marking-document');
+      const save = running!.page.getByRole('button', { name: 'Save now', exact: true });
+      const session = running!.page.locator('section[aria-label="Marking session"]');
+      if (!(await document.count()) || !(await save.count()) || !(await session.count())) return undefined;
+      return (await document.innerText()).includes('Echo phrase. Middle words.')
+        && (await session.innerText()).includes('Draft — official marks unchanged')
+        && await save.isEnabled() ? true : undefined;
+    }, 'bootstrapped pending workspace settled before later edit');
+    const laterFeedback = 'Fictional post-bootstrap change that the legacy backup must replace';
+    await running.page.getByTestId('marking-feedback').fill(laterFeedback);
+    await running.page.getByRole('button', { name: 'Save now', exact: true }).click();
+    await waitUntil(async () => (await snapshotAll(running!.page)).markingSessions.some(row => row.attemptId === marking!.firstAttemptId
+      && row.status === 'draft' && row.draft.pending?.text === laterFeedback) ? true : undefined, 'actual later B feedback saved');
+    const changed = await snapshotAll(running.page);
+    assert.notDeepEqual(changed.markingSessions, before.markingSessions, 'B must contain a later saved edit before recovery');
+    assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
+    assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
+    await running.page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+    await running.page.getByTestId('nav-portability-btn').click();
+    await running.page.getByTestId('restore-file-input').setInputFiles(backupPath);
+    await running.page.getByTestId('restore-confirm-dialog').waitFor();
+    assert.deepEqual(await snapshotAll(running.page), changed, 'Legacy backup preview must leave the later bootstrapped edit intact');
+    await running.page.getByTestId('confirm-restore-btn').click();
+    await running.page.getByText(/Database successfully restored/).waitFor();
+    assert.deepEqual(await snapshotAll(running.page), before, 'The real legacy full backup must restore all records through the current UI');
+    await running.app.close(); running = undefined;
+    running = await launchInstalled(executable, pair.B);
+    assert.equal(running.userData, profileA);
+    assert.deepEqual(await snapshotAll(running.page), before, 'A second B restart must retain all restored legacy records');
+    await openHub(running.page); await verifyAfterRestart(running.page, marking);
+    assert.deepEqual(running.errors, []);
+    writeEvidence('bootstrap-results.json', {
+      versions: pair, legacySource, currentSource: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), signatures,
+      acknowledgedUnsigned: true, profilePreserved: true, backupPath,
+      installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])),
+      tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), marking,
+      checks: ['actual pinned metadata-only legacy source', 'actual complete UI backup readback', 'deliberate per-user NSIS manual bootstrap', 'same legacy userData and every record',
+        'future installer bridge available', 'visible marking originals/rubric/pending and official feedback', 'identical finalized report bytes', 'current UI replaces a later saved B edit from the actual legacy backup', 'second B restart'],
+      limits: ['unsigned fictional CI only', 'no physical Windows/UAC/dialog or managed-device acceptance', 'manual bootstrap does not prove automatic updater reopening', 'no installation interruption or future-schema claim', 'no live GitHub delivery or public release']
+    });
+    console.log('PASS: Actual metadata-only legacy A manually bootstrapped to updater-enabled B; exact profile, all39 tables, originals/rubrics/pending/official feedback, report bytes and real legacy-backup UI restore survived another restart.');
+  } catch (error) {
+    writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined, legacySource, versions: pair, signatures, marking });
+    console.error('BOOTSTRAP PRIMARY FAILURE:', error);
+    if (running) await running.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
+    throw error;
+  } finally {
+    await running?.app.close().catch(() => {});
+    if (setup) killOwned(setup);
+    for (const process of await installedProcess(executable).catch(() => [])) {
+      try { execFileSync('taskkill', ['/PID', String(process.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* Already closed. */ }
+    }
+    cleanupDirectory(installDir);
+  }
+}
+
 async function main() {
   if (process.platform !== 'win32' || process.env.CI !== 'true' || process.env.GITHUB_ACTIONS !== 'true') {
     throw new Error('Real installer replacement may run only on a disposable Windows GitHub Actions runner.');
   }
   fs.mkdirSync(evidenceDir, { recursive: true });
+  if (legacyBootstrap) return runLegacyBootstrap();
   // Fail early on an installed IPC boundary problem, before building the A/B
   // pair. This also verifies the released QA installer exposes real status IPC.
   if (process.argv.includes('--ipc-boundary-only')) {
