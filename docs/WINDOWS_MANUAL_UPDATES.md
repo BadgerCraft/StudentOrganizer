@@ -1,5 +1,13 @@
 # Manual Windows update check — October 6, 2026
 
+## Approved PR23/PR24 merge sequence — October 13, 2026
+
+Tyler's “Go 4 it” explicitly approves the preceding recommendation to merge PR23 first, then retarget/review and merge PR24. This supersedes the reserved-merge statements in the dated October12/13 review checkpoints below; release/distribution, accounts/licenses/services, spending, new scope and real-student use remain reserved.
+
+PR23 merged at92257ed04f5643626c8869458b695ff12b7ddd09. PR24 was retargeted to that main; GitHub reported clean/mergeable, and candidate merge5e0cb3a51c0d7c9862345300e38041c36264fdef has the same complete tree b6a9acf057fc79726db4244cbe9a1baf86b06bad as verified sourcebbd61ff136f66b9a59edcd491d6ccdf271751b1a. Windows38399762602 and Mac/browser38399762590 are SUCCESS. This approval checkpoint changes only these two existing evidence documents; no application, test, workflow, dependency, schema or release bytes change. PR24's actual merged metadata/body records completion; a saved approval alone is not a completed merge.
+
+Next priority after the approved verification merges: prepare actual physical Windows installation/UAC/managed-device and interruption acceptance when an appropriate disposable device is available. Hosted silent-install tests cannot complete those checks. Free trusted-publisher signing remains unresolved; Store remains dormant. No public unsigned release, stable feed, account/license/service adoption, spending or real-student use is authorized.
+
 ## Installer failure repair and backup recovery — October 13, 2026
 
 PR24 is stacked on unmerged PR23 and changes verification only. Source60d54d0f79aef2fb361b8b2e604988e165210db7/test mergee09fc80c builds current-source A1.0.1, a CI-only B1.0.2 NSIS fixture that deterministically aborts after normal file copy/registration, and a normal B1.0.2 repair installer. The production package configuration has no fixture include; normal package/release jobs cannot use it. Fictional Windows Actions execution requires explicit unsigned acknowledgement.
