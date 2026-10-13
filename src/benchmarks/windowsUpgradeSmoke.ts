@@ -528,6 +528,7 @@ async function runInstallRecovery() {
 
     // Make the restore observable: the saved pre-failure backup must replace a
     // later B edit rather than merely previewing data that already matches.
+    await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
     await running.page.getByTestId(`marking-session-open-${marking.firstAttemptId}`).click();
     await waitUntil(async () => {
       const document = running!.page.getByTestId('marking-document');
