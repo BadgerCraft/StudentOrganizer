@@ -7,7 +7,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | Priority | ID | Status | Next action / gate |
 | --- | --- | --- | --- |
 | 1 | WIN-PHYSICAL | Blocked: requires disposable Windows device | Run physical installer/UAC/managed-device and interrupted-install checks; keep public unsigned release and signing on hold. PR22–24 CI evidence is not physical acceptance. |
-| 2 | QA-20261005-01,04–10 | Approved October 13 for bounded existing UI cleanup; implementation not yet launched in Codex | Execute bounded UI fixes QA01,04–10 in isolated Codex branch; verify with fictional data, preserve identity, official marks, audit and local-only photos; no merge/release approval. |
+| 2 | QA-20261005-01,04–10 | Approved October 13 for bounded existing UI cleanup; underway on codex/ui-cleanup-20261013; existing UI repair source being reused and verified | Execute bounded UI fixes QA01,04–10 in isolated Codex branch; verify with fictional data, preserve identity, official marks, audit and local-only photos; no merge/release approval. |
 | 3 | F-007 | Local bug-report draft implemented; central delivery not connected | Decide/authorize private receiver and access; test receipt on packaged Windows/Mac without automatic student-data transfer. |
 | 4 | F-006 | Native iPad project/compile exists; device runtime unverified | Test Files, touch, offline, backup/restore and signing renewal when Mac/Xcode/device is available. |
 | 5 | F-008-MODES / F-008-PHOTO | Requested future scope; plan approval pending | Scope three marking modes and handwritten image capture after core integration; handwriting OCR shelved, not in the active work batch. |
@@ -16,16 +16,16 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 
 | ID | Feature / requested outcome | Current disposition | Next step / source |
 | --- | --- | --- | --- |
-| QA-20261005-01 | Explicit teacher prompt each launch | Requested | Reproduce session behavior; preserve explicit acting-teacher authorization |
+| QA-20261005-01 | Explicit teacher prompt each launch | Underway; approved October 13 and current UI Cleanup Batch | Reproduce session behavior; preserve explicit acting-teacher authorization |
 | QA-20261005-02 | Imported roster appears on seating; populate discoverable | Merged PR18; development verified | No repeat work; device pilot separate |
 | QA-20261005-03 | Seating randomization confirmation | Merged PR18; development verified | No repeat work |
-| QA-20261005-04 | Participation defaults, buttons and tooltips | Requested | Reproduce empty state/classification controls |
-| QA-20261005-05 | Ontario conversion preset display | Requested | Diagnose missing/collapsed content |
-| QA-20261005-06 | Remove student from class roster | Requested | Plan safe unenrollment/archive, retain grades/history |
-| QA-20261005-07 | Local photo crop/resize/preview | Requested | Scope cancel-safe, on-device editing |
-| QA-20261005-08 | Create/edit/rename units | Requested | Audit existing unit metadata and UI |
-| QA-20261005-09 | Collapse assessment details to overall grade | Requested | Design display-only aggregation, no grading change |
-| QA-20261005-10 | K/T/C/A ordering in assessments | Requested | Audit affected views, preserve IDs and weights |
+| QA-20261005-04 | Participation defaults, buttons and tooltips | Underway; approved October 13 and current UI Cleanup Batch | Reproduce empty state/classification controls |
+| QA-20261005-05 | Ontario conversion preset display | Underway; approved October 13 and current UI Cleanup Batch | Diagnose missing/collapsed content |
+| QA-20261005-06 | Remove student from class roster | Underway; approved October 13 and current UI Cleanup Batch | Plan safe unenrollment/archive, retain grades/history |
+| QA-20261005-07 | Local photo crop/resize/preview | Underway; approved October 13 and current UI Cleanup Batch | Scope cancel-safe, on-device editing |
+| QA-20261005-08 | Create/edit/rename units | Underway; approved October 13 and current UI Cleanup Batch | Audit existing unit metadata and UI |
+| QA-20261005-09 | Collapse assessment details to overall grade | Underway; approved October 13 and current UI Cleanup Batch | Design display-only aggregation, no grading change |
+| QA-20261005-10 | K/T/C/A ordering in assessments | Underway; approved October 13 and current UI Cleanup Batch | Audit affected views, preserve IDs and weights |
 | F-004 | Assessment Hub and category-management UX | Requested | Scope with QA06/08/09/10; avoid duplicate controls |
 | F-007 | Private bug-only Control Panel intake | Partly implemented (local draft); receiver not adopted | Private provider/access decision and actual receipt test |
 | F-008 | Integrated essay marking, rubrics, imports, feedback and KTAC finalization | Merged PR20; core development acceptance verified | Platform/pilot acceptance separately |
