@@ -130,6 +130,44 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+  # Deterministically damages only a disposable hosted-runner installation
+  # after the production updater has launched NSIS and saved its verified
+  # backup. This proves repair/reinstall plus real UI backup recovery; it is not
+  # represented as a physical power-loss or managed-device test.
+  install-recovery:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out current source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build stable A, deliberate failing B and repair B installers
+        run: |
+          npm run build
+          npx electron-builder --win nsis --publish never --config.directories.output=release/recovery-A --config.extraMetadata.version=1.0.1
+          npx electron-builder --win nsis --publish never --config.directories.output=release/recovery-failure-B --config.extraMetadata.version=1.0.2 --config.nsis.include=scripts/windowsInstallFailureFixture.nsh
+          npx electron-builder --win nsis --publish never --config.directories.output=release/recovery-B --config.extraMetadata.version=1.0.2
+      - name: Test post-launch failure, repair and verified backup recovery
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts --install-recovery --acknowledge-unsigned
+      - name: Retain recovery evidence and exact fixture installers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-install-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/qa-evidence/windows-install-recovery/**
+            release/recovery-A/*-nsis.exe
+            release/recovery-failure-B/*-nsis.exe
+            release/recovery-B/*-nsis.exe
+          if-no-files-found: warn
+          retention-days: 90
+
   # Publishing is explicit: only a reviewed QA tag creates a lasting prerelease.
   release:
     if: startsWith(github.ref, 'refs/tags/qa-v')
