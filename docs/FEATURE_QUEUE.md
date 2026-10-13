@@ -4,6 +4,28 @@ Updated: October 13, 2026, America/Toronto. Owner: Tyler; coordinating agent mai
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Main contains completed PR19/PR20/PR22/PR21 and the October13 PR23 merge. Tyler approved PR23 followed by PR24 with “Go 4 it” on October13 at10:51 America/Toronto. The current PR24 record enters main with that approved merge; live PR23/PR24 merged metadata is the completion authority. Do not repeat either completed merge. PR17 is closed unmerged as superseded; never revive it.
 
+## UI repairs authorized and prior PR cleanup — October 13, 2026
+
+Tyler: “Okay let's clear up prior stuff and fix the UI. Do I have a control panel yet? How does that function? A separate application that I should launch?” This authorizes implementation/verification/publication through review for the eight outstanding October5 UI requests, plus reconciliation/closure of superseded prior PRs. Main merge, release, services/accounts, spending and real-student use remain reserved. Publisher work stays dormant until Tyler explicitly reopens it.
+
+Root recovered main3777181 and a clean isolated branch codex/ui-repairs-20261013, checked writers, and assigned disjoint UI/service/acceptance ownership. Existing dirty recovery files remain untouched. PR10/13/15 were closed unmerged as superseded after immutable-head/file comparison and PR18 integration evidence; their source branches/history are preserved. No unique intended production behavior was found missing: Windows QA identity retained; native/touch preparation retained; retired PWA delivery intentionally absent.
+
+Control Panel status: no separate admin application or connected central bug inbox has been implemented/deployed. Header “Report a problem” opens the existing local draft/preview/copy/download modal, explicitly unsent and without classroom attachments. Provider dashboard/account existence does not establish app receipt. F-007 receiver adoption/access and F-009 exemplars remain separate.
+
+UI scope: QA01 clearer session confirmation with last-confirmed profile suggested first, preserving explicit attribution on each fresh session; QA04 symmetric participation setup/actions and explicit empty-workspace starters without auto reseeding; QA05 actual active scale/version content; QA06 confirmed class unenrollment preserving student/marks/history and removing active seat/selection; QA07 local crop/zoom/preview/confirmation with cancellation preserving prior photo; QA08 discoverable stable-ID unit create/edit; QA09 per-assessment collapse/overall summary for both types without course-grade-policy changes; QA10 consistent K,T,C,A display. This batch does not add automatic teacher identity across closed app launches; local profile suggestions never grant write authority.
+
+Component comparison: current saved collection d74a6e6, indexv10/databasev6/browser-touchv2. DB003/004 apply to Dexie immediate uniqueness, stable identities and tombstone occupancy: no hard deletion of historical student/assessment records, service writes require actor authorization plus audit/outbox in the same transaction, injected failures must restore exact snapshots. SQLite DB001/002 are context-specific and cannot establish Dexie behavior. BRW001 requires actual reachable controls and scroll/hit targets at constrained widths; screenshot-only tests cannot prove UI flows. Browser evidence remains separate from physical devices/native dialogs.
+
+Current status: eight UI areas implemented; local339 tests/39files, production build and standalone acceptance-script typecheck PASS. Independent review found the new unit editor lacked focus/dirty guards; it now uses the shared guarded ModalDialog and declined-Escape/Cancel preservation acceptance. Direct seat reactivation and dropped-enrollment rejection regressions PASS. Full production Chromium/WebKit UI and native package acceptance remain pending publication CI; no main merge inferred. Local browser download failed with truncated CDN archives; existing pinned GitHub Actions browser container remains the feasible real UI route. Root owns integration, exact-source tests/build, production-browser scenarios, native regressions, publication and current evidence reconciliation.
+
+## Publisher work dormant — October 13, 2026, 11:59 America/Toronto
+
+Tyler: “We're shelving publisher thing until I ask for it.” Publisher signing/trust-route investigation, comparisons, eligibility/licensing/account proposals and enrollment are deliberately deferred. Revisit only when Tyler explicitly asks to reopen publisher work; installer progress, a scheduled check-in or an unresolved release gate is not that request. Do not automatically revive SignPath, Microsoft Store or another signing route, or repeat a signing decision in routine briefings.
+
+The unsigned public release/distribution hold remains. Continue already-authorized installer verification, routine repairs and review preparation where execution is available; physical Windows/UAC/managed-device acceptance remains separately unverified. This instruction does not approve a release, unsigned device installation, spending, account/license/service adoption, new product scope or real-student use.
+
+PR23 and PR24 are completed merges, main37771819cd4a72cc4d891a2836a24df71225d329. Their work covers legacy bootstrap and controlled installer failure/repair/backup recovery; the PR24 navigation/process fixes were test-harness fixes, not new app UI. Of the ten October5 UI findings, roster population/discoverability and Randomize were completed in PR18; the other eight have October13 UI implementation approval and current verification status recorded above. Existing history below is retained; this explicit deferral supersedes older signing priorities and revisit conditions.
+
 ## Approved PR23/PR24 merge sequence — October 13, 2026
 
 Tyler's “Go 4 it” explicitly approves the preceding recommendation to merge PR23 first, then retarget/review and merge PR24. This supersedes the reserved-merge statements in the dated October12/13 review checkpoints below; release/distribution, accounts/licenses/services, spending, new scope and real-student use remain reserved.
@@ -181,7 +203,7 @@ Tyler asked for the explicit post-approval instruction “Good, you approved wha
 | 2 / F-008 Markinator acceptance | Completed development merge; PR20 merged October 9 at 14:32:05 | main b9a8790; PR20 exact-source acceptance and merged-main Windows37973955991 SUCCESS | Current per-user Windows NSIS old/new upgrade now passed in PR22; signed/public pilot delivery, physical iPad/dialog/managed-device and future-schema/interruption remain separate. Do not repeat PR20 merge. |
 | 3 / F-006 installed iPad | Blocked native interaction; preparation approved October 5 | PR18 merged aa64da1; native project, asset checks and unsigned SDK compile exist | Finish available matrix/documentation while device work is blocked. Actual simulator/physical Files, touch selection, background/resume, offline/storage, export and free-signing renewal require Mac/Xcode/device access. Browser or compilation results do not prove these. |
 | 4 / F-007 central bug receipt | Requested receiver adoption; local draft implementation completed | PR19 receiver decision packet; no deployed receiver or verified receipt | Reconcile actual dashboard/access and Tyler replies before repeating a decision. Prepare concrete bug-only receiver setup; adoption/support-sign-in/access remains unresolved in the records. Do not transmit classroom records or invent provider approval. |
-| 5 / UI QA remaining items | Requested / scoped review; only QA02/03 implementation was approved and merged | Ten-item table below; coordinator owns diagnosis/planning | Prepare a coherent next repair proposal from actual reproduction and teacher workflow risk. Keep all eight remaining requests visible; do not treat the seating approval as approval for unrelated features. |
+| 5 / UI QA remaining items | Eight remaining items approved October13; implementation underway | Ten-item table below; coordinator owns diagnosis/planning | Execute the eight-item approved UI batch through meaningful checks/publication/review; preserve actor, marks/history and local-only boundaries. Merge/release remain reserved. |
 
 PR19/PR20/PR22/PR21 merge sequence is complete. Root owns the approved PR23/PR24 merge sequence and remaining installer-verification coordination; check actual merged metadata before acting. Release stays reserved.
 
@@ -191,16 +213,16 @@ Source: direct conversation, fictional Windows QA; screenshot unavailable. Detai
 
 | Stable ID | Requested outcome | Status / approval | Next action / evidence |
 | --- | --- | --- | --- |
-| QA-20261005-01 | Teacher-profile prompt every launch | Requested; shared-device/session attribution must remain explicit | Reproduce intended prompt; propose session behavior without assuming persistent identity approval. |
+| QA-20261005-01 | Teacher-profile prompt every launch | Approved October13; implemented, runtime verification pending | Reproduce intended prompt; propose session behavior without assuming persistent identity approval. |
 | QA-20261005-02 | Imported class not empty; Populate discoverable; correct empty-seat controls | Completed; roster/seating repair approved | Merged PR18 aa64da1; source64c6a3a; actual browser flow and combined desktop checks. Release/install remain separate. |
 | QA-20261005-03 | Randomize confirmation works | Completed under same seating approval | Same PR18 evidence; preservation/rollback/actor checks. |
-| QA-20261005-04 | Participation defaults/buttons and consistent tooltips | Requested | Reproduce new-class empty state and all classifications; prepare bounded repair. |
-| QA-20261005-05 | Ontario conversion preset shows useful content | Requested | Inspect active preset rendering/loading and propose fix. |
-| QA-20261005-06 | Easy removal from class roster | Requested | Plan confirmed unenrollment/archive preserving marks/history/audit. No destructive student deletion authorized. |
-| QA-20261005-07 | Local photo crop/resize/preview/confirmation | Requested; planned for scoped review | Define cancel-safe on-device flow; automatic existing resizing is not a crop/preview implementation. |
-| QA-20261005-08 | Discoverable unit create/name/rename/edit | Requested | Inspect existing metadata and controls; define unit lifecycle without duplicate UI. |
-| QA-20261005-09 | Collapse formative/summative details to overall grade | Requested; planned for scoped review | Define display and aggregation without changing grading policy. |
-| QA-20261005-10 | K, T, C, A order consistently | Requested | Inspect affected headers/lists; preserve IDs, weights and independent category evidence. |
+| QA-20261005-04 | Participation defaults/buttons and consistent tooltips | Approved October13; implemented, runtime verification pending | Reproduce new-class empty state and all classifications; prepare bounded repair. |
+| QA-20261005-05 | Ontario conversion preset shows useful content | Approved October13; implemented, runtime verification pending | Inspect active preset rendering/loading and propose fix. |
+| QA-20261005-06 | Easy removal from class roster | Approved October13; implemented, runtime verification pending | Plan confirmed unenrollment/archive preserving marks/history/audit. No destructive student deletion authorized. |
+| QA-20261005-07 | Local photo crop/resize/preview/confirmation | Approved October13; implemented, runtime verification pending | Define cancel-safe on-device flow; automatic existing resizing is not a crop/preview implementation. |
+| QA-20261005-08 | Discoverable unit create/name/rename/edit | Approved October13; implemented, runtime verification pending | Inspect existing metadata and controls; define unit lifecycle without duplicate UI. |
+| QA-20261005-09 | Collapse formative/summative details to overall grade | Approved October13; implemented, runtime verification pending | Define display and aggregation without changing grading policy. |
+| QA-20261005-10 | K, T, C, A order consistently | Approved October13; implemented, runtime verification pending | Inspect affected headers/lists; preserve IDs, weights and independent category evidence. |
 
 ## Other retained work and future features
 

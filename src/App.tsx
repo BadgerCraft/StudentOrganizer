@@ -241,6 +241,13 @@ export function App() {
     [activeSectionId, activeClassObj?.section.id]
   ) || [];
 
+  // Keep dropped enrollment records available to history, but never leave
+  // them selected for a new attendance or participation write.
+  useEffect(() => {
+    const activeIds = new Set(activeEnrollments.filter(e => e.deletedAt === null && e.enrollmentStatus === 'active').map(e => e.id));
+    setSelectedEnrollmentIds(ids => ids.every(id => activeIds.has(id)) ? ids : ids.filter(id => activeIds.has(id)));
+  }, [activeEnrollments]);
+
   const activeUnits = useLiveQuery(
     () => activeClassObj && activeSectionId ? db.units.where('classSectionId').equals(activeSectionId).toArray() : [],
     [activeSectionId, activeClassObj?.section.id]
@@ -629,6 +636,7 @@ export function App() {
           onHistoricalTimeChange={setHistoricalTime}
           onRecordEvent={handleRecordParticipation}
           onClearSelection={() => setSelectedEnrollmentIds([])}
+          onConfigureButtons={() => handleViewChange('settings')}
           lastBatchUndo={lastUndo}
           onUndo={handleUndo}
         />

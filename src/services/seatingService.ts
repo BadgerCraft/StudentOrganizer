@@ -104,8 +104,8 @@ export class SeatingDomainService {
 
         // Validate enrollment belongs to this class section
         const enrollment = await this.db.classEnrollments.get(classEnrollmentId);
-        if (!enrollment || enrollment.deletedAt !== null) {
-          throw new ValidationError(`Class enrollment ${classEnrollmentId} not found or deleted.`);
+        if (!enrollment || enrollment.deletedAt !== null || enrollment.enrollmentStatus !== 'active') {
+          throw new ValidationError(`Class enrollment ${classEnrollmentId} is not active.`);
         }
         if (enrollment.classSectionId !== layout.classSectionId) {
           throw new ValidationError(`Enrollment does not belong to section ${layout.classSectionId}.`);
@@ -117,7 +117,7 @@ export class SeatingDomainService {
           .first();
 
         if (existingStudentSeat) {
-          if (existingStudentSeat.row === row && existingStudentSeat.col === col) {
+          if (existingStudentSeat.row === row && existingStudentSeat.col === col && existingStudentSeat.deletedAt === null) {
             return existingStudentSeat; // Already in target seat
           }
 
@@ -125,13 +125,14 @@ export class SeatingDomainService {
             ...existingStudentSeat,
             row,
             col,
+            deletedAt: null,
             updatedAt: now,
             version: existingStudentSeat.version + 1
           };
           const changes: { previous: SeatPosition; next: SeatPosition }[] = [
             { previous: existingStudentSeat, next: updatedPosition }
           ];
-          if (existingAtCoord) {
+          if (existingAtCoord && existingAtCoord.id !== existingStudentSeat.id) {
             changes.push({
               previous: existingAtCoord,
               next: {
@@ -193,6 +194,7 @@ export class SeatingDomainService {
           const updated: SeatPosition = {
             ...existingAtCoord,
             classEnrollmentId,
+            deletedAt: null,
             updatedAt: now,
             version: existingAtCoord.version + 1
           };
