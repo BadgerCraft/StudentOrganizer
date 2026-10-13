@@ -75,6 +75,9 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   await page.getByTestId('observation-note-input').fill('Fictional settings acceptance snapshot');
   await page.getByRole('button', { name: 'Record Fictional positive button', exact: true }).click();
   const withObservation = await untilRows(page, 'participationEvents', events => events.some(e => e.note === 'Fictional settings acceptance snapshot'));
+  // Successful recording deliberately clears selection and closes the dock.
+  await page.getByTestId('configure-participation-btn').waitFor({ state: 'hidden' });
+  await page.getByTestId('student-seat-name').first().click();
   await page.getByTestId('configure-participation-btn').click();
   await page.getByRole('heading', { name: 'Grading Policies & Observation Settings', exact: true }).waitFor();
 
