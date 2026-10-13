@@ -14,7 +14,9 @@ import { runMarkingDesktopAcceptance, verifyAfterRestart, type MarkingDesktopEvi
 // guard below limits it to a disposable Windows runner containing fictional QA
 // data; no replacement is attempted against a teacher's installation/profile.
 const legacyBootstrap = process.argv.includes('--legacy-bootstrap');
-const evidenceDir = path.resolve(`release/qa-evidence/${legacyBootstrap ? 'windows-bootstrap' : 'windows-upgrade'}`);
+const installRecovery = process.argv.includes('--install-recovery');
+assert.ok(!(legacyBootstrap && installRecovery), 'Select one Windows acceptance mode');
+const evidenceDir = path.resolve(`release/qa-evidence/${legacyBootstrap ? 'windows-bootstrap' : installRecovery ? 'windows-install-recovery' : 'windows-upgrade'}`);
 const execFileAsync = promisify(execFile);
 const versions = { A: '1.0.1', B: '1.0.2' };
 const legacySource = 'b9a8790f4841fa9fd5057e7cfef097f619cbac4a';
@@ -408,12 +410,211 @@ async function runLegacyBootstrap() {
   }
 }
 
+/**
+ * Exercise the supported recovery after replacement has started and the old
+ * app can no longer stay open. The fixture installer uses the real NSIS
+ * extraction/registration path, then deliberately deletes the installed
+ * executable and aborts. This is deterministic binary-loss evidence, not a
+ * claim about an actual power cut.
+ */
+async function runInstallRecovery() {
+  assert.ok(process.argv.includes('--acknowledge-unsigned'), 'Disposable unsigned recovery testing requires explicit acknowledgement');
+  const packageBuild = JSON.parse(fs.readFileSync('package.json', 'utf8')).build;
+  assert.equal(packageBuild?.nsis?.include, undefined, 'The failure fixture must never be part of the production NSIS configuration');
+  const pair = { A: versions.A, B: versions.B };
+  const directories = { A: 'recovery-A', failure: 'recovery-failure-B', B: 'recovery-B' };
+  const installers = Object.fromEntries(Object.entries(directories).map(([key, directory]) => {
+    const names = fs.readdirSync(path.resolve('release', directory)).filter(name => name.endsWith('-nsis.exe'));
+    assert.equal(names.length, 1, `One recovery ${key} installer required`);
+    const expectedVersion = key === 'A' ? pair.A : pair.B;
+    assert.ok(names[0].includes(expectedVersion));
+    return [key, path.resolve('release', directory, names[0])];
+  })) as { A: string; failure: string; B: string };
+  const signatures: Record<string, unknown> = {};
+  for (const [key, installer] of Object.entries(installers)) {
+    const result = await windowsPowerShell(
+      '$s=Get-AuthenticodeSignature -LiteralPath $env:OTA_RECOVERY_INSTALLER; [pscustomobject]@{ status=$s.Status.ToString(); publisher=$s.SignerCertificate.Subject } | ConvertTo-Json -Compress',
+      { OTA_RECOVERY_INSTALLER: installer });
+    const signature = JSON.parse(result.stdout.trim());
+    assert.ok(['NotSigned', 'Valid'].includes(signature.status), 'Actual recovery installer signature errors must fail closed');
+    signatures[key] = signature;
+  }
+  console.log('Disposable fictional-data unsigned recovery fixture explicitly acknowledged; checksums do not verify publisher identity.');
+
+  const failureBytes = fs.readFileSync(installers.failure);
+  const sha512 = createHash('sha512').update(failureBytes).digest('base64');
+  const failureFilename = path.basename(installers.failure);
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url || '');
+    const resource = new URL(request.url || '/', 'http://localhost').pathname;
+    if (resource === '/latest.yml') {
+      response.setHeader('Content-Type', 'text/yaml');
+      response.end(`version: ${pair.B}\nfiles:\n  - url: ${failureFilename}\n    sha512: ${sha512}\n    size: ${failureBytes.length}\npath: ${failureFilename}\nsha512: ${sha512}\nreleaseDate: '2026-10-13T00:00:00.000Z'\n`);
+    } else if (resource === `/${failureFilename}`) {
+      response.setHeader('Content-Length', failureBytes.length);
+      response.end(failureBytes);
+    } else {
+      response.statusCode = 404;
+      response.end();
+    }
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const feed = `http://127.0.0.1:${address.port}`;
+  const installDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fictional-ota-install-recovery-'));
+  const executable = path.join(installDir, 'Ontario Teacher Assessment.exe');
+  const failureMarker = path.join(installDir, 'student-organizer-ci-install-failure.txt');
+  let running: Awaited<ReturnType<typeof launchInstalled>> | undefined;
+  let setup: ChildProcess | undefined;
+  let marking: MarkingDesktopEvidence | undefined;
+  let safetyBackup = '';
+  let fixtureDownload = '';
+  try {
+    setup = spawn(installers.A, ['/S', '/currentuser', `/D=${installDir}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
+    await waitForExit(setup, 120000);
+    canonicalExecutable(executable);
+    running = await launchInstalled(executable, pair.A);
+    await openHub(running.page);
+    marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
+    const before = await snapshotAll(running.page);
+    assert.equal(Object.keys(before).length, 39, 'Install recovery must cover every current-schema table');
+    const profileA = running.userData;
+    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    const updates = running.page.getByRole('region', { name: 'Windows updates' });
+    await updates.waitFor();
+    assert.deepEqual(await configureFixtureFeed(running.app, feed), { autoDownload: false, autoInstallOnAppQuit: false });
+    assert.equal(requests.length, 0, 'Recovery fixture must not check or download before a click');
+    await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
+    await updates.getByRole('status').filter({ hasText: `Version ${pair.B} is available.` }).waitFor();
+    await updates.getByRole('button', { name: 'Download update', exact: true }).click();
+    assert.equal((await waitState(running.page, ['downloaded'])).signature, 'unsigned');
+    const downloaded = await running.app.evaluate(() => (globalThis as any).__upgradeDownloaded || []);
+    assert.equal(downloaded.length, 1, 'Exactly one fixture installer download is required');
+    assert.equal(downloaded[0].expectedSha512, downloaded[0].actualSha512, 'The downloaded failure fixture must match its metadata');
+    fixtureDownload = downloaded[0].installerPath || downloaded[0].file;
+    assert.ok(typeof fixtureDownload === 'string' && fixtureDownload.endsWith('.exe'), 'The exact downloaded fixture path is required');
+
+    const installButton = updates.getByRole('button', { name: 'Backup and install', exact: true });
+    await installButton.click();
+    const dialog = running.page.getByRole('dialog', { name: 'Install Windows update' });
+    await dialog.getByRole('checkbox', { name: 'I understand this installer is unsigned.' }).check();
+    const exit = new Promise<void>(resolve => running!.app.process().once('exit', () => resolve()));
+    await dialog.getByRole('button', { name: 'Install and reopen', exact: true }).click();
+    await Promise.race([exit, delay(60000).then(() => { throw new Error('Production updater did not close A for the failure fixture'); })]);
+    running = undefined;
+    await waitUntil(async () => fs.existsSync(failureMarker) ? true : undefined, 'deliberate post-copy NSIS failure marker', 120000);
+    await waitUntil(async () => (await installedProcess(fixtureDownload)).length === 0 ? true : undefined,
+      'deliberate failure installer process exit', 120000);
+    assert.equal(fs.existsSync(executable), false, 'The failure fixture must leave the installed executable unusable');
+    assert.equal((await installedProcess(executable)).length, 0, 'A failed replacement must not claim an automatic reopen');
+
+    const backupDirectory = path.join(profileA, 'update-backups');
+    const backups = fs.readdirSync(backupDirectory).filter(name => name.endsWith('.json')).sort();
+    assert.ok(backups.length, 'The verified safety backup must survive the post-launch installer failure');
+    safetyBackup = path.join(backupDirectory, backups.at(-1)!);
+    const backup = JSON.parse(fs.readFileSync(safetyBackup, 'utf8'));
+    assert.equal(backup.schemaVersion, 4);
+    for (const [table, rows] of Object.entries(before)) {
+      assert.deepEqual((backup.tables[table] || []).sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))), rows,
+        `Safety backup must preserve ${table} before the failed replacement`);
+    }
+
+    setup = spawn(installers.B, ['/S', '/currentuser', `/D=${installDir}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
+    await waitForExit(setup, 120000);
+    running = await launchInstalled(executable, pair.B);
+    assert.equal(running.userData, profileA, 'Manual repair must rediscover the original installed profile');
+    await openHub(running.page); await verifyAfterRestart(running.page, marking);
+
+    // Make the restore observable: the saved pre-failure backup must replace a
+    // later B edit rather than merely previewing data that already matches.
+    await running.page.getByTestId(`marking-session-open-${marking.firstAttemptId}`).click();
+    await waitUntil(async () => {
+      const document = running!.page.getByTestId('marking-document');
+      const save = running!.page.getByRole('button', { name: 'Save now', exact: true });
+      const session = running!.page.locator('section[aria-label="Marking session"]');
+      if (!(await document.count()) || !(await save.count()) || !(await session.count())) return undefined;
+      return (await document.innerText()).includes('Echo phrase. Middle words.')
+        && (await session.innerText()).includes('Draft — official marks unchanged')
+        && await save.isEnabled() ? true : undefined;
+    }, 'repaired pending workspace settled before later edit');
+    const laterFeedback = 'Fictional post-repair change that the safety backup must replace';
+    await running.page.getByTestId('marking-feedback').fill(laterFeedback);
+    await running.page.getByRole('button', { name: 'Save now', exact: true }).click();
+    await waitUntil(async () => (await snapshotAll(running!.page)).markingSessions.some(row => row.attemptId === marking!.firstAttemptId
+      && row.status === 'draft' && row.draft.pending?.text === laterFeedback) ? true : undefined, 'actual later repaired feedback saved');
+    const changed = await snapshotAll(running.page);
+    assert.notDeepEqual(changed.markingSessions, before.markingSessions);
+    assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
+    assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
+    await running.page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+    await running.page.getByTestId('nav-portability-btn').click();
+    await running.page.getByTestId('restore-file-input').setInputFiles(safetyBackup);
+    await running.page.getByTestId('restore-confirm-dialog').waitFor();
+    assert.deepEqual(await snapshotAll(running.page), changed, 'Safety-backup preview must not change the repaired database');
+    await running.page.getByTestId('confirm-restore-btn').click();
+    await running.page.getByText(/Database successfully restored/).waitFor();
+    assert.deepEqual(await snapshotAll(running.page), before, 'Confirmed safety-backup recovery must restore every original record');
+
+    await running.app.close(); running = undefined;
+    running = await launchInstalled(executable, pair.B);
+    assert.equal(running.userData, profileA);
+    assert.deepEqual(await snapshotAll(running.page), before, 'A repaired B restart must retain the recovered records');
+    await openHub(running.page); await verifyAfterRestart(running.page, marking);
+    const reportB = path.join(evidenceDir, 'markinator-report-recovered.html');
+    await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
+    assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Recovered finalized report bytes must match the original');
+    await running.app.close(); running = undefined;
+    running = await launchInstalled(executable, pair.B);
+    assert.equal(running.userData, profileA);
+    assert.deepEqual(await snapshotAll(running.page), before, 'Another B restart must retain the recovered records');
+    await openHub(running.page); await verifyAfterRestart(running.page, marking);
+    assert.deepEqual(running.errors, []);
+
+    writeEvidence('install-recovery-results.json', {
+      versions: pair, signatures, acknowledgedUnsigned: true, profilePreserved: true,
+      failureFixture: { marker: path.basename(failureMarker), downloadedInstaller: path.basename(fixtureDownload),
+        installerProcessExited: true, executableMissing: true, kind: 'deterministic post-copy NSIS abort; not a physical power interruption' },
+      safetyBackup: { file: path.basename(safetyBackup), schemaVersion: backup.schemaVersion },
+      installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, {
+        file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+      }])),
+      tablesRecovered: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])),
+      reportSha256: createHash('sha256').update(fs.readFileSync(reportB)).digest('hex'),
+      requests, marking,
+      checks: ['production explicit check/download/unsigned acknowledgement', 'verified complete safety backup before quit',
+        'real NSIS post-copy failure fixture leaves no usable executable or reopened app', 'manual good-installer repair finds the same profile',
+        'actual UI restore replaces a later saved B edit', 'every table and visible marking/report recovered', 'second B restart'],
+      limits: ['controlled NSIS failure injection, not actual power loss or OS shutdown', 'unsigned fictional hosted-runner evidence only',
+        'no native dialogs/UAC or physical/managed-device acceptance', 'no future-schema, live GitHub delivery, public release or publisher-trust claim']
+    });
+    console.log('PASS: A deterministic post-launch NSIS failure left the app unusable while preserving the complete safety backup; manual B repair plus actual UI restore recovered all39 tables, visible marking and identical report bytes across another restart.');
+  } catch (error) {
+    writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined,
+      versions: pair, signatures, safetyBackup, fixtureDownload, marking, requests });
+    console.error('INSTALL RECOVERY PRIMARY FAILURE:', error);
+    if (running) await running.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
+    throw error;
+  } finally {
+    await running?.app.close().catch(() => {});
+    if (setup) killOwned(setup);
+    for (const process of await installedProcess(executable).catch(() => [])) {
+      try { execFileSync('taskkill', ['/PID', String(process.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* Already closed. */ }
+    }
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    cleanupDirectory(installDir);
+  }
+}
+
 async function main() {
   if (process.platform !== 'win32' || process.env.CI !== 'true' || process.env.GITHUB_ACTIONS !== 'true') {
     throw new Error('Real installer replacement may run only on a disposable Windows GitHub Actions runner.');
   }
   fs.mkdirSync(evidenceDir, { recursive: true });
   if (legacyBootstrap) return runLegacyBootstrap();
+  if (installRecovery) return runInstallRecovery();
   // Fail early on an installed IPC boundary problem, before building the A/B
   // pair. This also verifies the released QA installer exposes real status IPC.
   if (process.argv.includes('--ipc-boundary-only')) {
