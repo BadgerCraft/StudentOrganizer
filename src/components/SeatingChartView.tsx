@@ -97,7 +97,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   students.forEach(s => studentMap.set(s.id, s));
 
   const enrollmentMap = new Map<UUID, ClassEnrollment>();
-  enrollments.forEach(e => enrollmentMap.set(e.id, e));
+  enrollments.filter(e => e.deletedAt === null && e.enrollmentStatus === 'active').forEach(e => enrollmentMap.set(e.id, e));
 
   const attendanceMap = new Map<UUID, AttendanceRecord>();
   attendanceRecords
@@ -121,7 +121,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   for (let r = 0; r < layout.rows; r++) {
     const rowArr: (SeatPosition | null)[] = [];
     for (let c = 0; c < layout.cols; c++) {
-      const pos = seatPositions.find(p => p.row === r && p.col === c && p.deletedAt === null);
+      const pos = seatPositions.find(p => p.row === r && p.col === c && p.deletedAt === null && enrollmentMap.has(p.classEnrollmentId));
       rowArr.push(pos || null);
     }
     grid.push(rowArr);

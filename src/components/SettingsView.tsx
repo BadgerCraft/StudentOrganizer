@@ -1,4 +1,5 @@
 import { ManualWindowsUpdate } from './ManualWindowsUpdate';
+import { MarkScalePreview } from './MarkScalePreview';
 import { ClassSettingsService } from '../services/classSettingsService';
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -62,10 +63,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Event Type Management State
   const eventTypeService = useMemo(() => new ParticipationEventTypeService(db), []);
-  const allEventTypes = useLiveQuery(
+  const queriedEventTypes = useLiveQuery(
     () => eventTypeService.listEventTypesForSection(activeSectionId, true),
     [activeSectionId]
-  ) || [];
+  );
+  const allEventTypes = queriedEventTypes || [];
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingType, setEditingType] = useState<ParticipationEventType | null>(null);
@@ -123,6 +125,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setNewCategory('NONE');
     setShowCreateModal(false);
     setEventTypeErrorMessage(null);
+  };
+
+  const openCreateButton = (classification: EventClassification = 'positive') => {
+    resetCreateForm();
+    setNewClassification(classification);
+    setNewPoints(classification === 'positive' ? 1 : 0);
+    setShowCreateModal(true);
+  };
+
+  const handleAddStarters = async () => {
+    if (!activeSectionId) return;
+    setEventTypeErrorMessage(null);
+    setPendingWrites(count => count + 1);
+    try {
+      const identity = await getIdentity();
+      const created = await eventTypeService.addStarterButtons(activeSectionId, identity.userId, identity.deviceId);
+      setEventTypeSuccessMessage(created.length ? 'Added four starter buttons. Customize them below. Observations have no formal grade impact.' : 'Existing buttons were preserved; no starter buttons were added.');
+    } catch (error) {
+      setEventTypeErrorMessage(error instanceof Error ? error.message : 'Starter buttons could not be added.');
+    } finally {
+      setPendingWrites(count => count - 1);
+    }
   };
 
   const getIdentity = async () => {
@@ -315,28 +339,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Participation &amp; Observation Buttons</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Configure 1-click Quick-Tally and Level 1–4 observation buttons. Global presets are read-only.
+              Buttons are shared by classes in this school workspace. Quick tallies and Level 1–4 observations have no formal grade impact. Global presets are read-only.
             </p>
           </div>
           <button
             data-testid="create-event-type-btn"
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition active:scale-95"
+            onClick={() => openCreateButton()}
+            disabled={!activeSectionId || pendingWrites > 0 || queriedEventTypes === undefined}
+            className="min-h-[44px] flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>New Button</span>
           </button>
         </div>
 
+        {queriedEventTypes === undefined ? <p role="status" className="text-sm text-slate-600">Loading participation buttons…</p> : !activeSectionId ?
+          <p className="text-sm text-slate-600">Select a class to configure its workspace buttons.</p> : allEventTypes.length === 0 ? (
+          <div data-testid="participation-empty-state" className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+            <p className="text-sm text-slate-800">This workspace has no participation buttons yet. Add starter buttons for positive contributions, general observations, achievement levels and follow-up, or create your own in any group below.</p>
+            <button data-testid="add-starter-buttons-btn" disabled={pendingWrites > 0} onClick={handleAddStarters}
+              className="min-h-[44px] px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-xs disabled:opacity-50">Add starter buttons</button>
+          </div>
+        ) : activeTypes.length === 0 ? <p className="text-sm text-slate-600">All workspace buttons are archived. Restore a button below or create a new one; historical observations are preserved.</p> : null}
+
         {/* Groups: Positive, Neutral, Needs Follow-up */}
         <div className="space-y-6">
           {/* Positive Group */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center space-x-1.5 mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex flex-wrap items-center gap-2 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Positive Contribution Buttons ({positiveTypes.length})</span>
+              <button data-testid="create-positive-button" onClick={() => openCreateButton('positive')} disabled={!activeSectionId || pendingWrites > 0}
+                title="Create a positive contribution button; no formal grade impact"
+                className="ml-auto min-h-[44px] px-3 py-2 text-xs normal-case tracking-normal rounded-lg border border-slate-300 bg-white disabled:opacity-50">New Button</button>
             </h3>
             <div className="space-y-1.5">
+              {positiveTypes.length === 0 && queriedEventTypes !== undefined && <p className="p-3 text-xs text-slate-600 border border-dashed rounded-xl">No positive contribution buttons. Use New Button in this group to create one.</p>}
               {positiveTypes.map((et, idx) => {
                 const isOrg = et.organizationId !== null;
                 const orgTypesInGroup = positiveTypes.filter(t => t.organizationId !== null);
@@ -346,9 +384,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div
                     key={et.id}
                     data-testid="event-type-row"
-                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
+                    className="flex flex-wrap gap-2 items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
                   >
-                    <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="flex flex-wrap gap-2 items-center min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
                       <span className="font-bold text-slate-900 truncate">{et.name}</span>
                       {et.organizationId === null ? (
@@ -386,7 +424,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             data-testid="move-up-event-type-btn"
                             disabled={orgIdx <= 0}
                             onClick={() => handleReorder(et, 'up')}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                             title="Move Up"
                           >
                             <ChevronUp className="w-3.5 h-3.5" />
@@ -395,7 +433,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             data-testid="move-down-event-type-btn"
                             disabled={orgIdx >= orgTypesInGroup.length - 1}
                             onClick={() => handleReorder(et, 'down')}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                             title="Move Down"
                           >
                             <ChevronDown className="w-3.5 h-3.5" />
@@ -403,7 +441,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <button
                             data-testid="edit-event-type-btn"
                             onClick={() => handleOpenEdit(et)}
-                            className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
                             title="Edit Button"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -411,7 +449,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <button
                             data-testid="archive-event-type-btn"
                             onClick={() => setConfirmArchiveType(et)}
-                            className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
                             title="Archive Button"
                           >
                             <Archive className="w-3.5 h-3.5" />
@@ -427,9 +465,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Neutral Group */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5 mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex flex-wrap items-center gap-2 mb-2">
               <Eye className="w-3.5 h-3.5 text-slate-600" />
               <span>Observation / Neutral Buttons ({neutralTypes.length})</span>
+              <button data-testid="create-neutral-button" onClick={() => openCreateButton('neutral')} disabled={!activeSectionId || pendingWrites > 0}
+                title="Create a neutral observation button; no formal grade impact"
+                className="ml-auto min-h-[44px] px-3 py-2 text-xs normal-case tracking-normal rounded-lg border border-slate-300 bg-white disabled:opacity-50">New Button</button>
             </h3>
             <div className="space-y-1.5">
               {neutralTypes.length === 0 ? (
@@ -446,9 +487,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div
                       key={et.id}
                       data-testid="event-type-row"
-                      className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
+                      className="flex flex-wrap gap-2 items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
                     >
-                      <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="flex flex-wrap gap-2 items-center min-w-0">
                         <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
                         <span className="font-bold text-slate-900 truncate">{et.name}</span>
                         {et.organizationId === null ? (
@@ -486,7 +527,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                               data-testid="move-up-event-type-btn"
                               disabled={orgIdx <= 0}
                               onClick={() => handleReorder(et, 'up')}
-                              className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                               title="Move Up"
                             >
                               <ChevronUp className="w-3.5 h-3.5" />
@@ -495,7 +536,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                               data-testid="move-down-event-type-btn"
                               disabled={orgIdx >= orgTypesInGroup.length - 1}
                               onClick={() => handleReorder(et, 'down')}
-                              className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                               title="Move Down"
                             >
                               <ChevronDown className="w-3.5 h-3.5" />
@@ -503,7 +544,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             <button
                               data-testid="edit-event-type-btn"
                               onClick={() => handleOpenEdit(et)}
-                              className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
                               title="Edit Button"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -511,7 +552,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             <button
                               data-testid="archive-event-type-btn"
                               onClick={() => setConfirmArchiveType(et)}
-                              className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
                               title="Archive Button"
                             >
                               <Archive className="w-3.5 h-3.5" />
@@ -528,11 +569,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Needs Follow-up Group */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center space-x-1.5 mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex flex-wrap items-center gap-2 mb-2">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
               <span>Needs Follow-up Buttons ({needsFollowupTypes.length})</span>
+              <button data-testid="create-needs_followup-button" onClick={() => openCreateButton('needs_followup')} disabled={!activeSectionId || pendingWrites > 0}
+                title="Create a follow-up button; no formal grade impact"
+                className="ml-auto min-h-[44px] px-3 py-2 text-xs normal-case tracking-normal rounded-lg border border-slate-300 bg-white disabled:opacity-50">New Button</button>
             </h3>
             <div className="space-y-1.5">
+              {needsFollowupTypes.length === 0 && queriedEventTypes !== undefined && <p className="p-3 text-xs text-slate-600 border border-dashed rounded-xl">No follow-up buttons. Use New Button in this group to create one.</p>}
               {needsFollowupTypes.map(et => {
                 const isOrg = et.organizationId !== null;
                 const orgTypesInGroup = needsFollowupTypes.filter(t => t.organizationId !== null);
@@ -542,9 +587,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div
                     key={et.id}
                     data-testid="event-type-row"
-                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
+                    className="flex flex-wrap gap-2 items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs transition"
                   >
-                    <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="flex flex-wrap gap-2 items-center min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
                       <span className="font-bold text-slate-900 truncate">{et.name}</span>
                       {et.organizationId === null ? (
@@ -582,7 +627,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             data-testid="move-up-event-type-btn"
                             disabled={orgIdx <= 0}
                             onClick={() => handleReorder(et, 'up')}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                             title="Move Up"
                           >
                             <ChevronUp className="w-3.5 h-3.5" />
@@ -591,7 +636,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             data-testid="move-down-event-type-btn"
                             disabled={orgIdx >= orgTypesInGroup.length - 1}
                             onClick={() => handleReorder(et, 'down')}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
                             title="Move Down"
                           >
                             <ChevronDown className="w-3.5 h-3.5" />
@@ -599,7 +644,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <button
                             data-testid="edit-event-type-btn"
                             onClick={() => handleOpenEdit(et)}
-                            className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
                             title="Edit Button"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -607,7 +652,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <button
                             data-testid="archive-event-type-btn"
                             onClick={() => setConfirmArchiveType(et)}
-                            className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
                             title="Archive Button"
                           >
                             <Archive className="w-3.5 h-3.5" />
@@ -624,7 +669,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* Archived Buttons Section */}
           {archivedTypes.length > 0 && (
             <div className="pt-4 border-t border-slate-100">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5 mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex flex-wrap items-center gap-2 mb-2">
                 <Archive className="w-3.5 h-3.5 text-slate-400" />
                 <span>Archived Buttons ({archivedTypes.length})</span>
               </h3>
@@ -635,7 +680,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 {archivedTypes.map(et => (
                   <div
                     key={et.id}
-                    className="flex items-center justify-between p-2.5 bg-slate-50/60 border border-dashed border-slate-200 rounded-xl text-xs"
+                    className="flex flex-wrap gap-2 items-center justify-between p-2.5 bg-slate-50/60 border border-dashed border-slate-200 rounded-xl text-xs"
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-semibold text-slate-600 line-through">{et.name}</span>
@@ -756,23 +801,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </form>
 
-      {/* Versioned Mark Scale Preview */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-        <h2 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100">
-          Ontario Achievement-Level Teacher Conversion Preset (Active Version 1)
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {scaleEntries.map(entry => (
-            <div key={entry.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-              <span className="font-extrabold text-sm text-blue-700 block">{entry.code}</span>
-              <span className="text-[11px] text-slate-600">{entry.label}</span>
-              <div className="mt-2 text-[10px] text-slate-400">
-                Benchmark: <strong className="text-slate-800">{entry.benchmarkPercentage}%</strong> ({entry.minimumPercentage}-{entry.maximumPercentage}%)
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <MarkScalePreview versionId={policy?.defaultMarkScaleVersionId ?? null} />
 
       <ManualWindowsUpdate installationBlocked={pendingWrites > 0 || showCreateModal || !!editingType || !!confirmArchiveType ||
         (!!policy && (weightK !== policy.weightK || weightT !== policy.weightT || weightC !== policy.weightC || weightA !== policy.weightA ||
@@ -796,7 +825,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 data-testid="event-type-name-input"
                 type="text"
                 required
-                maxLength={100}
+                maxLength={60}
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="e.g. Collaborative Discussion"
@@ -893,7 +922,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 data-testid="save-event-type-btn"
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition"
+                className="min-h-[44px] px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition"
               >
                 Create Button
               </button>
@@ -931,7 +960,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   data-testid="edit-event-type-name-input"
                   type="text"
                   required
-                  maxLength={100}
+                  maxLength={60}
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
@@ -999,7 +1028,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   data-testid="save-edit-event-type-btn"
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition"
+                  className="min-h-[44px] px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition"
                 >
                   Save Changes
                 </button>

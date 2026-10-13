@@ -127,7 +127,8 @@ async function checkApp(appPath: string, format: string) {
       name: 'fictional-mac.png', mimeType: 'image/png', // Self-contained fictional PNG: photo recovery must not depend on retired PWA icons.
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGPQqNjyH4QZYAwATjwJTSZS7G8AAAAASUVORK5CYII=', 'base64')
     });
-    // Wait for the asynchronous image resize before committing the settings.
+    // Apply the actual local crop preview before committing the settings.
+    await page.getByTestId('apply-photo-crop-btn').click();
     await removePhoto.waitFor();
     assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), preferredName);
     await page.locator('[data-testid="save-student-settings-btn"]').click();
