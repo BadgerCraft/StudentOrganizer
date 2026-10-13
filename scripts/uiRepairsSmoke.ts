@@ -15,6 +15,7 @@ mkdirSync(directory, { recursive: true });
 const server = await preview({ preview: { host: '127.0.0.1', port: 4198, strictPort: true } });
 const browser = await engine.launch({ headless: true });
 const completed: string[] = [];
+const failures: { task: string; error: string }[] = [];
 
 async function teacherConfirmation(page: Page) {
   const teacher = page.locator('[data-testid^="select-teacher-"]').first();
@@ -73,10 +74,12 @@ try {
     } catch (error) {
       await page.screenshot({ path: `${directory}/${name}-failed.png`, fullPage: true }).catch(() => {});
       writeFileSync(`${directory}/${name}-failure.json`, JSON.stringify({ error: String(error), errors, external, body: await page.locator('body').innerText().catch(() => '') }, null, 2));
-      throw error;
+      failures.push({ task: name, error: String(error) });
+      console.error(`FAIL UI ${engine.name()}: ${name}`, error);
     } finally { await context.close(); }
   }
-  writeFileSync(`${directory}/results.json`, JSON.stringify({ engine: engine.name(), completed, source: process.env.VITE_BUILD_SHA || 'local', limitations: ['fictional browser evidence', 'no native/device/OS-dialog acceptance', 'fresh sessions still require explicit teacher confirmation'] }, null, 2));
+  writeFileSync(`${directory}/results.json`, JSON.stringify({ engine: engine.name(), completed, failures, source: process.env.VITE_BUILD_SHA || 'local', limitations: ['fictional browser evidence', 'no native/device/OS-dialog acceptance', 'fresh sessions still require explicit teacher confirmation'] }, null, 2));
+  if (failures.length) throw new Error(`UI acceptance failed: ${JSON.stringify(failures)}`);
 } finally {
   await browser.close();
   await new Promise<void>(resolve => server.httpServer!.close(() => resolve()));

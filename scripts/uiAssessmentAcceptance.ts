@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import type { Page } from 'playwright';
+import type { Page, Locator } from 'playwright';
+import { calculateOverallCourseGrade } from '../src/services/calculationEngine';
 
 async function records(page: Page, table: string): Promise<any[]> {
   return page.evaluate(table => new Promise((resolve, reject) => {
@@ -21,6 +22,43 @@ async function waitForRecord(page: Page, table: string, match: (row: any) => boo
     await page.waitForTimeout(100);
   }
   throw new Error(`Expected fictional ${table} record was not saved.`);
+}
+
+async function waitForVisibleText(locator: Locator, expected: string, description: string) {
+  let actual = '';
+  for (let attempt = 0; attempt < 60; attempt++) {
+    actual = (await locator.innerText()).trim();
+    if (actual === expected) return;
+    await locator.page().waitForTimeout(100);
+  }
+  assert.equal(actual, expected, description);
+}
+
+async function persistedCourseGrade(page: Page, enrollmentId: string, classSectionId: string) {
+  // Read the related grade inputs from one readonly transaction, then use the
+  // production pure calculator in Node. This requests no development modules.
+  const tables = await page.evaluate(() => new Promise<Record<string, any[]>>((resolve, reject) => {
+    const request = indexedDB.open('OntarioTeacherAssessmentDB');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const names = ['assessments', 'assessmentCategories', 'studentAssessments', 'categoryResults', 'gradingPolicies', 'gradeOverrides'];
+      const tx = db.transaction(names, 'readonly');
+      const data: Record<string, any[]> = {};
+      for (const name of names) {
+        const read = tx.objectStore(name).getAll();
+        read.onsuccess = () => { data[name] = read.result; };
+      }
+      tx.onerror = () => { db.close(); reject(tx.error); };
+      tx.oncomplete = () => { db.close(); resolve(data); };
+    };
+  }));
+  const policy = tables.gradingPolicies.find(row => row.classSectionId === classSectionId && row.deletedAt === null);
+  assert.ok(policy, 'persisted class policy exists');
+  assert.equal(policy.excludeFormative, true, 'persisted class policy still excludes formative evidence');
+  return calculateOverallCourseGrade(enrollmentId, null,
+    tables.assessments.filter(row => row.classSectionId === classSectionId), tables.assessmentCategories,
+    tables.studentAssessments, tables.categoryResults, policy, tables.gradeOverrides).finalOverall;
 }
 
 /** Begins at the dashboard after explicit first-teacher selection. Only real UI writes. */
@@ -90,6 +128,7 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
   assert.equal(policy.excludeFormative, true, 'fixture excludes formative course evidence');
   const percentages = { K: 90, T: 70, C: 50, A: 30 };
   let courseAfterSummative = '';
+  let persistedAfterSummative: number | null = null;
   for (const type of ['summative', 'formative']) {
     const assessmentId = assessmentIds[type];
     const categoryDefinitions = allCategories.filter(row => row.assessmentId === assessmentId && row.deletedAt === null);
@@ -103,9 +142,23 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
       await page.getByRole('button', { name: 'Complete', exact: true }).click();
       await page.getByRole('button', { name: 'Save Result', exact: true }).click();
       await page.getByRole('button', { name: 'Save Result', exact: true }).waitFor({ state: 'hidden' });
+      const assignment = await waitForRecord(page, 'studentAssessments', row => row.assessmentId === assessmentId &&
+        row.classEnrollmentId === enrollment.id && row.deletedAt === null && row.completionStatus === 'complete');
+      await waitForRecord(page, 'categoryResults', row => row.studentAssessmentId === assignment.id &&
+        row.assessmentCategoryId === category.id && row.deletedAt === null && row.rawScore === String(percentages[code]) &&
+        row.normalizedPercentage === percentages[code]);
+      await waitForVisibleText(page.getByTestId(`markbook-cell-${enrollment.id}-${category.id}`),
+        String(percentages[code]), `${type} ${code} saved score must be rendered before proceeding`);
     }
     const studentRow = page.getByTestId(`markbook-cell-${enrollment.id}-${categoryDefinitions[0].id}`).locator('..');
-    const overall = await studentRow.locator('td').nth(1).innerText();
+    const expectedCourse = await persistedCourseGrade(page, enrollment.id, summative.classSectionId);
+    assert.notEqual(expectedCourse, null, 'stored results produce a course grade');
+    if (type === 'summative') persistedAfterSummative = expectedCourse;
+    else assert.equal(expectedCourse, persistedAfterSummative, 'stored formative results do not change the persisted course calculation');
+    const expectedText = `${expectedCourse}%`;
+    await waitForVisibleText(studentRow.locator('td').nth(1), expectedText,
+      `${type} course grade must settle to the persisted calculation`);
+    const overall = (await studentRow.locator('td').nth(1).innerText()).trim();
     if (type === 'summative') courseAfterSummative = overall;
     else assert.equal(overall, courseAfterSummative, 'saving formative results does not change course grade');
   }
@@ -119,7 +172,7 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
   for (const type of ['summative', 'formative']) {
     const summary = page.getByTestId(`markbook-summary-${enrollment.id}-${assessmentIds[type]}`);
     await summary.waitFor();
-    assert.equal(await summary.locator('span').first().innerText(), `${expected}%`, `${type} summary uses configured weights`);
+    await waitForVisibleText(summary.locator('span').first(), `${expected}%`, `${type} summary uses configured weights`);
   }
   await page.getByTestId(`markbook-summary-${enrollment.id}-${assessmentIds.formative}`).getByRole('button', { name: /^Edit / }).click();
   const formativeCategories = allCategories.filter(row => row.assessmentId === assessmentIds.formative);
