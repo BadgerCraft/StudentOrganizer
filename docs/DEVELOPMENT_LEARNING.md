@@ -305,3 +305,10 @@ Rotate to DEV018 (update lookup versus installation), stage0, dueOctober7; its p
 DEV020 (schema upgrade versus backup restore versus installer update) was introduced today; first review remainsOctober9. Do not bring it forward or mark Tyler's high-level test-preservation explanation as specific recall. DEV007's previously successful stop rule is not repeated.
 
 No new deeper-reading packet is assigned. The existing optional upgrade/recovery explanation can be requested in an interactive reply; no defer, reading choice, feature approval or major decision is inferred from silence. Learning does not block independent authorized work.
+
+
+## Approved UI cleanup — preserved context and display rules
+
+The current UI cleanup approval was carried through implementation, regression checks and branch preparation without another routine approval request. A display order sorts a copy of category definitions; it does not change their IDs or grading weights. Collapsed assessment summaries use the existing calculation engine while the saved course policy stays unchanged. Local photo Apply edits the preview draft, while Save commits it; Cancel and obsolete asynchronous reads leave the previous photo intact.
+
+Teacher context is checked inside the write transaction, including the local device and the captured selection epoch. Switching away and back does not revive an old form, and a change during the last queued write aborts the entire transaction. The baseline teacher launch prompt already worked; a remembered profile is only an explicit confirmation shortcut. These are observed development checks, not native-device acceptance or authentication for a shared machine. Shared component-lessons skill access was unavailable; no external lesson IDs or updates are claimed. Prior optional learning prompts remain unanswered and nonblocking.
