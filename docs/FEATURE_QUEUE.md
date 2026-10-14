@@ -4,6 +4,16 @@ Updated: October 13, 2026, America/Toronto. Owner: Tyler; coordinating agent mai
 **This is the authoritative current execution queue for StudentOrganizer and Markinator.**
 Main contains completed PR19/PR20/PR22/PR21 and the October13 PR23 merge. Tyler approved PR23 followed by PR24 with “Go 4 it” on October13 at10:51 America/Toronto. The current PR24 record enters main with that approved merge; live PR23/PR24 merged metadata is the completion authority. Do not repeat either completed merge. PR17 is closed unmerged as superseded; never revive it.
 
+## How to use this record
+
+This file is the **single authoritative backlog and execution queue** for Organizer, Markinator, UI, installer/platform acceptance and Control Panel work. Consult its current dated entries and live GitHub PR status before claiming completion. A requested idea is not automatically approved, an implemented change is not automatically merged, and a passing CI test is not physical-device or release acceptance.
+
+- **Current work and priorities:** use the newest dated status/decision sections below; preserve stable feature IDs and link work orders/PRs. If contradictory, verify live PRs and reconcile this file.
+- **Product scope:** [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) explains intended behavior but does not maintain an independent priority/status queue.
+- **Bug evidence:** [BUG_REPORTS.md](BUG_REPORTS.md) and [BUG_REPORTING_INTAKE.md](BUG_REPORTING_INTAKE.md) retain details, not a competing feature backlog.
+- **Technical evidence:** Markinator checkpoints, platform guides, work orders and dated history remain supporting records, not authority to restart finished work.
+- **On each change:** update the relevant feature ID here with requested/approved/in-progress/verified/merged/deferred status, blocker, next action and evidence. Do not delete historical approvals or silently mark features complete.
+
 ## Approved PR23/PR24 merge sequence — October 13, 2026
 
 Tyler's “Go 4 it” explicitly approves the preceding recommendation to merge PR23 first, then retarget/review and merge PR24. This supersedes the reserved-merge statements in the dated October12/13 review checkpoints below; release/distribution, accounts/licenses/services, spending, new scope and real-student use remain reserved.
