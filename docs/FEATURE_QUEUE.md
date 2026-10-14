@@ -40,7 +40,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | QA-20261010-RESTART | Intermittent Intel ZIP seating visibility after restart | Observed once, retry passed; unresolved reproducibility | Capture tables/renderer if recurrence |
 | WF-002 | Reliable autonomous queue handoff and schedules | Partially verified | Confirm new-session/automatic dispatch behavior before claiming general success |
 
-| WF-003 | Decision persistence and streamlined agent workflow | Approved October 13; implementation proposed in documentation PR, not yet merged | Add top-of-file operating contract to AGENTS.md and CODING_WORKFLOW.md; verify PR and next real decision write before marking behavior validated |
+| WF-003 | Decision persistence and streamlined agent workflow | Approved October 13; documentation merged in PR28; behavioral validation pending | Top-of-file contract merged; verify next real project decision is persisted without prompting before marking behavior validated |
 
 ## Deferred proposals — no implementation authorization
 
@@ -53,7 +53,6 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | FUTURE-STORE | Microsoft Store/signing/publisher distribution | Shelved until explicitly requested; no spending or service adoption |
 
 ## Rules and supporting evidence
-
 
 - **Authority:** This table owns active status and next actions. [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) explains scope; [BUG_REPORTS.md](BUG_REPORTS.md) retains QA evidence; [BUG_REPORTING_INTAKE.md](BUG_REPORTING_INTAKE.md) describes receiver options; [markinator/CHECKPOINT.md](markinator/CHECKPOINT.md) and work orders retain technical evidence.
 - **State discipline:** Requested ≠ approved ≠ implemented ≠ tested ≠ merged ≠ released. Check live PR metadata for merge completion; historical assertions below may be superseded.
