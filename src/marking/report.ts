@@ -1,6 +1,7 @@
 import type { Assessment, AssessmentCategory, Student } from '../types/schema';
 import { exportNativeBackup, usesNativeFiles } from '../services/nativeFiles';
 import type { MarkingAttempt, MarkingCommit, MarkingRubric } from './types';
+import { assertAttemptDraft } from './validation';
 
 export interface MarkingReportInput {
   commit: MarkingCommit;
@@ -16,6 +17,8 @@ const categoryNames = { K: 'Knowledge / Understanding', T: 'Thinking', A: 'Appli
 /** Call only with records freshly read through the authorized marking service. No draft state is accepted. */
 export function renderMarkingReport({ commit, rubric, attempt, student, assessment, categories }: MarkingReportInput): string {
   if (commit.rubricId !== rubric.id || commit.attemptId !== attempt.id || attempt.rubricId !== rubric.id || [commit, rubric, attempt].some(record => record.assessmentId !== assessment.id || record.classSectionId !== assessment.classSectionId) || commit.draft.pending) throw new Error('The saved report records do not match.');
+  if (commit.createdBy !== rubric.createdBy || commit.createdBy !== attempt.createdBy) throw new Error('The saved report records do not match.');
+  assertAttemptDraft(commit.draft, attempt, rubric);
   const name = `${student.preferredName || student.firstName} ${student.lastName}`;
   const judgments = commit.draft.judgments.map(judgment => {
     const category = categories.find(value => value.id === judgment.assessmentCategoryId && value.assessmentId === assessment.id);
@@ -29,7 +32,23 @@ export function renderMarkingReport({ commit, rubric, attempt, student, assessme
     return `<article><h3>${escape(criterion.name)} — ${escape(annotation.level || 'No achievement label')}</h3><p class="source">${escape(document.name)} · characters ${annotation.start + 1}–${annotation.end}</p><blockquote>${escape(annotation.quote)}</blockquote><p>${escape(annotation.text)}</p></article>`;
   }).join('');
   const rubricRows = rubric.criteria.map(criterion => `<tr><th>${escape(criterion.name)}<br>${escape(categoryNames[criterion.categoryCode])}${criterion.weight === undefined ? '' : `<br>Rubric weight: ${escape(criterion.weight)}`}</th>${rubric.levels.map(level => `<td>${escape(criterion.descriptors[level])}</td>`).join('')}</tr>`).join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(assessment.title)} — ${escape(name)}</title><style>body{font-family:system-ui,sans-serif;color:#172033;max-width:65rem;margin:2rem auto;padding:0 1rem}h1,h2,h3{break-after:avoid}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #b9c1cc;padding:.6rem;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}p,blockquote{white-space:pre-wrap;overflow-wrap:anywhere}article{break-inside:avoid;border-top:1px solid #b9c1cc;padding:.5rem 0}blockquote{border-left:3px solid #b9c1cc;padding-left:1rem}.source,footer{font-size:.85rem;color:#475569}@media print{body{max-width:none;margin:0}table{font-size:10pt}}</style></head><body><h1>${escape(assessment.title)}</h1><p><strong>${escape(name)}</strong></p><p>Saved assessment report · ${escape(commit.createdAt)}</p><h2>Category judgments</h2><table><thead><tr><th>Category</th><th>Teacher judgment</th><th>Feedback</th></tr></thead><tbody>${judgments}</tbody></table><h2>Overall feedback</h2><p>${escape(commit.draft.overallFeedback)}</p><h2>Supporting quotations and feedback</h2>${evidence || '<p>No passage annotations.</p>'}<h2>Rubric: ${escape(rubric.title)}</h2><table><thead><tr><th>Criterion / KTAC</th>${rubric.levels.map(level => `<th>${escape(level)}</th>`).join('')}</tr></thead><tbody>${rubricRows}</tbody></table><footer><p>Saved commit ${escape(commit.id)} · attempt ${escape(attempt.id)} · rubric ${escape(rubric.id)}. Rubric labels are evidence; category judgments above are entered by the teacher. Use your browser’s Print / Save as PDF to create a PDF locally.</p></footer></body></html>`;
+  const criterionFeedback = (commit.draft.rubricFeedback ?? []).map(feedback => {
+    const criterion = rubric.criteria.find(value => value.id === feedback.criterionId)!;
+    return `<tr><th>${escape(criterion.name)}</th><td>${escape(feedback.level || 'No achievement label')}</td><td>${escape(feedback.feedback)}</td></tr>`;
+  }).join('');
+  // Original photographs and visual strokes stay in local marking recovery. Only
+  // deliberate written comments become student-facing supporting evidence.
+  const imageEvidence = (commit.draft.imageFeedback ?? []).map(feedback => {
+    const page = attempt.imagePages!.find(value => value.id === feedback.pageId)!;
+    return feedback.annotations.filter(annotation => annotation.text.trim()).map(annotation => {
+      const criterion = rubric.criteria.find(value => value.id === annotation.criterionId);
+      const label = criterion ? `${criterion.name} — ${annotation.level || 'No achievement label'}` : 'Page feedback';
+      return `<article><h3>${escape(label)}</h3><p class="source">${escape(page.name)}</p><p>${escape(annotation.text)}</p></article>`;
+    }).join('');
+  }).join('');
+  const criterionSection = criterionFeedback ? `<h2>Criterion feedback</h2><table><thead><tr><th>Criterion</th><th>Achievement label</th><th>Feedback</th></tr></thead><tbody>${criterionFeedback}</tbody></table>` : '';
+  const imageSection = imageEvidence ? `<h2>Supporting page comments</h2>${imageEvidence}` : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(assessment.title)} — ${escape(name)}</title><style>body{font-family:system-ui,sans-serif;color:#172033;max-width:65rem;margin:2rem auto;padding:0 1rem}h1,h2,h3{break-after:avoid}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #b9c1cc;padding:.6rem;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}p,blockquote{white-space:pre-wrap;overflow-wrap:anywhere}article{break-inside:avoid;border-top:1px solid #b9c1cc;padding:.5rem 0}blockquote{border-left:3px solid #b9c1cc;padding-left:1rem}.source,footer{font-size:.85rem;color:#475569}@media print{body{max-width:none;margin:0}table{font-size:10pt}}</style></head><body><h1>${escape(assessment.title)}</h1><p><strong>${escape(name)}</strong></p><p>Saved assessment report · ${escape(commit.createdAt)}</p><h2>Category judgments</h2><table><thead><tr><th>Category</th><th>Teacher judgment</th><th>Feedback</th></tr></thead><tbody>${judgments}</tbody></table><h2>Overall feedback</h2><p>${escape(commit.draft.overallFeedback)}</p>${criterionSection}<h2>Supporting quotations and feedback</h2>${evidence || '<p>No passage annotations.</p>'}${imageSection}<h2>Rubric: ${escape(rubric.title)}</h2><table><thead><tr><th>Criterion / KTAC</th>${rubric.levels.map(level => `<th>${escape(level)}</th>`).join('')}</tr></thead><tbody>${rubricRows}</tbody></table><footer><p>Saved commit ${escape(commit.id)} · attempt ${escape(attempt.id)} · rubric ${escape(rubric.id)}. Rubric labels are evidence; category judgments above are entered by the teacher. Use your browser’s Print / Save as PDF to create a PDF locally.</p></footer></body></html>`;
 }
 
 /** Deliberate local export; the report has no executable content or external resources. */

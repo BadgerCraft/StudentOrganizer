@@ -2,6 +2,7 @@ import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument,
 import { MARKING_LIMITS } from './types';
 import { ValidationError } from '../services/markbookService';
 import type { AssessmentCategory } from '../types/schema';
+import type { MarkingImagePage, MarkingPageFeedback } from './types';
 
 export type MarkingTableName = 'markingRubrics' | 'markingAttempts' | 'markingSessions' | 'markingCommits';
 function fail(message: string): never { throw new ValidationError(message); }
@@ -99,11 +100,100 @@ export function assertMarkingDocument(value: unknown): asserts value is MarkingD
     if (decodedSize !== original.size) fail('Original file size does not match its bytes.');
   }
 }
-export function assertMarkingDocuments(value: unknown): asserts value is MarkingDocument[] {
+export function assertMarkingDocuments(value: unknown, allowEmpty = false): asserts value is MarkingDocument[] {
   arr(value, 'Documents', MARKING_LIMITS.documents);
-  if (!value.length) fail('Import at least one document.');
+  if (!value.length && !allowEmpty) fail('Import at least one document.');
   value.forEach(assertMarkingDocument); const documents = value as MarkingDocument[]; unique(documents.map(item => item.id), 'Document IDs');
   if (documents.reduce((total, item) => total + (item.original?.size ?? new TextEncoder().encode(item.text).byteLength), 0) > MARKING_LIMITS.batchBytes) fail('Combined documents exceed batch size limit.');
+}
+
+export function assertMarkingImagePages(value: unknown): asserts value is MarkingImagePage[] {
+  arr(value, 'Image pages', MARKING_LIMITS.imagePages);
+  const ids: string[] = []; let bytes = 0;
+  for (const item of value) {
+    const page = object(item, 'Image page');
+    if (Object.keys(page).some(key => !['id', 'name', 'mime', 'base64', 'size', 'hash', 'width', 'height'].includes(key))) fail('Image pages must contain local bytes, never URLs or unknown source fields.');
+    str(page.id, 'Image page ID', 200); ids.push(page.id);
+    str(page.name, 'Image name', 255);
+    if (/[\u0000-\u001f\u007f/\\]/u.test(page.name as string)) fail('Image name contains paths or control characters.');
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(page.mime as string)) fail('Only local PNG, JPEG and WebP pages are supported.');
+    str(page.hash, 'Image hash', 64);
+    if (!/^[a-f0-9]{64}$/i.test(page.hash)) fail('Image hash must be SHA-256.');
+    integer(page.size, 'Image bytes');
+    if (page.size > MARKING_LIMITS.imageBytes) fail('Image exceeds the page size limit.');
+    bytes += page.size;
+    str(page.base64, 'Image bytes', 4 * Math.ceil(MARKING_LIMITS.imageBytes / 3));
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(page.base64)) fail('Image bytes must be plain base64, never a URL.');
+    const size = page.base64.length / 4 * 3 - (page.base64.endsWith('==') ? 2 : page.base64.endsWith('=') ? 1 : 0);
+    if (size !== page.size) fail('Image size does not match its retained bytes.');
+    integer(page.width, 'Image width'); integer(page.height, 'Image height');
+    if (page.width * page.height > MARKING_LIMITS.imagePixels) fail('Image exceeds the pixel limit.');
+  }
+  unique(ids, 'Image page IDs');
+  if (bytes > MARKING_LIMITS.imageBatchBytes) fail('Combined image pages exceed the batch size limit.');
+}
+
+function normalized(value: unknown, label: string, positive = false): asserts value is number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value > 1 || value < 0 || (positive && value === 0)) fail(`${label} must be a bounded normalized coordinate.`);
+}
+function extraDraft(v: Record<string, unknown>) {
+  if (v.rubricFeedback !== undefined) {
+    arr(v.rubricFeedback, 'Rubric evidence', MARKING_LIMITS.criteria);
+    let total = 0; const ids: string[] = [];
+    for (const item of v.rubricFeedback) {
+      const entry = object(item, 'Rubric evidence'); str(entry.criterionId, 'Evidence criterion', 200); ids.push(entry.criterionId);
+      str(entry.level, 'Evidence level', 100, true); str(entry.feedback, 'Criterion feedback', 20000, true); total += entry.feedback.length;
+    }
+    unique(ids, 'Evidence criteria'); if (total > 50000) fail('Combined rubric feedback exceeds its limit.');
+  }
+  if (v.oral !== undefined) {
+    const oral = object(v.oral, 'Presentation evidence'); arr(oral.items, 'Checklist items', MARKING_LIMITS.checklistItems); str(oral.notes, 'Private presentation notes', 50000, true);
+    let total = oral.notes.length; const ids: string[] = [];
+    for (const item of oral.items) {
+      const entry = object(item, 'Checklist item'); str(entry.id, 'Checklist ID', 200); ids.push(entry.id);
+      str(entry.label, 'Checklist label', 500, true); str(entry.note, 'Checklist note', 20000, true); total += entry.note.length;
+      if (typeof entry.checked !== 'boolean') fail('Checklist status must be explicit.');
+    }
+    unique(ids, 'Checklist IDs'); if (total > 50000) fail('Combined presentation notes exceed their limit.');
+  }
+  if (v.imageFeedback !== undefined) {
+    arr(v.imageFeedback, 'Page feedback', MARKING_LIMITS.imagePages); const pageIds: string[] = [], annotationIds: string[] = [];
+    for (const item of v.imageFeedback) {
+      const page = object(item, 'Page feedback'); str(page.pageId, 'Feedback page ID', 200); pageIds.push(page.pageId);
+      if (![0, 90, 180, 270].includes(page.rotation as number)) fail('Page rotation must be a right angle.');
+      const crop = object(page.crop, 'Page crop'); normalized(crop.x, 'Crop left'); normalized(crop.y, 'Crop top'); normalized(crop.width, 'Crop width', true); normalized(crop.height, 'Crop height', true);
+      if (crop.x + crop.width > 1 + 1e-9 || crop.y + crop.height > 1 + 1e-9) fail('Page crop must stay inside the retained original.');
+      arr(page.annotations, 'Visual annotations', MARKING_LIMITS.visualAnnotations);
+      for (const value of page.annotations) {
+        const mark = object(value, 'Visual annotation'); str(mark.id, 'Visual annotation ID', 200); annotationIds.push(mark.id);
+        if (!['pen', 'highlight', 'comment'].includes(mark.kind as string) || !['red', 'blue', 'yellow'].includes(mark.color as string)) fail('Unsupported visual annotation tool or color.');
+        normalized(mark.width, 'Visual stroke width', true);
+        arr(mark.points, 'Visual points', MARKING_LIMITS.strokePoints);
+        if (!mark.points.length || (mark.kind === 'comment' && mark.points.length !== 1)) fail('Visual annotations require original-page anchors.');
+        for (const point of mark.points) { const p = object(point, 'Visual point'); normalized(p.x, 'Point x'); normalized(p.y, 'Point y'); }
+        str(mark.text, 'Visual comment', 20000, true); nullableId(mark.criterionId, 'Visual criterion'); str(mark.level, 'Visual evidence level', 100, true);
+      }
+    }
+    unique(pageIds, 'Feedback page IDs'); unique(annotationIds, 'Visual annotation IDs');
+  }
+}
+
+/** Links extension data to the immutable attempt, not the current import UI. */
+export function assertAttemptDraft(draft: MarkingDraft, attempt: MarkingAttempt, rubric: MarkingRubric) {
+  assertMarkingDraft(draft, rubric, attempt.documents);
+  const mode = attempt.mode ?? 'written', pages = attempt.imagePages ?? [];
+  if (mode !== 'oral' && draft.oral !== undefined) fail('Presentation evidence belongs only to an oral attempt.');
+  if (mode === 'oral' && draft.oral === undefined) fail('Oral attempts must retain their presentation evidence.');
+  const feedback = draft.imageFeedback ?? [];
+  if (feedback.length !== pages.length || feedback.some(p => !pages.some(original => original.id === p.pageId))) fail('Review feedback for every retained original image page.');
+  if (mode !== 'written' && (pages.length || draft.annotations.length || draft.pending)) fail('This marking mode cannot contain written-page annotations.');
+  if (draft.rubricFeedback !== undefined && draft.rubricFeedback.length !== rubric.criteria.length) fail('Retain feedback for every pinned rubric criterion.');
+  for (const entry of draft.rubricFeedback ?? []) {
+    if (!rubric.criteria.some(c => c.id === entry.criterionId) || (entry.level && !rubric.levels.includes(entry.level))) fail('Rubric evidence must use the pinned criterion and achievement labels.');
+  }
+  for (const entry of feedback.flatMap(p => p.annotations)) {
+    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || !rubric.levels.includes(entry.level)))) fail('Visual evidence must use the pinned rubric.');
+  }
 }
 function annotation(value: unknown): asserts value is MarkingAnnotation {
   const v = object(value, 'Annotation');
@@ -114,6 +204,7 @@ function annotation(value: unknown): asserts value is MarkingAnnotation {
 }
 export function assertMarkingDraft(value: unknown, rubric?: MarkingRubric, documents?: MarkingDocument[], categoryIds?: string[]): asserts value is MarkingDraft {
   const v = object(value, 'Draft'); arr(v.annotations, 'Annotations', MARKING_LIMITS.annotations);
+  extraDraft(v);
   v.annotations.forEach(annotation); const savedAnnotations = v.annotations as MarkingAnnotation[]; unique(savedAnnotations.map(item => item.id), 'Annotation IDs');
   if (v.pending !== null) annotation(v.pending);
   arr(v.judgments, 'Category judgments', 4); const ids: unknown[] = [];
@@ -140,7 +231,12 @@ export function assertMarkingRecord(table: MarkingTableName, value: unknown): as
   if (table === 'markingRubrics') {
     assertRubricContent(v); if (v.confirmed !== true) fail('Stored rubric must have confirmed KTAC mapping.');
   } else if (table === 'markingAttempts') {
-    str(v.rubricId, 'Rubric ID', 200); nullableId(v.classEnrollmentId, 'Enrollment ID'); nullableId(v.previousAttemptId, 'Previous attempt ID'); assertMarkingDocuments(v.documents);
+    str(v.rubricId, 'Rubric ID', 200); nullableId(v.classEnrollmentId, 'Enrollment ID'); nullableId(v.previousAttemptId, 'Previous attempt ID');
+    if (v.mode !== undefined && !['written', 'oral', 'rubric'].includes(v.mode as string)) fail('Unsupported marking mode.');
+    if (v.imagePages !== undefined) assertMarkingImagePages(v.imagePages);
+    const pages = (v.imagePages ?? []) as MarkingImagePage[];
+    assertMarkingDocuments(v.documents, v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0);
+    if ((v.mode === 'oral' || v.mode === 'rubric') && (v.documents.length || pages.length)) fail('Oral and rubric-only attempts do not import written sources.');
   } else if (table === 'markingSessions') {
     str(v.attemptId, 'Attempt ID', 200); str(v.rubricId, 'Rubric ID', 200); integer(v.revision, 'Revision');
     if (!['draft', 'finalized'].includes(v.status as string)) fail('Unsupported session status.');

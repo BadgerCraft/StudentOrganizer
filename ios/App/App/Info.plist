@@ -22,6 +22,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Photograph handwritten assessment pages for marking on this device. Photos stay local.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose assessment page photos for local marking. Photos stay on this device.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
