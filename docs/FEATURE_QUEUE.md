@@ -52,6 +52,9 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 
 ## Rules and supporting evidence
 
+| WF-003 | Decision persistence and streamlined agent workflow | Approved October 13; implementation proposed in documentation PR, not yet merged | Add top-of-file operating contract to AGENTS.md and CODING_WORKFLOW.md; verify PR and next real decision write before marking behavior validated |
+
+
 - **Authority:** This table owns active status and next actions. [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) explains scope; [BUG_REPORTS.md](BUG_REPORTS.md) retains QA evidence; [BUG_REPORTING_INTAKE.md](BUG_REPORTING_INTAKE.md) describes receiver options; [markinator/CHECKPOINT.md](markinator/CHECKPOINT.md) and work orders retain technical evidence.
 - **State discipline:** Requested ≠ approved ≠ implemented ≠ tested ≠ merged ≠ released. Check live PR metadata for merge completion; historical assertions below may be superseded.
 - **Privacy:** No automatic student-data, photo, essay or feedback uploads; no real-student pilot, paid provider, account/service adoption or public unsigned release without separate authorization.
