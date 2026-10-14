@@ -114,6 +114,7 @@ jobs:
           npm run test:marking:browser
           npm run test:marking:category-recovery
           npm run test:marking:acceptance
+          npm run test:marking:modes-photo
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/nativePilotSmoke.ts
@@ -126,6 +127,9 @@ jobs:
         if: always()
         with:
           name: iPad-browser-evidence-${{ github.run_number }}
-          path: screenshots/**
+          path: |
+            screenshots/**
+            /tmp/markinator-modes-photo-results.json
+            /tmp/markinator-modes-photo-*.png
           if-no-files-found: warn
           retention-days: 90

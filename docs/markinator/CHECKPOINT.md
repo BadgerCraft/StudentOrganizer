@@ -1,3 +1,17 @@
+# Current checkpoint — Markinator modes/photo, October 14, 2026
+
+**Development verified; ready for review.** Branch `codex/markinator-modes-photo-20261013`, verified implementation **`0347d94535e67b19a3f54ee02170f7e3af1aee63`**, base work order `4bd96c6` / main `5a769cb`. Current authority: [approved P0 order](../work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md). Its execution section contains exact results, review findings, routing and recovery instructions. Earlier checkpoints below are historical and cannot reset this authorization/status.
+
+Delivered: written document/image, oral checklist/private notes, rubric-only; pinned criterion evidence; multi-page local camera-file fallback/import, immutable originals, non-destructive crop/rotate/reorder/pen/highlight/comments; autosave/reopen/full backup restore through existing guarded grading/audit services. Legacy optional records remain usable. No OCR, cloud transfer, dependency or schema-version change.
+
+**PASS: 392 tests/37 files, production build, nine-group modes/photo Chromium acceptance, final production marking browser, existing input/authority/portability/category-recovery browser checks, iOS sync/static asset audit.** Browser verified EXIF6/3/8/2 raw-pixel coordinates, delayed-preview rejection, draft restart, comment editing, all three mode recoveries, exact clean-profile full restore and deliberate grade finalization. No external app requests/browser exceptions. Three reproduced integration defects were repaired and independently reviewed. New browser checks are wired into the existing CI job; remote CI is not observed.
+
+Git works; GitHub GraphQL/REST PR APIs return Forbidden. PR creation/update and exact-head CI inspection remain blocked. [PR text](PR_DRAFT.md) is prepared. Implementation `0347d94` was normally pushed and its exact remote head independently read back. This evidence/CI documentation follows in a separate commit; no existing PR state is assumed. Physical camera/native Windows/Mac/iPad interactions and iOS simulator checks remain unverified; no merge/release/distribution/real-student use authorized.
+
+Next batch: review PR/CI after API access, then native camera/Files/touch/background/restart/backup acceptance. Preserve the separate UI cleanup branch `codex/ui-cleanup-20261013` (`66a3477`) without duplicating or merging it here. Model recommendation for a receiving native batch: confirm GPT-6.1 Codex Sol is selectable; high reasoning for native local storage/permissions, escalate data/grade loss to independent review; completion requires measured device evidence or exact blocker. Scheduled execution/tool availability remains unverified.
+
+---
+
 # Markinator integration — resumable checkpoint, October 7, 2026
 
 ## October 9 — current approved merge reconciliation

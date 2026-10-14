@@ -1,11 +1,21 @@
-# Assessment-linked local Markinator integration
+# Add local Markinator modes and recoverable photographed-page markup
 
-Teachers confirm a rubric's KTAC mapping, import and explicitly match local TXT/DOCX/pasted submissions, save passage feedback, and finalize category judgments through the existing markbook. Drafts preserve official results; originals, rubric/document versions and marking history participate in local full backup/restore. No remote parsing, automated grading or new schema preference changes.
+Previously assessment-linked marking required text documents. Teachers can now choose written document/image marking, an oral presentation checklist with private notes, or rubric-only evidence. Every mode pins a confirmed rubric and explicit student; evidence labels/checks stay separate from official category judgments and the existing deliberate finalization path.
 
-Independent review repaired unresolved missing/excused completion handling, retained DOCX/text consistency and unsaved rubric tab/exit protection.
+Photographed JPEG/PNG/WebP pages stay local with immutable originals. Crop/rotation/order, pen/highlight/comment anchors and edits are stored separately and survive autosave, reopen and full backup restore. A metadata-neutral temporary decode copy prevents EXIF from changing coordinate axes; delayed previews cannot accept marks on the wrong page. Legacy written drafts remain usable, including first edits to new per-criterion feedback.
 
-Verified application/test source5443e15200383eee6c10341f5eac303920df6d3a:287 tests and build pass; Windows run37723697785 and Mac/browser run37723697784 all succeed. Actual Windows portable/installed and arm64/x64 Mac DMG/ZIP flows cover original file bytes/hashes, annotation and pending revision, official3+ T finalization, real inert report/full-backup downloads, confirmed restore reverting a later edit, process restart and visible recovery. Browser primary/recovery/expanded suites pass with no external attempts. Unsigned iOS compile passes. This follow-up changes documentation only; verified application/test content is unchanged.
+Existing teacher/epoch/version authorization, atomic audit/mark/finalization/restore, manual-mark review, immutable history, completion policy and grade overrides are retained. Student reports include rubric feedback and textual page comments; original images/strokes and oral private observations remain excluded. No OCR, remote URLs, cloud processing, new dependencies or schema version.
 
-Initial native checks failed due to test navigation racing a reused document node; bounded document/draft/enabled-state waits fixed the harness, and exact-source reruns pass without production changes or weakened assertions.
+Normally pushed and independently read back. Verified implementation: **`0347d94535e67b19a3f54ee02170f7e3af1aee63`** on `codex/markinator-modes-photo-20261013`, based on `4bd96c6` / main `5a769cb`.
 
-Remaining limits: actual iPad Files/touch/background/restart/recovery, native OS picker/Save As dialogs, system printing/PDF, managed-device/Gatekeeper acceptance and real-student authorization. No merge/release/distribution approved. Future marking modes/photo requests stay deferred. CHECKPOINT.md, INTEGRATION_REVIEW.md, UI_ACCEPTANCE.md and IPAD_SUPPORT.md carry scope, evidence and remaining steps.
+- **392 tests / 37 files pass**; production TypeScript/Vite build passes.
+- **Nine modes/photo browser groups pass**: EXIF6/3/8/2 axes and original anchors, delayed decoders, four-page capture-file/import, pen/highlight/comment/crop/rotate/reorder, autosave/reload/edit/finalize/revision, oral/rubric-only recovery, legacy matrix, rejected domain boundaries and actual clean-profile full backup restore. Zero external requests/errors.
+- Final production marking browser, existing input/authority/portability and four category-recovery browser scenarios pass. Atomic storage failure and wrong-teacher/stale identity regressions preserve records and grades.
+- iOS asset sync/static audit and photo purpose descriptions pass; independent integration review reproduced and verified repairs to legacy feedback initialization, EXIF axes and stale canvas races.
+- Existing browser CI now runs the new acceptance command and retains result/screenshots; workflow parses. New-head CI remains unobserved.
+
+Remaining gates: physical Windows/Mac/iPad camera/file-picker/permission/touch/background/process-restart/recovery checks; simulator/Xcode unavailable here. Native large-photo storage/quota behavior is not established. Immutable originals plus audit snapshots grow local storage/backups. Full annotated-image export remains separately scoped. Mixed-import/chunk build warnings persist.
+
+GitHub GraphQL and REST PR listing return Forbidden. Existing draft state cannot be checked; creation/update is pending API access. This file is the complete saved PR body. Main merge, release/distribution/signing/spending/provider adoption and real student data remain unauthorized. Preserve the independently verified UI cleanup branch; integration with it is a separate review gate.
+
+Full evidence and next routing: [approved work order](https://github.com/BadgerCraft/StudentOrganizer/blob/codex/markinator-modes-photo-20261013/docs/work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md) and [checkpoint](https://github.com/BadgerCraft/StudentOrganizer/blob/codex/markinator-modes-photo-20261013/docs/markinator/CHECKPOINT.md).

@@ -1,36 +1,36 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-Updated: October 13, 2026 (America/Toronto). Urgent Markinator reprioritization recorded; execution not yet launched. **Single source of truth for feature status, priority, approval and next action.** This is a documentation reconciliation; it does not establish fresh application/device acceptance.
+Updated: October 14, 2026 (UTC and America/Toronto). Approved Markinator modes/photo implementation is development verified and pushed for review; evidence below supersedes the pre-execution snapshot. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
 
 ## Immediate execution priorities
 
 | Priority | ID | Status | Next action / gate |
 | --- | --- | --- | --- |
-| 1 | WIN-PHYSICAL | Blocked: requires disposable Windows device | Run physical installer/UAC/managed-device and interrupted-install checks; keep public unsigned release and signing on hold. PR22–24 CI evidence is not physical acceptance. |
-| 2 | QA-20261005-01,04–10 | Approved October 13 for bounded existing UI cleanup; implementation not yet launched in Codex | Execute bounded UI fixes QA01,04–10 in isolated Codex branch; verify with fictional data, preserve identity, official marks, audit and local-only photos; no merge/release approval. |
+| 1 | F-008-MODES / F-008-PHOTO | Implemented and development verified; source `0347d94` pushed/read back; not merged/released | Review [work order](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md) and saved PR text. API Forbidden blocks PR/CI inspection. Native camera/device acceptance remains separate. |
+| 2 | QA-20261005-01,04–10 | Prior isolated UI cleanup ready for review; preserved, not merged into this branch | `codex/ui-cleanup-20261013` at `66a3477` retains its prior 378-test/build/browser evidence. [Branch work order](https://github.com/BadgerCraft/StudentOrganizer/blob/codex/ui-cleanup-20261013/docs/work-orders/UI-CLEANUP-20261013.md). PR26 metadata/update remains API-blocked; do not duplicate implementation or claim main merge. |
 | 3 | F-007 | Local bug-report draft implemented; central delivery not connected | Decide/authorize private receiver and access; test receipt on packaged Windows/Mac without automatic student-data transfer. |
 | 4 | F-006 | Native iPad project/compile exists; device runtime unverified | Test Files, touch, offline, backup/restore and signing renewal when Mac/Xcode/device is available. |
-| 1 (new) | F-008-MODES / F-008-PHOTO | User directed urgent prioritization October 13; implementation scope authorized for local-only modes and non-OCR photo markup | Inspect current main/PRs, create isolated implementation branches, verify fictional-data tests and integration; no merge/release or real student use without separate approval. |
+| 5 | WIN-PHYSICAL | Blocked: requires disposable Windows device | Run physical installer/UAC/managed-device and interrupted-install checks; keep public unsigned release and signing on hold. PR22–24 CI evidence is not physical acceptance. |
 
 ## Active feature register
 
 | ID | Feature / requested outcome | Current disposition | Next step / source |
 | --- | --- | --- | --- |
-| QA-20261005-01 | Explicit teacher prompt each launch | Requested | Reproduce session behavior; preserve explicit acting-teacher authorization |
+| QA-20261005-01 | Explicit teacher prompt each launch | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
 | QA-20261005-02 | Imported roster appears on seating; populate discoverable | Merged PR18; development verified | No repeat work; device pilot separate |
 | QA-20261005-03 | Seating randomization confirmation | Merged PR18; development verified | No repeat work |
-| QA-20261005-04 | Participation defaults, buttons and tooltips | Requested | Reproduce empty state/classification controls |
-| QA-20261005-05 | Ontario conversion preset display | Requested | Diagnose missing/collapsed content |
-| QA-20261005-06 | Remove student from class roster | Requested | Plan safe unenrollment/archive, retain grades/history |
-| QA-20261005-07 | Local photo crop/resize/preview | Requested | Scope cancel-safe, on-device editing |
-| QA-20261005-08 | Create/edit/rename units | Requested | Audit existing unit metadata and UI |
-| QA-20261005-09 | Collapse assessment details to overall grade | Requested | Design display-only aggregation, no grading change |
-| QA-20261005-10 | K/T/C/A ordering in assessments | Requested | Audit affected views, preserve IDs and weights |
-| F-004 | Assessment Hub and category-management UX | Requested | Scope with QA06/08/09/10; avoid duplicate controls |
+| QA-20261005-04 | Participation defaults, buttons and tooltips | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-05 | Ontario conversion preset display | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-06 | Remove student from class roster | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-07 | Local photo crop/resize/preview | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-08 | Create/edit/rename units | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-09 | Collapse assessment details to overall grade | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| QA-20261005-10 | K/T/C/A ordering in assessments | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
+| F-004 | Assessment Hub and category-management UX | Requested | Review the existing QA06/08/09/10 evidence before additional scope; avoid duplicate controls |
 | F-007 | Private bug-only Control Panel intake | Partly implemented (local draft); receiver not adopted | Private provider/access decision and actual receipt test |
 | F-008 | Integrated essay marking, rubrics, imports, feedback and KTAC finalization | Merged PR20; core development acceptance verified | Platform/pilot acceptance separately |
-| F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Priority implementation authorized October 13; not yet implemented | Codex handoff: GPT-6.1 Codex if available, medium initially; escalate high for grade/authorization integration; verify three modes and save/reopen |
-| F-008-PHOTO | Photograph and annotate handwritten submissions | Priority implementation authorized October 13; not yet implemented | Codex handoff: GPT-6.1 Codex if available, high; test multi-page local capture/import, non-destructive markup, restart/backup recovery and privacy; OCR shelved |
+| F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Implemented and development verified on `codex/markinator-modes-photo-20261013` at `0347d94`; pushed/read back, review pending | 392 tests/build and actual three-mode save/reopen/backup/grade-preservation browser checks pass. [Evidence](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md). PR/CI API access and review are next; no merge/release. |
+| F-008-PHOTO | Photograph and annotate handwritten submissions | Implemented and development verified on `codex/markinator-modes-photo-20261013` at `0347d94`; pushed/read back, review pending | Actual four-page EXIF6/3/8/2 import, raw anchors, delayed-preview guard, markup/transforms/restart/full restore pass; original bytes remain exact. Camera file fallback tested; physical/native checks unverified, OCR shelved. [Evidence](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md). |
 | F-006 | Installed iPad application | Preparation implemented; native interaction blocked | Mac/Xcode/device acceptance |
 | WIN-UPDATER | Manual Windows update check, verified backup, deliberate installer/reopen | Development merged PR22; CI replacement verified | Live distribution, publisher and physical testing separate |
 | WIN-BOOTSTRAP | Older installed version to new updater-enabled version | PR23 verification merged per queue; CI acceptance recorded | Physical/manual delivery separate |
@@ -40,8 +40,8 @@ Updated: October 13, 2026 (America/Toronto). Urgent Markinator reprioritization 
 | QA-20261010-RESTART | Intermittent Intel ZIP seating visibility after restart | Observed once, retry passed; unresolved reproducibility | Capture tables/renderer if recurrence |
 | WF-002 | Reliable autonomous queue handoff and schedules | Partially verified | Confirm new-session/automatic dispatch behavior before claiming general success |
 
-| WF-003 | Decision persistence and streamlined agent workflow | Approved October 13; documentation merged in PR28; behavioral validation pending | Top-of-file contract merged; verify next real project decision is persisted without prompting before marking behavior validated |
-| WF-004 | Codex model/effort routing on every handoff | Documentation merged PR29; next-session validation pending | Verify next Codex handoff includes available model, reasoning effort, rationale, escalation trigger and completion evidence |
+| WF-003 | Decision persistence and streamlined agent workflow | Observed this batch: approved execution, stable-ID queue/work-order/PR-text persistence, verified source push/readback | F-008 evidence records `0347d94` and exact API/native blockers without duplicate approval. Documentation follows separately; future scheduled dispatch/general fresh-session behavior remains unverified. |
+| WF-004 | Codex model/effort routing on every handoff | Observed bounded parallel dispatch: actual `gpt-6.1-sol` selection, medium/high/xhigh as routed | [Work-order routing evidence](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md) records rationale, ownership, escalation and observable checks. Future scheduled/new-chat model and tool availability still require confirmation. |
 
 ## Deferred proposals — no implementation authorization
 
