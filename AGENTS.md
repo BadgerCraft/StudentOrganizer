@@ -13,6 +13,13 @@ This short contract takes precedence over dated workflow examples below. Detaile
 This is a workflow discipline, not an automated enforcement mechanism; demonstrate it with a subsequent real project decision.
 
 
+## Codex task routing — persistent handoff requirement (October 13, 2026)
+
+For every substantial Codex implementation, investigation, verification, or review handoff, the coordinating agent must specify: **(1)** the model to select from the models actually available in the receiving Codex environment, **(2)** supported reasoning effort, **(3)** why that effort is proportionate, **(4)** the condition for escalating or switching, and **(5)** an observable completion check. If model availability is unknown, label the selection a recommendation to confirm rather than asserting that it is available. Do not imply that the coordinating chat can launch Codex or change Codex's model settings unless that action was actually performed.
+
+Use cost-aware defaults: medium effort for bounded visual/UI investigation and simple documentation; high for cross-component changes, local-file handling, permissions, grading data or migrations; extra-high only for unusually consequential architecture, destructive data risk, or independent final integration review. Escalate based on observed complexity or failed verification, not habit. Preserve the user's approval boundaries and the decision-persistence contract above. Include this routing information in the concrete copyable Codex handoff so it survives chat changes.
+
+
 ## Current check-in destination — October 9, 2026
 
 Tyler deleted Daily checkins and explicitly designated its replacement chat as the new scheduled coordination conversation. Daily 08:15 and 16:00 America/Toronto replacement schedules were created and independently read back bound to that chat, starting October 10. Old morning/afternoon schedules are disabled; evening continuation stays paused. This supersedes historical schedule-unavailable/destination statements below. Preserve actual approvals and read current FEATURE_QUEUE.md plus live PR evidence; PR19/PR20 are already merged. A scheduled run's checkout/tools and automatic execution remain unverified until observed. Current recovery owner and evidence: docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md and the queue's current recovery checkpoint.
