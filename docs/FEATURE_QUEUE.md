@@ -1,6 +1,6 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-Updated: October 13, 2026 (America/Toronto). **Single source of truth for feature status, priority, approval and next action.** This is a documentation reconciliation; it does not establish fresh application/device acceptance.
+Updated: October 13, 2026 (America/Toronto). Urgent Markinator reprioritization recorded; execution not yet launched. **Single source of truth for feature status, priority, approval and next action.** This is a documentation reconciliation; it does not establish fresh application/device acceptance.
 
 ## Immediate execution priorities
 
@@ -10,7 +10,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | 2 | QA-20261005-01,04–10 | Approved October 13 for bounded existing UI cleanup; implementation not yet launched in Codex | Execute bounded UI fixes QA01,04–10 in isolated Codex branch; verify with fictional data, preserve identity, official marks, audit and local-only photos; no merge/release approval. |
 | 3 | F-007 | Local bug-report draft implemented; central delivery not connected | Decide/authorize private receiver and access; test receipt on packaged Windows/Mac without automatic student-data transfer. |
 | 4 | F-006 | Native iPad project/compile exists; device runtime unverified | Test Files, touch, offline, backup/restore and signing renewal when Mac/Xcode/device is available. |
-| 5 | F-008-MODES / F-008-PHOTO | Requested future scope; plan approval pending | Scope three marking modes and handwritten image capture after core integration; handwriting OCR shelved, not in the active work batch. |
+| 1 (new) | F-008-MODES / F-008-PHOTO | User directed urgent prioritization October 13; implementation scope authorized for local-only modes and non-OCR photo markup | Inspect current main/PRs, create isolated implementation branches, verify fictional-data tests and integration; no merge/release or real student use without separate approval. |
 
 ## Active feature register
 
@@ -29,8 +29,8 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | F-004 | Assessment Hub and category-management UX | Requested | Scope with QA06/08/09/10; avoid duplicate controls |
 | F-007 | Private bug-only Control Panel intake | Partly implemented (local draft); receiver not adopted | Private provider/access decision and actual receipt test |
 | F-008 | Integrated essay marking, rubrics, imports, feedback and KTAC finalization | Merged PR20; core development acceptance verified | Platform/pilot acceptance separately |
-| F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Requested, not approved for implementation | Design/acceptance plan after core integration |
-| F-008-PHOTO | Photograph and annotate handwritten submissions | Requested, not approved for implementation | Scope local image/annotation only after core marking/UI stability; OCR explicitly shelved |
+| F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Priority implementation authorized October 13; not yet implemented | Codex handoff: GPT-6.1 Codex if available, medium initially; escalate high for grade/authorization integration; verify three modes and save/reopen |
+| F-008-PHOTO | Photograph and annotate handwritten submissions | Priority implementation authorized October 13; not yet implemented | Codex handoff: GPT-6.1 Codex if available, high; test multi-page local capture/import, non-destructive markup, restart/backup recovery and privacy; OCR shelved |
 | F-006 | Installed iPad application | Preparation implemented; native interaction blocked | Mac/Xcode/device acceptance |
 | WIN-UPDATER | Manual Windows update check, verified backup, deliberate installer/reopen | Development merged PR22; CI replacement verified | Live distribution, publisher and physical testing separate |
 | WIN-BOOTSTRAP | Older installed version to new updater-enabled version | PR23 verification merged per queue; CI acceptance recorded | Physical/manual delivery separate |
