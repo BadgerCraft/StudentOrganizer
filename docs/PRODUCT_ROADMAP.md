@@ -1,8 +1,8 @@
 # Product roadmap
 
-Updated October 9, 2026, America/Toronto.
+Updated October 13, 2026, America/Toronto.
 **Execution, approvals and next actions are owned by [FEATURE_QUEUE.md](FEATURE_QUEUE.md).**
-This file describes product scope. Canonical planning is on main after merged PR19 a1d985e. PR20 development merge approved October9, conditional on fresh checks against this main. Current PR20 metadata/queue hold completion evidence; release is separate.
+This file describes product scope, not a second feature backlog. Status in older dated paragraphs is historical; consult the current queue and live PR metadata. Canonical planning is on main after merged PR19 a1d985e. PR20 development merge approved October9, conditional on fresh checks against this main. Current PR20 metadata/queue hold completion evidence; release is separate.
 
 ## Current application
 
@@ -13,7 +13,7 @@ This file describes product scope. Canonical planning is on main after merged PR
 | Windows/Mac | Packaging and generic actual app restart/recovery checks | Combined marking runtime, signing/device policy, release and installed-copy update remain separate. |
 | Installed iPad | Bundled native project/assets and unsigned SDK compilation | Actual device/simulator interaction and free-signing renewal remain unverified; no operational website/PWA is the intended product. |
 | Bug reporting | Editable local draft, preview, copy/download and error preservation | Central receipt/control panel not configured or verified. |
-| Updates | Manual Windows release-metadata lookup at bottom of Settings | Download/install/reopen is unfinished. |
+| Updates | Manual Windows installer check/download, verified backup, and deliberate install/reopen path implemented and tested in CI | Physical Windows/UAC/managed-device acceptance, trusted publisher and live release delivery remain unverified; consult FEATURE_QUEUE.md and live PR metadata. |
 
 ## Requested next product scope
 
