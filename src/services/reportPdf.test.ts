@@ -21,8 +21,8 @@ function fixture() {
 describe('local desktop PDF export', () => {
   it('writes actual PDF bytes and isolates the renderer from scripts, permissions, network and local files', async () => {
     const f = fixture(); expect(await f.run('marked-assessment-commit.pdf', '<!doctype html><p>Fictional feedback</p>')).toBe(true);
-    expect(f.write).toHaveBeenCalledWith('/fictional/.assessment-pdf-temp/report.pdf', f.pdf, { flag: 'wx', mode: 0o600, flush: true });
-    expect(f.replace).toHaveBeenCalledWith('/fictional/.assessment-pdf-temp/report.pdf', '/fictional/assessment.pdf');
+    expect(f.write).toHaveBeenCalledWith(join('/fictional/.assessment-pdf-temp', 'report.pdf'), f.pdf, { flag: 'wx', mode: 0o600, flush: true });
+    expect(f.replace).toHaveBeenCalledWith(join('/fictional/.assessment-pdf-temp', 'report.pdf'), '/fictional/assessment.pdf');
     expect(f.cleanup).toHaveBeenCalledWith('/fictional/.assessment-pdf-temp', { recursive: true, force: true });
     expect(f.construct.mock.calls[0][0].webPreferences).toMatchObject({ javascript: false, nodeIntegration: false, sandbox: true, contextIsolation: true });
     const filter = f.request.mock.calls[0][0];
