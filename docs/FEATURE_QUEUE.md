@@ -41,7 +41,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | WF-002 | Reliable autonomous queue handoff and schedules | Partially verified | Confirm new-session/automatic dispatch behavior before claiming general success |
 
 | WF-003 | Decision persistence and streamlined agent workflow | Approved October 13; documentation merged in PR28; behavioral validation pending | Top-of-file contract merged; verify next real project decision is persisted without prompting before marking behavior validated |
-| WF-004 | Codex model/effort routing on every handoff | Requested October 13; documentation PR pending | Include available model, reasoning effort, rationale, escalation trigger, and completion evidence; validate in next handoff |
+| WF-004 | Codex model/effort routing on every handoff | Documentation merged PR29; next-session validation pending | Verify next Codex handoff includes available model, reasoning effort, rationale, escalation trigger and completion evidence |
 
 ## Deferred proposals — no implementation authorization
 
