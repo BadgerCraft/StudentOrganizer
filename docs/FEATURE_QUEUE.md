@@ -10,7 +10,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | 2 | QA-20261005-01,04–10 | Requested; diagnosis/scoping, **not** implementation approval | Reproduce and propose bounded UI fixes; protect identity, official marks, audit and local-only photos. |
 | 3 | F-007 | Local bug-report draft implemented; central delivery not connected | Decide/authorize private receiver and access; test receipt on packaged Windows/Mac without automatic student-data transfer. |
 | 4 | F-006 | Native iPad project/compile exists; device runtime unverified | Test Files, touch, offline, backup/restore and signing renewal when Mac/Xcode/device is available. |
-| 5 | F-008-MODES / F-008-PHOTO | Requested future scope; plan approval pending | Scope three marking modes and handwritten image capture after core integration; no OCR requirement. |
+| 5 | F-008-MODES / F-008-PHOTO | Requested future scope; plan approval pending | Scope three marking modes and handwritten image capture after core integration; handwriting OCR shelved, not in the active work batch. |
 
 ## Active feature register
 
@@ -30,7 +30,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | F-007 | Private bug-only Control Panel intake | Partly implemented (local draft); receiver not adopted | Private provider/access decision and actual receipt test |
 | F-008 | Integrated essay marking, rubrics, imports, feedback and KTAC finalization | Merged PR20; core development acceptance verified | Platform/pilot acceptance separately |
 | F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Requested, not approved for implementation | Design/acceptance plan after core integration |
-| F-008-PHOTO | Photograph and annotate handwritten submissions | Requested, not approved for implementation | Local image/annotation design; OCR optional |
+| F-008-PHOTO | Photograph and annotate handwritten submissions | Requested, not approved for implementation | Scope local image/annotation only after core marking/UI stability; OCR explicitly shelved |
 | F-006 | Installed iPad application | Preparation implemented; native interaction blocked | Mac/Xcode/device acceptance |
 | WIN-UPDATER | Manual Windows update check, verified backup, deliberate installer/reopen | Development merged PR22; CI replacement verified | Live distribution, publisher and physical testing separate |
 | WIN-BOOTSTRAP | Older installed version to new updater-enabled version | PR23 verification merged per queue; CI acceptance recorded | Physical/manual delivery separate |
@@ -45,7 +45,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | ID | Proposal | Revisit condition |
 | --- | --- | --- |
 | F-009 | Selected exemplary student work + feedback repository | Only after private bug-only transfer works and explicit opt-in design |
-| F-008-EXT | Full annotated export, file-based rubric import, PDF/OCR, legacy JSON, scratch marking | New scope decision after core marking acceptance |
+| F-008-EXT | Full annotated export, file-based rubric import, PDF/OCR, legacy JSON, scratch marking | OCR explicitly shelved October 13; revisit only after core Markinator workflow/UI stability and fresh approval. Other extensions need separate scope decisions. |
 | FUTURE-CLOUD | Live sync/cloud backup, AI/voice, redo, retained-file purge | Separate user decision and privacy design |
 | FUTURE-CONTROL | Control Panel release/update management | After bug intake; separate scope |
 | FUTURE-STORE | Microsoft Store/signing/publisher distribution | Shelved until explicitly requested; no spending or service adoption |
