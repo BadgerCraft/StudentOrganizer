@@ -7,7 +7,7 @@ Updated: October 13, 2026 (America/Toronto). **Single source of truth for featur
 | Priority | ID | Status | Next action / gate |
 | --- | --- | --- | --- |
 | 1 | WIN-PHYSICAL | Blocked: requires disposable Windows device | Run physical installer/UAC/managed-device and interrupted-install checks; keep public unsigned release and signing on hold. PR22–24 CI evidence is not physical acceptance. |
-| 2 | QA-20261005-01,04–10 | Requested; diagnosis/scoping, **not** implementation approval | Reproduce and propose bounded UI fixes; protect identity, official marks, audit and local-only photos. |
+| 2 | QA-20261005-01,04–10 | Approved October 13 for bounded existing UI cleanup; implementation not yet launched in Codex | Execute bounded UI fixes QA01,04–10 in isolated Codex branch; verify with fictional data, preserve identity, official marks, audit and local-only photos; no merge/release approval. |
 | 3 | F-007 | Local bug-report draft implemented; central delivery not connected | Decide/authorize private receiver and access; test receipt on packaged Windows/Mac without automatic student-data transfer. |
 | 4 | F-006 | Native iPad project/compile exists; device runtime unverified | Test Files, touch, offline, backup/restore and signing renewal when Mac/Xcode/device is available. |
 | 5 | F-008-MODES / F-008-PHOTO | Requested future scope; plan approval pending | Scope three marking modes and handwritten image capture after core integration; handwriting OCR shelved, not in the active work batch. |
