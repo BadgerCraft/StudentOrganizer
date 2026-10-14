@@ -1,5 +1,18 @@
 # Daily development workflow
 
+## Active operating contract — decision persistence (October 13, 2026)
+
+This short contract takes precedence over dated workflow examples below. Detailed history remains below for audit; dated statements are not a competing current queue.
+
+1. **Read first:** On StudentOrganizer/Markinator project turns, consult `docs/FEATURE_QUEUE.md` and live PR evidence before deciding status or asking for approval.
+2. **Persist decisions in the same task:** An approval, rejection, shelving, reprioritization, scope change, or explicit deferral is unfinished until the matching stable-ID row in `docs/FEATURE_QUEUE.md` records disposition, authority/boundary, next action or revisit condition. Update supporting roadmap/bug/work-order docs only when their facts change.
+3. **Verify before claiming completion:** Read back or verify the resulting GitHub commit/PR. If repository access or approval is unavailable, explicitly report the queue update as pending, with the exact blocker; never say a decision was saved without evidence.
+4. **Execute approved routine work:** Use an isolated branch, preserve concurrent edits, verify, commit/push and open/update PR without asking for duplicate permission. Main merge, release, spending, external provider, real student data and new product scope remain separately authorized unless explicitly approved.
+5. **End-of-turn check:** Report (a) action/decision, (b) documentation write + commit/PR or explicit pending blocker, (c) next action/gate. No silent conversation-only decisions.
+
+This is a workflow discipline, not an automated enforcement mechanism; demonstrate it with a subsequent real project decision.
+
+
 ## Current check-in destination — October 9, 2026
 
 Tyler deleted Daily checkins and explicitly designated its replacement chat as the new scheduled coordination conversation. Daily 08:15 and 16:00 America/Toronto replacement schedules were created and independently read back bound to that chat, starting October 10. Old morning/afternoon schedules are disabled; evening continuation stays paused. This supersedes historical schedule-unavailable/destination statements below. Preserve actual approvals and read current FEATURE_QUEUE.md plus live PR evidence; PR19/PR20 are already merged. A scheduled run's checkout/tools and automatic execution remain unverified until observed. Current recovery owner and evidence: docs/work-orders/SCHEDULE-MIGRATION-2026-10-06.md and the queue's current recovery checkpoint.
