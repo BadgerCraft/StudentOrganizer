@@ -58,6 +58,7 @@ try {
   });
   await page.goto(origin);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
+  await page.waitForFunction(() => !!sessionStorage.getItem('ontario_active_user_id'));
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
   assert.ok(actorId, 'fictional teacher explicitly selected');
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
@@ -110,8 +111,10 @@ try {
     assert.deepEqual(await records(page, 'markingAttempts'), beforeCancel, 'cancel archive changes no attempt');
     assert.deepEqual(await official(page, assessment.id), grades);
     if (keep) {
-      await checkbox.check();
+      // This controlled value changes only after the local transaction/readback.
+      await checkbox.click();
       await waitRecord(page, 'markingAttempts', row => row.id === attempt.id && row.keepStudentWork === true);
+      await page.waitForFunction(id => (document.querySelector(`[aria-label="Keep student work for ${id}"]`) as HTMLInputElement | null)?.checked === true, attempt.id);
       const exportDownload = page.waitForEvent('download');
       await page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).last().click();
       await (await exportDownload).saveAs(`${artifacts}-retained-report.html`);
@@ -140,13 +143,15 @@ try {
   }
   const beforeRestart = await records(page, 'markingAttempts');
   await page.reload();
-  await page.getByTestId(`select-teacher-${actorId}`).click();
+  await page.getByTestId('header-teacher-btn').waitFor();
+  assert.equal(await page.getByTestId('teacher-selector-modal').count(), 0, 'reload retains the explicitly selected session');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id')), actorId);
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
   await page.getByTestId(`marking-archived-${first.id}`).waitFor();
   await page.getByTestId(`marking-archived-${second.id}`).waitFor();
   assert.deepEqual(await records(page, 'markingAttempts'), beforeRestart);
-  scenarios.push('Reload requires explicit teacher selection and preserves separate Archive listing');
+  scenarios.push('Reload retains the explicit teacher session and preserves separate Archive listing');
   await page.screenshot({ path: `${artifacts}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
   await page.getByTestId('nav-portability-btn').click();
