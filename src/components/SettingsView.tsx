@@ -31,7 +31,7 @@ import type {
 } from '../types/schema';
 import { db } from '../db/database';
 import { ParticipationEventTypeService } from '../services/eventTypeService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getIdentityEpoch } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { ModalDialog } from './ModalDialog';
 
@@ -52,6 +52,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   deviceId,
   onRefresh
 }) => {
+  const [identityEpoch] = useState(getIdentityEpoch);
   const [weightK, setWeightK] = useState(policy?.weightK ?? 25);
   const [weightT, setWeightT] = useState(policy?.weightT ?? 25);
   const [weightC, setWeightC] = useState(policy?.weightC ?? 25);
@@ -140,7 +141,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setPendingWrites(count => count + 1);
     try {
       const identity = await getIdentity();
-      const created = await eventTypeService.addStarterButtons(activeSectionId, identity.userId, identity.deviceId);
+      const created = await eventTypeService.addStarterButtons(activeSectionId, identity.userId, identity.deviceId, identity.identityEpoch);
       setEventTypeSuccessMessage(created.length ? 'Added four starter buttons. Customize them below. Observations have no formal grade impact.' : 'Existing buttons were preserved; no starter buttons were added.');
     } catch (error) {
       setEventTypeErrorMessage(error instanceof Error ? error.message : 'Starter buttons could not be added.');
@@ -150,11 +151,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const getIdentity = async () => {
+    if (!userId || !deviceId || identityEpoch !== getIdentityEpoch()) {
+      throw new AuthorizationError('Acting teacher changed. Please reopen Settings.');
+    }
     const currentIdentity = await getAppIdentity(db);
-    if (userId && userId !== currentIdentity.userId) {
+    if (userId !== currentIdentity.userId || deviceId !== currentIdentity.deviceId || identityEpoch !== getIdentityEpoch()) {
       throw new AuthorizationError('Acting teacher has changed. Please refresh.');
     }
-    return currentIdentity;
+    return { ...currentIdentity, identityEpoch };
   };
 
   const handleCreateEventType = async (e: React.FormEvent) => {

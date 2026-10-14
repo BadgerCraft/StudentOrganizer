@@ -1,5 +1,5 @@
 import { safePhotoSource } from '../utils/localPhoto';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   X,
   BookOpen,
@@ -30,7 +30,7 @@ import type {
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
 import { StudentDomainService } from '../services/studentService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getIdentityEpoch } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 import { RosterEnrollmentService } from '../services/rosterEnrollmentService';
@@ -90,6 +90,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [overrideRationale, setOverrideRationale] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const formIdentityEpoch = useRef(getIdentityEpoch());
   const [confirmRemoval, setConfirmRemoval] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -142,9 +143,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     setActionError(null);
     try {
       const identity = await getAppIdentity(db);
-      if (!userId || identity.userId !== userId) throw new AuthorizationError('Acting teacher has changed. Reopen the profile.');
+      if (!userId || identity.userId !== userId || (deviceId && identity.deviceId !== deviceId) || formIdentityEpoch.current !== getIdentityEpoch()) throw new AuthorizationError('Acting teacher has changed. Reopen the profile.');
       await new RosterEnrollmentService(db).removeFromClass({ enrollmentId, expectedVersion: enrollment.version,
-        userId: identity.userId, deviceId: identity.deviceId });
+        userId: identity.userId, deviceId: identity.deviceId, identityEpoch: formIdentityEpoch.current });
       onRefresh();
       onClose();
     } catch (err) { setActionError(err instanceof Error ? err.message : 'Failed to remove student from this class.'); }

@@ -1,3 +1,4 @@
+import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 import type { OntarioTeacherDB } from '../db/database';
 import type { ClassEnrollment, SeatPosition, UUID } from '../types/schema';
 import { AUTH_TABLES, assertClassSectionWriteAccess } from './authHelper';
@@ -9,9 +10,11 @@ import { getSchoolLocalDate } from '../utils/dateUtils';
 export class RosterEnrollmentService {
   constructor(private db: OntarioTeacherDB) {}
 
-  async removeFromClass(params: { enrollmentId: UUID; expectedVersion: number; userId: UUID; deviceId: UUID }): Promise<ClassEnrollment> {
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.classEnrollments,
+  async removeFromClass(params: { enrollmentId: UUID; expectedVersion: number; userId: UUID; deviceId: UUID; identityEpoch?: number }): Promise<ClassEnrollment> {
+    const actor = captureLocalWriteActor(params);
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.classEnrollments, this.db.devices,
       this.db.seatPositions, this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, actor);
       const current = await this.db.classEnrollments.get(params.enrollmentId);
       if (!current || current.deletedAt !== null) throw new ValidationError('Class enrollment no longer exists.');
       const auth = await assertClassSectionWriteAccess(this.db, params.userId, current.classSectionId);
@@ -39,6 +42,7 @@ export class RosterEnrollmentService {
           baseVersion: change.before.version, status: 'pending', createdAt: now, attemptCount: 0,
           lastAttemptAt: null, lastError: null, acknowledgedAt: null });
       }
+      checkIdentity();
       return updated;
     });
   }

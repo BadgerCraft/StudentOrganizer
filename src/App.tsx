@@ -20,7 +20,7 @@ import { TeacherSelectorModal } from './components/TeacherSelectorModal';
 import { ParticipationDomainService } from './services/participationService';
 import { ParticipationEventTypeService } from './services/eventTypeService';
 import { ClassSessionService } from './services/sessionService';
-import { getAppIdentity, selectActingTeacher, clearActiveTeacherId } from './services/identityService';
+import { getAppIdentity, selectActingTeacher, clearActiveTeacherId, getIdentityEpoch } from './services/identityService';
 import { AuthorizationError } from './services/authHelper';
 import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from './utils/dateUtils';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
@@ -557,6 +557,7 @@ export function App() {
 
         {currentView === 'markbook' && activeSectionId && (
           <MarkbookView
+            key={`${activeSectionId}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             classSectionId={activeSectionId}
             reportingPeriodId={null}
             policy={activePolicy}
@@ -577,7 +578,7 @@ export function App() {
 
         {currentView === 'assessments' && activeClassObj && (
           <AssessmentHubView
-            key={activeClassObj.section.id}
+            key={`${activeClassObj.section.id}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             onOpenMarking={assessmentId => setMarkingTarget({assessmentId})}
             userId={appIdentity?.userId}
             classSection={activeClassObj.section}
@@ -615,7 +616,7 @@ export function App() {
 
         {currentView === 'settings' && (
           <SettingsView
-            key={activePolicy.id}
+            key={`${activePolicy.id}:${appIdentity?.userId}:${appIdentity?.deviceId}:${getIdentityEpoch()}`}
             policy={activePolicy}
             scaleEntries={markScaleEntries}
             activeSectionId={activeSectionId}

@@ -1,6 +1,7 @@
 import type { Assessment, AssessmentCategory, Student } from '../types/schema';
 import { exportNativeBackup, usesNativeFiles } from '../services/nativeFiles';
 import type { MarkingAttempt, MarkingCommit, MarkingRubric } from './types';
+import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
 export interface MarkingReportInput {
   commit: MarkingCommit;
@@ -17,9 +18,12 @@ const categoryNames = { K: 'Knowledge / Understanding', T: 'Thinking', A: 'Appli
 export function renderMarkingReport({ commit, rubric, attempt, student, assessment, categories }: MarkingReportInput): string {
   if (commit.rubricId !== rubric.id || commit.attemptId !== attempt.id || attempt.rubricId !== rubric.id || [commit, rubric, attempt].some(record => record.assessmentId !== assessment.id || record.classSectionId !== assessment.classSectionId) || commit.draft.pending) throw new Error('The saved report records do not match.');
   const name = `${student.preferredName || student.firstName} ${student.lastName}`;
-  const judgments = commit.draft.judgments.map(judgment => {
+  const linkedJudgments = commit.draft.judgments.map(judgment => {
     const category = categories.find(value => value.id === judgment.assessmentCategoryId && value.assessmentId === assessment.id);
     if (!category) throw new Error('A saved category is unavailable for this report.');
+    return { categoryCode: category.categoryCode, category, judgment };
+  });
+  const judgments = sortCategoriesForDisplay(linkedJudgments).map(({ category, judgment }) => {
     return `<tr><th>${escape(categoryNames[category.categoryCode])}</th><td>${judgment.assessed ? `${escape(judgment.rawScore)} (${escape(judgment.inputFormat.replace(/_/g, ' '))})` : 'Not assessed'}</td><td>${escape(judgment.feedback)}</td></tr>`;
   }).join('');
   const evidence = commit.draft.annotations.map(annotation => {

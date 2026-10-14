@@ -30,4 +30,12 @@ describe('actual class conversion preset preview', () => {
     await db.markScaleEntries.clear();
     expect(renderToStaticMarkup(<MarkScalePreviewContent data={await loadScalePreview(db, version.id)} />)).toContain('no conversion entries');
   });
+  it('does not show conversions from a deleted class version even when retained entries still exist', async () => {
+    const version = (await db.markScaleVersions.toArray())[0];
+    expect(await db.markScaleEntries.where('markScaleVersionId').equals(version.id).count()).toBeGreaterThan(0);
+    await db.markScaleVersions.update(version.id, { deletedAt: new Date().toISOString() });
+    const data = await loadScalePreview(db, version.id);
+    expect(data.entries).toEqual([]);
+    expect(renderToStaticMarkup(<MarkScalePreviewContent data={data} />)).toContain('version is unavailable');
+  });
 });

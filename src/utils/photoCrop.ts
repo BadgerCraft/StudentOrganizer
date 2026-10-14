@@ -1,6 +1,8 @@
 import { isLocalPhoto } from './localPhoto';
 
 export interface PhotoCrop { zoom: number; horizontal: number; vertical: number }
+export const MAX_PHOTO_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_PHOTO_PIXELS = 16 * 1024 * 1024;
 export const DEFAULT_PHOTO_CROP: PhotoCrop = { zoom: 1, horizontal: 0, vertical: 0 };
 const bounded = (value: number, min: number, max: number) => Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
 
@@ -14,6 +16,7 @@ export function photoCropBounds(width: number, height: number, crop: PhotoCrop) 
 
 export function readLocalPhotoFile(file: File): Promise<string> {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return Promise.reject(new Error('Please upload a local JPEG, PNG, or WebP image.'));
+  if (!Number.isFinite(file.size) || file.size <= 0 || file.size > MAX_PHOTO_UPLOAD_BYTES) return Promise.reject(new Error('Choose an image of at most 10 MB.'));
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Failed to read image file.'));
@@ -24,10 +27,17 @@ export function readLocalPhotoFile(file: File): Promise<string> {
 
 export function loadLocalCropImage(source: string): Promise<HTMLImageElement> {
   // Raw local uploads may exceed the stored 64 KB budget; crop output is checked separately.
+  if (source.length > Math.ceil(MAX_PHOTO_UPLOAD_BYTES / 3) * 4 + 64) return Promise.reject(new Error('Choose an image of at most 10 MB.'));
   if (!/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(source)) return Promise.reject(new Error('Only local raster images can be cropped.'));
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth * img.naturalHeight > MAX_PHOTO_PIXELS) {
+        reject(new Error('Choose an image of at most 16 megapixels.'));
+        return;
+      }
+      resolve(img);
+    };
     img.onerror = () => reject(new Error('Failed to decode image file.'));
     img.src = source;
   });

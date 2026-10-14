@@ -13,7 +13,7 @@ const origin = 'http://127.0.0.1:4198';
 const directory = `screenshots/ui-repairs-${engine.name()}`;
 mkdirSync(directory, { recursive: true });
 const server = await preview({ preview: { host: '127.0.0.1', port: 4198, strictPort: true } });
-const browser = await engine.launch({ headless: true });
+const browser = await engine.launch({ headless: true, ...(engine === chromium && process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
 const completed: string[] = [];
 const failures: { task: string; error: string }[] = [];
 
@@ -49,7 +49,9 @@ try {
     ['photo-crop-roster-preservation', runUiPhotoRosterAcceptance],
     ['participation-scale-settings', runUiSettingsAcceptance],
   ];
-  for (const [name, run] of tasks) {
+  const requested = process.env.UI_TEST_TASKS?.split(',');
+  if (requested) assert.ok(requested.length > 0 && requested.every(name => tasks.some(([task]) => task === name)), 'Unknown UI acceptance task');
+  for (const [name, run] of tasks.filter(([name]) => !requested || requested.includes(name))) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
     const external: string[] = [], errors: string[] = [];
     context.on('page', page => page.on('pageerror', error => errors.push(error.message)));

@@ -4,7 +4,7 @@ import { Camera, Trash2, AlertCircle, Save } from 'lucide-react';
 import type { Student } from '../types/schema';
 import { ModalDialog } from './ModalDialog';
 import { StudentDomainService } from '../services/studentService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 import { readLocalPhotoFile } from '../utils/photoCrop';
@@ -35,13 +35,16 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const uploadEpoch = useRef(0);
+  const formIdentityEpoch = useRef(getIdentityEpoch());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (student && isOpen) {
+      formIdentityEpoch.current = getIdentityEpoch();
       setFirstName(student.firstName || '');
       setLastName(student.lastName || '');
       setPreferredName(student.preferredName || '');
@@ -50,19 +53,30 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
       setIsDirty(false);
       setError(null);
       setIsSaving(false);
+      setIsReadingPhoto(false);
       setCropSource(null);
       uploadEpoch.current++;
     }
     return () => { uploadEpoch.current++; };
-  }, [student, isOpen]);
+  }, [student, isOpen, userId, deviceId]);
+
+  useEffect(() => subscribeIdentityChange(() => {
+    uploadEpoch.current++;
+    setCropSource(null);
+    setIsReadingPhoto(false);
+    setIsSaving(false);
+    setPhotoUrl(student?.photoUrl || null);
+    setError('Acting teacher has changed. Please reopen settings.');
+  }), [student]);
 
   if (!isOpen || !student) return null;
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (!file || isSaving) return;
     const currentUpload = ++uploadEpoch.current;
+    setIsReadingPhoto(true);
     try {
       const source = await readLocalPhotoFile(file);
       if (currentUpload !== uploadEpoch.current) return;
@@ -70,11 +84,14 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
       setError(null);
     } catch (err) {
       if (currentUpload === uploadEpoch.current) setError(err instanceof Error ? err.message : 'Failed to read image file.');
+    } finally {
+      if (currentUpload === uploadEpoch.current) setIsReadingPhoto(false);
     }
   };
 
   const handleRemovePhoto = () => {
     uploadEpoch.current++;
+    setIsReadingPhoto(false);
     setCropSource(null);
     setPhotoUrl(null);
     setIsDirty(true);
@@ -83,6 +100,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving || isReadingPhoto) return;
     if (cropSource) { setError('Apply or cancel the photo crop before saving.'); return; }
     setError(null);
 
@@ -98,11 +116,13 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
       return;
     }
 
+    const saveEpoch = formIdentityEpoch.current;
+    const saveUpload = ++uploadEpoch.current;
     setIsSaving(true);
     try {
       const studentService = new StudentDomainService(db);
       const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
+      if (saveEpoch !== getIdentityEpoch() || saveUpload !== uploadEpoch.current || userId !== currentIdentity.userId || deviceId !== currentIdentity.deviceId) {
         throw new AuthorizationError('Acting teacher has changed. Please reopen settings.');
       }
       const updated = await studentService.updateStudentProfile({
@@ -114,18 +134,18 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
         pronouns: pronouns.trim() || null,
         photoUrl: photoUrl,
         userId: currentIdentity.userId,
-        deviceId: currentIdentity.deviceId
+        deviceId: currentIdentity.deviceId,
+        identityEpoch: saveEpoch
       });
 
+      if (saveEpoch !== getIdentityEpoch() || saveUpload !== uploadEpoch.current) return;
       setIsDirty(false);
       onSaveSuccess(updated);
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Failed to update student profile.');
+      if (saveUpload === uploadEpoch.current) setError(err?.message || 'Failed to update student profile.');
     } finally {
-      setIsSaving(false);
-      setCropSource(null);
-      uploadEpoch.current++;
+      if (saveUpload === uploadEpoch.current) setIsSaving(false);
     }
   };
 
@@ -134,7 +154,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Student Settings"
-      isDirty={isDirty || cropSource !== null}
+      isDirty={isDirty || cropSource !== null || isReadingPhoto}
       confirmDiscardMessage="You have unsaved changes to this student. Are you sure you want to discard them?"
       maxWidthClass="max-w-lg"
       testId="student-settings-modal"
@@ -172,6 +192,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
               <div className="flex items-center space-x-2">
                 <input
                   type="file"
+                  disabled={isSaving}
                   ref={fileInputRef}
                   onChange={handlePhotoUpload}
                   accept="image/jpeg,image/png,image/webp"
@@ -180,6 +201,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
                 />
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => fileInputRef.current?.click()}
                   className="inline-flex items-center space-x-1 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg shadow-sm transition active:scale-95"
                   data-testid="upload-photo-btn"
@@ -187,10 +209,11 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
                   <Camera className="w-3.5 h-3.5 text-slate-500" />
                   <span>{photoUrl ? 'Replace Photo' : 'Upload Photo'}</span>
                 </button>
-                {safePhotoSource(photoUrl) && <button type="button" data-testid="edit-photo-crop-btn" onClick={() => setCropSource(photoUrl)} className="px-2.5 py-1.5 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50">Edit Crop</button>}
+                {safePhotoSource(photoUrl) && <button type="button" data-testid="edit-photo-crop-btn" disabled={isSaving} onClick={() => { uploadEpoch.current++; setIsReadingPhoto(false); setCropSource(photoUrl); }} className="px-2.5 py-1.5 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50">Edit Crop</button>}
                 {photoUrl && (
                   <button
                     type="button"
+                    disabled={isSaving}
                     onClick={handleRemovePhoto}
                     className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-red-600 hover:bg-red-50 text-xs font-medium rounded-lg transition active:scale-95"
                     data-testid="remove-photo-btn"
@@ -203,8 +226,8 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
             </div>
           </div>
 
-          {cropSource && <PhotoCropEditor source={cropSource} onCancel={() => setCropSource(null)} onApply={photo => {
-            setPhotoUrl(photo); setIsDirty(true); setCropSource(null); setError(null);
+          {cropSource && <PhotoCropEditor key={cropSource} source={cropSource} onCancel={() => { uploadEpoch.current++; setIsReadingPhoto(false); setCropSource(null); }} onApply={photo => {
+            uploadEpoch.current++; setIsReadingPhoto(false); setPhotoUrl(photo); setIsDirty(true); setCropSource(null); setError(null);
           }} />}
 
           {/* Names */}
@@ -300,7 +323,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSaving || cropSource !== null}
+              disabled={isSaving || isReadingPhoto || cropSource !== null}
               data-testid="save-student-settings-btn"
               className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition active:scale-95 disabled:opacity-50"
             >

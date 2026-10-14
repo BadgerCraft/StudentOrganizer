@@ -1,22 +1,28 @@
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { StudentDomainService } from './studentService';
 import { SyncOutboxWorker } from './syncOutbox';
+import { clearActiveTeacherId, selectActingTeacher } from './identityService';
 import type { SyncMutation, Student } from '../types/schema';
 
 describe('Student Photo Sync Payload Hygiene & Local Photo Preservation', () => {
   let db: OntarioTeacherDB;
   let studentService: StudentDomainService;
   let syncWorker: SyncOutboxWorker;
+  let deviceId: string;
 
   beforeEach(async () => {
     db = new OntarioTeacherDB(`test-photo-sync-${crypto.randomUUID()}`);
     await seedDatabase(db);
+    clearActiveTeacherId();
+    deviceId = (await selectActingTeacher(db, 'user-tyler')).deviceId;
     studentService = new StudentDomainService(db);
     syncWorker = new SyncOutboxWorker(db);
   });
+
+  afterEach(async () => { clearActiveTeacherId(); await db.delete(); });
 
   it('Direction 1 (Outbound): updating student profile omits photoUrl completely from SyncMutation.payloadJson', async () => {
     const student = (await db.students.toCollection().first())!;
@@ -31,7 +37,7 @@ describe('Student Photo Sync Payload Hygiene & Local Photo Preservation', () => 
       pronouns: 'they/them',
       photoUrl: mockDataUrl,
       userId: 'user-tyler',
-      deviceId: 'dev-1'
+      deviceId
     });
 
     // Local student has photoUrl set

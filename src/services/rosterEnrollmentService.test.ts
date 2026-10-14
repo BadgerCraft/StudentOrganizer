@@ -6,17 +6,44 @@ import { RosterEnrollmentService } from './rosterEnrollmentService';
 import { PortabilityService } from './portabilityService';
 import { parseRosterText } from './rosterParser';
 import { SeatingDomainService } from './seatingService';
+import { setActiveTeacherId, clearActiveTeacherId, getAppIdentity, getIdentityEpoch } from './identityService';
 
 describe('Roster removal preserves historical identity', () => {
   let db: OntarioTeacherDB;
   let service: RosterEnrollmentService;
-  beforeEach(async () => { db = new OntarioTeacherDB(`fictional-roster-removal-${crypto.randomUUID()}`); await seedDatabase(db); service = new RosterEnrollmentService(db); });
-  afterEach(async () => { vi.restoreAllMocks(); await db.delete(); });
+  beforeEach(async () => { db = new OntarioTeacherDB(`fictional-roster-removal-${crypto.randomUUID()}`); await seedDatabase(db); setActiveTeacherId('user-tyler'); await getAppIdentity(db); await db.devices.put({ id: 'fictional-device', userId: 'user-tyler', installationId: 'fictional-device', name: 'Fictional', lastSeenAt: new Date().toISOString() }); service = new RosterEnrollmentService(db); });
+  afterEach(async () => { vi.restoreAllMocks(); clearActiveTeacherId(); await db.delete(); });
   const params = (enrollment: { id: string; version: number }, userId = 'user-tyler') => ({ enrollmentId: enrollment.id, expectedVersion: enrollment.version, userId, deviceId: 'fictional-device' });
   async function snapshot(): Promise<Record<string, any[]>> {
-    const tables = ['students', 'classEnrollments', 'seatPositions', 'studentAssessments', 'categoryResults', 'attendanceRecords', 'studentNotes', 'participationEvents', 'auditEntries', 'syncMutations'];
+    const tables = ['students', 'classEnrollments', 'seatPositions', 'studentAssessments', 'categoryResults', 'attendanceRecords', 'studentNotes', 'participationEvents', 'gradeOverrides', 'auditEntries', 'syncMutations'];
     return Object.fromEntries(await Promise.all(tables.map(async table => [table, await db.table(table).toArray()])));
   }
+  it('rejects stale active identity and unverified devices without changing roster/history', async () => {
+    const enrollment = (await db.classEnrollments.toCollection().first())!;
+    clearActiveTeacherId();
+    const before = await snapshot();
+    await expect(service.removeFromClass(params(enrollment))).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    setActiveTeacherId('user-tyler');
+    await getAppIdentity(db);
+    await expect(service.removeFromClass({ ...params(enrollment), deviceId: 'unknown-device' })).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+  });
+  it('rejects an obsolete form even after switching away and back, and aborts a mid-write identity change', async () => {
+    const enrollment = (await db.classEnrollments.toCollection().first())!;
+    const before = await snapshot();
+    const identityEpoch = getIdentityEpoch();
+    clearActiveTeacherId(); setActiveTeacherId('user-tyler');
+    await expect(service.removeFromClass({ ...params(enrollment), identityEpoch })).rejects.toThrow('Acting teacher changed');
+    expect(await snapshot()).toEqual(before);
+    const original = db.auditEntries.add.bind(db.auditEntries);
+    vi.spyOn(db.auditEntries, 'add').mockImplementationOnce((...args) => original(...args).then(result => {
+      clearActiveTeacherId(); setActiveTeacherId('user-tyler');
+      return result;
+    }));
+    await expect(service.removeFromClass(params(enrollment))).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+  });
   it('drops roster membership and seating with grouped audit, retaining students and exact saved academic/attendance records', async () => {
     const enrollment = (await db.classEnrollments.toCollection().first())!;
     const before = await snapshot();
@@ -27,7 +54,7 @@ describe('Roster removal preserves historical identity', () => {
     expect(updated).toMatchObject({ id: enrollment.id, enrollmentStatus: 'dropped', deletedAt: null, version: enrollment.version + 1 });
     expect(updated.droppedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const after = await snapshot();
-    for (const table of ['students', 'studentAssessments', 'categoryResults', 'attendanceRecords', 'studentNotes', 'participationEvents']) expect(after[table]).toEqual(before[table]);
+    for (const table of ['students', 'studentAssessments', 'categoryResults', 'attendanceRecords', 'studentNotes', 'participationEvents', 'gradeOverrides']) expect(after[table]).toEqual(before[table]);
     const seats = after.seatPositions.filter(s => s.classEnrollmentId === enrollment.id);
     expect(seats.length).toBeGreaterThan(0);
     expect(seats.every(s => s.deletedAt !== null)).toBe(true);
@@ -41,6 +68,18 @@ describe('Roster removal preserves historical identity', () => {
     expect(mutations.every(m => m.transactionSize === mutations.length && m.operation === 'UPDATE')).toBe(true);
     await expect(service.removeFromClass(params(updated))).rejects.toThrow('already outside');
     expect(await snapshot()).toEqual(after);
+  });
+  it('round-trips the dropped enrollment, retained marks/history and grouped audit through backup restore', async () => {
+    const enrollment = (await db.classEnrollments.toCollection().first())!;
+    await service.removeFromClass(params(enrollment));
+    const after = await snapshot();
+    const backup = await new PortabilityService(db).createFullBackupJSON();
+    const restored = new OntarioTeacherDB(`fictional-roster-restore-${crypto.randomUUID()}`);
+    try {
+      await new PortabilityService(restored).restoreFromJSON(backup);
+      for (const [table, records] of Object.entries(after)) expect(await restored.table(table).toArray()).toEqual(records);
+      expect(await restored.classEnrollments.get(enrollment.id)).toMatchObject({ enrollmentStatus: 'dropped', deletedAt: null });
+    } finally { await restored.delete(); }
   });
   it('re-enrolls with the same historical ID and repopulates the retired seat without unique-index collisions', async () => {
     const enrollment = (await db.classEnrollments.toCollection().first())!;

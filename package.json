@@ -28,6 +28,7 @@
     "test:marking:inputs": "tsx scripts/markingInputAcceptanceSmoke.ts",
     "test:marking:authority": "tsx scripts/markingAuthorityAcceptanceSmoke.ts",
     "test:marking:portability": "tsx scripts/markingPortabilityAcceptanceSmoke.ts",
+    "test:ui:cleanup": "tsx scripts/uiRepairsSmoke.ts",
     "test:marking:acceptance": "npm run test:marking:inputs && npm run test:marking:authority && npm run test:marking:portability"
   },
   "dependencies": {

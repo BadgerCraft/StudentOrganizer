@@ -3,8 +3,9 @@ import type { Assessment, AssessmentCategory, StudentAssessment, GradingPolicy, 
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
 import { ValidationError } from './markbookService';
 import { ConcurrencyError } from './participationService';
+import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 
-interface Actor { userId: UUID; deviceId: UUID }
+interface Actor { userId: UUID; deviceId: UUID; identityEpoch?: number }
 interface CategoryInput { categoryCode: AssessmentCategory['categoryCode']; maxScore: number; evidenceWeight: number }
 interface CreateInput extends Actor {
   classSectionId: UUID; unitId: UUID; title: string;
@@ -29,6 +30,7 @@ export class ClassSettingsService {
   }
 
   async createAssessment(input: CreateInput): Promise<Assessment> {
+    const captured = captureLocalWriteActor(input);
     if (!input.title.trim() || input.title.trim().length > 200 || !Number.isFinite(Date.parse(input.dueAt)))
       throw new ValidationError('A title and valid due date are required.');
     if (!['summative', 'formative'].includes(input.assessmentType) || !input.categories.length ||
@@ -36,9 +38,10 @@ export class ClassSettingsService {
       input.categories.some(c => !['K', 'T', 'C', 'A'].includes(c.categoryCode) ||
         !Number.isFinite(c.maxScore) || c.maxScore <= 0 || !Number.isFinite(c.evidenceWeight) || c.evidenceWeight <= 0))
       throw new ValidationError('Select valid categories with positive maximum scores and weights.');
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.units, this.db.gradingPolicies,
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.units, this.db.gradingPolicies,
       this.db.reportingPeriods, this.db.classEnrollments, this.db.assessments, this.db.assessmentCategories,
       this.db.studentAssessments, this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, captured);
       const auth = await assertClassSectionWriteAccess(this.db, input.userId, input.classSectionId);
       const unit = await this.db.units.get(input.unitId);
       if (!unit || unit.deletedAt !== null || unit.classSectionId !== input.classSectionId)
@@ -70,12 +73,14 @@ export class ClassSettingsService {
         ...assignments.map(row => ({ table: 'studentAssessments', row }))];
       const txId = crypto.randomUUID();
       for (const [i, item] of rows.entries()) await this.record(item.table, item.row, null, input, auth.organizationId, txId, i + 1, rows.length);
-      return assessment;
+      checkIdentity(); return assessment;
     });
   }
 
   async archiveAssessment(id: UUID, expectedVersion: number, actor: Actor): Promise<void> {
-    await this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.assessments, this.db.auditEntries, this.db.syncMutations], async () => {
+    const captured = captureLocalWriteActor(actor);
+    await this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.assessments, this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, captured);
       const previous = await this.db.assessments.get(id);
       if (!previous || previous.deletedAt !== null) throw new ValidationError('Assessment is unavailable.');
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, previous.classSectionId);
@@ -84,12 +89,15 @@ export class ClassSettingsService {
       const next = { ...previous, deletedAt: now, updatedAt: now, version: previous.version + 1 };
       await this.db.assessments.put(next);
       await this.record('assessments', next, previous, actor, auth.organizationId, crypto.randomUUID(), 1, 1);
+      checkIdentity();
     });
   }
 
   async duplicateAssessment(id: UUID, expectedVersion: number, actor: Actor): Promise<Assessment> {
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.assessments, this.db.assessmentCategories,
+    const captured = captureLocalWriteActor(actor);
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.assessments, this.db.assessmentCategories,
       this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, captured);
       const previous = await this.db.assessments.get(id);
       if (!previous || previous.deletedAt !== null) throw new ValidationError('Assessment is unavailable.');
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, previous.classSectionId);
@@ -104,16 +112,18 @@ export class ClassSettingsService {
       const txId = crypto.randomUUID();
       await this.record('assessments', next, null, actor, auth.organizationId, txId, 1, categories.length + 1);
       for (const [i, category] of categories.entries()) await this.record('assessmentCategories', category, null, actor, auth.organizationId, txId, i + 2, categories.length + 1);
-      return next;
+      checkIdentity(); return next;
     });
   }
 
   async updateGradingPolicy(id: UUID, expectedVersion: number, changes: PolicyChanges, actor: Actor): Promise<GradingPolicy> {
+    const captured = captureLocalWriteActor(actor);
     const weights = [changes.weightK, changes.weightT, changes.weightC, changes.weightA];
     if (weights.some(w => !Number.isFinite(w) || w < 0 || w > 100) || Math.abs(weights.reduce((a, b) => a + b, 0) - 100) > .001 ||
       typeof changes.excludeFormative !== 'boolean' || !['exclude', 'zero_with_warning', 'floor_r'].includes(changes.missingWorkPolicy))
       throw new ValidationError('Category weights must total 100% and the missing-work policy must be valid.');
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.gradingPolicies, this.db.auditEntries, this.db.syncMutations], async () => {
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.gradingPolicies, this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, captured);
       const previous = await this.db.gradingPolicies.get(id);
       if (!previous || previous.deletedAt !== null) throw new ValidationError('Grading policy is unavailable.');
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, previous.classSectionId);
@@ -123,7 +133,7 @@ export class ClassSettingsService {
         updatedAt: new Date().toISOString(), version: previous.version + 1 };
       await this.db.gradingPolicies.put(next);
       await this.record('gradingPolicies', next, previous, actor, auth.organizationId, crypto.randomUUID(), 1, 1);
-      return next;
+      checkIdentity(); return next;
     });
   }
 }

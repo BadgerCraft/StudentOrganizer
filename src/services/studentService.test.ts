@@ -1,9 +1,10 @@
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { StudentDomainService } from './studentService';
 import { ValidationError } from './markbookService';
+import { setActiveTeacherId, clearActiveTeacherId, getIdentityEpoch } from './identityService';
 import { ConcurrencyError } from './participationService';
 
 describe('StudentDomainService Suite', () => {
@@ -13,7 +14,30 @@ describe('StudentDomainService Suite', () => {
   beforeEach(async () => {
     db = new OntarioTeacherDB(`student-service-test-${crypto.randomUUID()}`);
     await seedDatabase(db);
+    setActiveTeacherId('user-tyler');
+    await db.devices.put({ id: 'device-test', userId: 'user-tyler', installationId: 'device-test', name: 'Fictional', lastSeenAt: new Date().toISOString() });
     service = new StudentDomainService(db);
+  });
+
+  it('preserves the existing photo and audit when the teacher changes during profile writes', async () => {
+    const student = (await db.students.toCollection().first())!;
+    const before = await db.students.toArray();
+    const audits = await db.auditEntries.toArray();
+    const outbox = await db.syncMutations.toArray();
+    const input = { studentId: student.id, expectedVersion: student.version, firstName: student.firstName, lastName: student.lastName, preferredName: student.preferredName, pronouns: student.pronouns, photoUrl: 'data:image/jpeg;base64,AAAA', userId: 'user-tyler', deviceId: 'device-test' };
+    const identityEpoch = getIdentityEpoch();
+    clearActiveTeacherId(); setActiveTeacherId('user-tyler');
+    await expect(service.updateStudentProfile({ ...input, identityEpoch })).rejects.toThrow('Acting teacher changed');
+    const original = db.auditEntries.add.bind(db.auditEntries);
+    vi.spyOn(db.auditEntries, 'add').mockImplementationOnce((...args) => original(...args).then(result => {
+      clearActiveTeacherId(); setActiveTeacherId('user-tyler');
+      return result;
+    }));
+    await expect(service.updateStudentProfile(input)).rejects.toThrow();
+    vi.restoreAllMocks();
+    expect(await db.students.toArray()).toEqual(before);
+    expect(await db.auditEntries.toArray()).toEqual(audits);
+    expect(await db.syncMutations.toArray()).toEqual(outbox);
   });
 
   describe('Validation & Privacy Constraints', () => {

@@ -4,7 +4,9 @@ import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
 import { ValidationError } from './markbookService';
 import { ConcurrencyError } from './participationService';
 
-interface Actor { userId: UUID; deviceId: UUID }
+import { captureLocalWriteActor, guardLocalWriteIdentity, type LocalWriteActor } from './localWriteIdentity';
+
+type Actor = LocalWriteActor;
 export type UnitDetails = Pick<Unit, 'code' | 'title' | 'sortOrder' | 'startsOn' | 'endsOn'>;
 
 function validate(details: UnitDetails): UnitDetails {
@@ -46,7 +48,9 @@ export class UnitService {
 
   async createUnit(classSectionId: UUID, details: UnitDetails, actor: Actor): Promise<Unit> {
     const changes = validate(details);
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.units, this.db.auditEntries, this.db.syncMutations], async () => {
+    actor = captureLocalWriteActor(actor);
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.units, this.db.auditEntries, this.db.syncMutations], async () => {
+      const checkIdentity = await guardLocalWriteIdentity(this.db, actor);
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, classSectionId);
       await this.requireAvailableCode(classSectionId, changes.code);
       const now = new Date().toISOString();
@@ -54,21 +58,25 @@ export class UnitService {
         createdAt: now, updatedAt: now, deletedAt: null, version: 1 };
       await this.db.units.add(unit);
       await this.record(unit, null, actor, auth.organizationId);
+      checkIdentity();
       return unit;
     });
   }
 
   async updateUnit(id: UUID, expectedVersion: number, details: UnitDetails, actor: Actor): Promise<Unit> {
     const changes = validate(details);
-    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.units, this.db.auditEntries, this.db.syncMutations], async () => {
+    actor = captureLocalWriteActor(actor);
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.units, this.db.auditEntries, this.db.syncMutations], async () => {
       const previous = await this.db.units.get(id);
       if (!previous || previous.deletedAt !== null) throw new ValidationError('Unit is unavailable.');
+      const checkIdentity = await guardLocalWriteIdentity(this.db, actor);
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, previous.classSectionId);
       if (previous.version !== expectedVersion) throw new ConcurrencyError('Unit changed. Please refresh before editing.');
       await this.requireAvailableCode(previous.classSectionId, changes.code, previous.id);
       const next: Unit = { ...previous, ...changes, updatedAt: new Date().toISOString(), version: previous.version + 1 };
       await this.db.units.put(next);
       await this.record(next, previous, actor, auth.organizationId);
+      checkIdentity();
       return next;
     });
   }

@@ -1,7 +1,7 @@
 import { ClassSettingsService } from '../services/classSettingsService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Calendar,
@@ -48,10 +48,18 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 }) => {
   const [actionError, setActionError] = useState<string | null>(null);
   const service = new ClassSettingsService(db);
-  const actor = async () => {
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const context = useRef({ classSectionId: classSection.id, userId });
+  context.current = { classSectionId: classSection.id, userId };
+  const actor = async (epoch = getIdentityEpoch()) => {
+    const sectionId = classSection.id;
+    const current = () => mounted.current && !!userId && context.current.userId === userId &&
+      context.current.classSectionId === sectionId && getActiveTeacherId() === userId && getIdentityEpoch() === epoch;
+    if (!current()) throw new AuthorizationError('Acting teacher or class changed. Please reopen the editor.');
     const identity = await getAppIdentity(db);
-    if (!userId || identity.userId !== userId) throw new AuthorizationError('Acting teacher changed. Please refresh.');
-    return identity;
+    if (!current() || identity.userId !== userId) throw new AuthorizationError('Acting teacher or class changed. Please reopen the editor.');
+    return { ...identity, identityEpoch: epoch };
   };
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'summative' | 'formative'>('all');
@@ -66,6 +74,18 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
   const [unitEndsOn, setUnitEndsOn] = useState('');
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitBaseline, setUnitBaseline] = useState('');
+  const unitEpoch = useRef(getIdentityEpoch());
+  const assessmentEpoch = useRef(getIdentityEpoch());
+  useEffect(() => {
+    setShowUnitForm(false);
+    setShowCreateModal(false);
+    setFilterUnit('all');
+    setActionError(null);
+  }, [classSection.id, userId]);
+  useEffect(() => subscribeIdentityChange(() => {
+    setShowUnitForm(false);
+    setShowCreateModal(false);
+  }), []);
   const unitDraft = JSON.stringify({ code: unitCode, title: unitTitle, sortOrder: unitOrder,
     startsOn: unitStartsOn, endsOn: unitEndsOn });
   const activeUnits = units.filter(u => u.deletedAt === null && u.classSectionId === classSection.id)
@@ -73,6 +93,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
   const openUnitForm = (unit: Unit | null) => {
     const order = unit?.sortOrder ?? Math.max(0, ...activeUnits.map(u => u.sortOrder)) + 1;
+    unitEpoch.current = getIdentityEpoch();
     setEditingUnit(unit);
     setUnitCode(unit?.code ?? '');
     setUnitTitle(unit?.title ?? '');
@@ -94,9 +115,9 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       const details = { code: unitCode, title: unitTitle, sortOrder: unitOrder,
         startsOn: unitStartsOn || null, endsOn: unitEndsOn || null };
       const unitService = new UnitService(db);
-      if (editingUnit) await unitService.updateUnit(editingUnit.id, editingUnit.version, details, await actor());
+      if (editingUnit) await unitService.updateUnit(editingUnit.id, editingUnit.version, details, await actor(unitEpoch.current));
       else {
-        const unit = await unitService.createUnit(classSection.id, details, await actor());
+        const unit = await unitService.createUnit(classSection.id, details, await actor(unitEpoch.current));
         setSelectedUnitId(unit.id);
       }
       setShowUnitForm(false);
@@ -145,7 +166,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       if (cChecked) categories.push({ categoryCode: 'C', maxScore: cMax, evidenceWeight: cWeight });
       if (aChecked) categories.push({ categoryCode: 'A', maxScore: aMax, evidenceWeight: aWeight });
       await service.createAssessment({ classSectionId: classSection.id, unitId: selectedUnitId,
-        title, assessmentType, dueAt: dueDate, categories, ...await actor() });
+        title, assessmentType, dueAt: dueDate, categories, ...await actor(assessmentEpoch.current) });
       setShowCreateModal(false);
       setTitle('');
       onRefresh();
@@ -184,7 +205,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
           </p>
         </div>
         <button
-          onClick={() => { setSelectedUnitId(activeUnits.find(u => u.id === selectedUnitId)?.id ?? activeUnits[0]?.id ?? ''); setShowCreateModal(true); }}
+          onClick={() => { assessmentEpoch.current = getIdentityEpoch(); setSelectedUnitId(activeUnits.find(u => u.id === selectedUnitId)?.id ?? activeUnits[0]?.id ?? ''); setShowCreateModal(true); }}
           className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition active:scale-95"
         >
           <Plus className="w-4 h-4" />

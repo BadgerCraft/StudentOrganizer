@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   ArrowUpDown,
@@ -21,7 +21,7 @@ import type {
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
 import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
@@ -42,6 +42,13 @@ interface MarkbookViewProps {
   onOpenStudentProfile: (enrollmentId: UUID) => void;
   onOpenMarking?: (assessmentId: string, enrollmentId: string) => void;
   onRefresh: () => void;
+}
+
+/** Display one assessment with the existing engine and a temporary formative policy. */
+export function calculateAssessmentSummary(enrollmentId: UUID, assessment: Assessment,
+  categories: AssessmentCategory[], assignments: StudentAssessment[], results: CategoryResult[], policy: GradingPolicy) {
+  return calculateOverallCourseGrade(enrollmentId, assessment.reportingPeriodId,
+    [assessment], categories, assignments, results, { ...policy, excludeFormative: false }, []);
 }
 
 export const MarkbookView: React.FC<MarkbookViewProps> = ({
@@ -75,6 +82,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
 
   // Cell Editor Popover state
   const [activeCell, setActiveCell] = useState<{
+    identityEpoch: number;
+    classSectionId: UUID;
     enrollmentId: UUID;
     assessmentId: UUID;
     categoryId: UUID;
@@ -95,6 +104,13 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   const [editIsLate, setEditIsLate] = useState(false);
   const [editFeedback, setEditFeedback] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const mounted = useRef(true);
+  const context = useRef({ classSectionId, userId });
+  context.current = { classSectionId, userId };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { setActiveCell(null); setSaveError(null); }, [classSectionId, userId]);
+  useEffect(() => subscribeIdentityChange(() => setActiveCell(null)), []);
 
   const markbookService = new MarkbookDomainService(db);
 
@@ -200,6 +216,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     const cr = sa ? categoryResults.find(r => r.studentAssessmentId === sa.id && r.assessmentCategoryId === category.id && r.deletedAt === null) : null;
 
     setActiveCell({
+      identityEpoch: getIdentityEpoch(),
+      classSectionId,
       enrollmentId,
       assessmentId: assessment.id,
       categoryId: category.id,
@@ -228,8 +246,12 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     setSaveError(null);
 
     try {
+      const current = () => mounted.current && !!userId && context.current.userId === userId &&
+        context.current.classSectionId === activeCell.classSectionId && classSectionId === activeCell.classSectionId &&
+        getActiveTeacherId() === userId && getIdentityEpoch() === activeCell.identityEpoch;
+      if (!current()) throw new AuthorizationError('Acting teacher or class changed. Please reopen the cell editor.');
       const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
+      if (!current() || userId !== currentIdentity.userId || (deviceId && deviceId !== currentIdentity.deviceId)) {
         throw new AuthorizationError('Acting teacher has changed. Please refresh and try again.');
       }
 
@@ -517,9 +539,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                       if (!category) {
                         // Reuse the grading engine; this single-assessment display has no course overrides.
                         // Include formative evidence here only, without modifying the saved/course policy.
-                        const summary = calculateOverallCourseGrade(enr.id, assessment.reportingPeriodId,
-                          [assessment], categories, studentAssessments, categoryResults,
-                          { ...policy, excludeFormative: false }, []);
+                        const summary = calculateAssessmentSummary(enr.id, assessment, categories, studentAssessments, categoryResults, policy);
                         return <td key={`${assessment.id}-summary`} data-testid={`markbook-summary-${enr.id}-${assessment.id}`} className="px-3 py-2 text-center border-r border-slate-200">
                           <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? `${summary.finalOverall}%` : '--'}</span>
                           {sa?.completionStatus === 'missing' && <span className="block text-[10px] text-red-700">Missing</span>}

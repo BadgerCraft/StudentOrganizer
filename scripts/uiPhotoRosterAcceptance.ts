@@ -76,7 +76,28 @@ export async function runUiPhotoRosterAcceptance(page: Page): Promise<void> {
   await card.getByTestId('student-settings-gear-btn').click();
   await page.getByTestId('edit-photo-crop-btn').click();
   await page.getByTestId('photo-crop-zoom').press('End');
+  // Hold a replacement read while the existing crop is open, then cancel.
+  // Finishing that read must not reopen a crop or replace the stored photo.
+  await page.evaluate(() => {
+    const original = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function(file) {
+      const reader = this;
+      (window as any).__finishFictionalPhotoRead = () => new Promise<void>(resolve => {
+        reader.addEventListener('loadend', () => resolve(), { once: true });
+        FileReader.prototype.readAsDataURL = original;
+        original.call(reader, file);
+      });
+    };
+  });
+  await page.getByTestId('student-photo-file-input').setInputFiles(fictionalFile);
   await page.getByTestId('cancel-photo-crop-btn').click();
+  await page.evaluate(async () => {
+    await (window as any).__finishFictionalPhotoRead();
+    delete (window as any).__finishFictionalPhotoRead;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
+  assert.equal(await page.getByTestId('photo-crop-editor').count(), 0, 'cancel invalidates delayed replacement read');
+  assert.deepEqual(await currentStudent(), saved);
   await page.getByTestId('cancel-student-settings-btn').click();
   await page.getByTestId('student-settings-modal').waitFor({ state: 'hidden' });
   assert.deepEqual(await currentStudent(), saved, 'recrop cancellation retains exact previously saved crop');

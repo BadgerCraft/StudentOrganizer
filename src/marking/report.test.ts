@@ -20,6 +20,19 @@ function reportInput(): MarkingReportInput {
 }
 
 describe('saved marking report', () => {
+  it('shows KTCA order without changing saved judgments, category IDs or weights', () => {
+    const input = reportInput();
+    input.categories = (['A', 'C', 'T', 'K'] as const).map((code, index) => ({ ...input.categories[0], id: `category-${code}`, categoryCode: code, evidenceWeight: index + 1 }));
+    input.commit.draft.judgments = input.categories.map(c => ({ ...input.commit.draft.judgments[0], assessmentCategoryId: c.id, feedback: `Saved ${c.categoryCode} feedback` }));
+    const before = structuredClone(input);
+    const html = renderMarkingReport(input);
+    const names = ['Knowledge / Understanding', 'Thinking', 'Communication', 'Application'];
+    const positions = names.map(name => html.indexOf(`<th>${name}</th>`));
+    expect(positions.every(position => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    for (const code of ['K', 'T', 'C', 'A']) expect(html).toContain(`Saved ${code} feedback`);
+    expect(input).toEqual(before);
+  });
   it('exports saved judgments and exact repeated-text quote anchors with pinned rubric descriptors', () => {
     const input = reportInput();
     const html = renderMarkingReport(input);

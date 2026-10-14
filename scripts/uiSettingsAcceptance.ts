@@ -37,7 +37,10 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   await settings(page);
   const entries = await rows(page, 'markScaleEntries');
   const policies = await rows(page, 'gradingPolicies');
-  const initialVersion = policies[0].defaultMarkScaleVersionId;
+  const sectionId = await page.getByTestId('header-class-select').inputValue();
+  const selectedPolicy = policies.find(policy => policy.classSectionId === sectionId);
+  assert.ok(selectedPolicy, 'The selected class has an actual grading policy');
+  const initialVersion = selectedPolicy.defaultMarkScaleVersionId;
   const visible = entries.filter(entry => entry.markScaleVersionId === initialVersion);
   assert.equal(await page.getByTestId('mark-scale-entry').count(), visible.length);
   for (const entry of visible) {
@@ -103,6 +106,7 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   await page.getByTestId('add-starter-buttons-btn').click();
   const starters = await untilRows(page, 'participationEventTypes', types => types.length === 4);
   assert.deepEqual(starters.map(t => t.classification).sort(), ['needs_followup', 'neutral', 'neutral', 'positive']);
+  await page.getByTestId('add-starter-buttons-btn').waitFor({ state: 'hidden' });
   assert.equal(await page.getByTestId('add-starter-buttons-btn').count(), 0);
   assert.deepEqual(await rows(page, 'participationEvents'), withObservation);
   assert.deepEqual(await rows(page, 'categoryResults'), formalResults);

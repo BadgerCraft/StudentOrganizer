@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { UnitService } from './unitService';
+import { setActiveTeacherId, clearActiveTeacherId, getIdentityEpoch } from './identityService';
 import type { Unit } from '../types/schema';
 
 const actor = { userId: 'user-tyler', deviceId: 'fictional-unit-device' };
@@ -14,10 +15,12 @@ describe('Unit management preserves linked records and atomic attribution', () =
   beforeEach(async () => {
     db = new OntarioTeacherDB(`units-${crypto.randomUUID()}`);
     await seedDatabase(db);
+    setActiveTeacherId(actor.userId);
+    await db.devices.put({ id: actor.deviceId, userId: actor.userId, installationId: actor.deviceId, name: 'Fictional unit device', lastSeenAt: new Date().toISOString() });
     service = new UnitService(db);
     unit = (await db.units.toCollection().first())!;
   });
-  afterEach(async () => { vi.restoreAllMocks(); await db.delete(); });
+  afterEach(async () => { vi.restoreAllMocks(); clearActiveTeacherId(); await db.delete(); });
 
   it('creates and renames units with stable identity, untouched assessments and grouped actor attribution', async () => {
     const linkedBefore = await db.assessments.toArray();
@@ -57,6 +60,35 @@ describe('Unit management preserves linked records and atomic attribution', () =
     await db.classSectionStaff.update(staff.id, { role: 'primary_teacher', deletedAt: null });
     before = await snapshot();
     await expect(service.updateUnit(unit.id, unit.version + 1, { ...unit, title: 'Stale' }, actor)).rejects.toThrow('changed');
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each(['unselected', 'different-teacher', 'returned-teacher', 'different-device', 'missing-device'])
+    ('rejects %s context without any writes', async context => {
+      const identityEpoch = getIdentityEpoch();
+      if (context === 'unselected') clearActiveTeacherId();
+      if (context === 'different-teacher') setActiveTeacherId('fictional-other-teacher');
+      if (context === 'returned-teacher') { clearActiveTeacherId(); setActiveTeacherId(actor.userId); }
+      if (context === 'different-device') await db.devices.update(actor.deviceId, { userId: 'fictional-other-teacher' });
+      if (context === 'missing-device') await db.devices.delete(actor.deviceId);
+      const before = await snapshot();
+      await expect(service.createUnit(unit.classSectionId, { ...unit, code: 'NEW' }, { ...actor, identityEpoch })).rejects.toThrow();
+      await expect(service.updateUnit(unit.id, unit.version, { ...unit, title: 'Denied' }, { ...actor, identityEpoch })).rejects.toThrow();
+      expect(await snapshot()).toEqual(before);
+    });
+
+  it.each(['create', 'edit'])('rolls back %s when the session changes during attribution', async operation => {
+    const before = await snapshot();
+    const add = db.auditEntries.add.bind(db.auditEntries);
+    vi.spyOn(db.auditEntries, 'add').mockImplementationOnce((...args) => add(...args).then(result => {
+      clearActiveTeacherId();
+      setActiveTeacherId(actor.userId);
+      return result;
+    }));
+    const write = operation === 'create'
+      ? service.createUnit(unit.classSectionId, { ...unit, code: 'NEW' }, actor)
+      : service.updateUnit(unit.id, unit.version, { ...unit, title: 'Denied' }, actor);
+    await expect(write).rejects.toThrow();
     expect(await snapshot()).toEqual(before);
   });
 
