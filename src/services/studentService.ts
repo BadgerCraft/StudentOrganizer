@@ -1,3 +1,4 @@
+import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 import { isLocalPhoto, MAX_PHOTO_BYTES } from '../utils/localPhoto';
 import type { OntarioTeacherDB } from '../db/database';
 import type { AuditEntry, Student, StudentNote, SyncMutation, UUID } from '../types/schema';
@@ -15,6 +16,7 @@ export interface UpdateStudentProfileParams {
   photoUrl: string | null;
   userId: UUID;
   deviceId: UUID;
+  identityEpoch?: number;
 }
 
 export interface CreateStudentNoteParams {
@@ -68,10 +70,12 @@ export class StudentDomainService {
       }
     }
 
+    const actor = captureLocalWriteActor(params);
     return await this.db.transaction(
       'rw',
-      [...AUTH_TABLES(this.db), this.db.classEnrollments, this.db.students, this.db.auditEntries, this.db.syncMutations],
+      [...AUTH_TABLES(this.db), this.db.devices, this.db.classEnrollments, this.db.students, this.db.auditEntries, this.db.syncMutations],
       async () => {
+        const checkIdentity = await guardLocalWriteIdentity(this.db, actor);
         const current = await this.db.students.get(params.studentId);
         if (!current || current.deletedAt !== null) {
           throw new ValidationError(`Student ${params.studentId} not found or deleted.`);
@@ -182,6 +186,7 @@ export class StudentDomainService {
           this.db.syncMutations.add(sync)
         ]);
 
+        checkIdentity();
         return updated;
       }
     );

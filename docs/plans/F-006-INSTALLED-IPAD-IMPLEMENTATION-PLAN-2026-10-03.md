@@ -1,5 +1,7 @@
 > **Superseded October 4, 2026:** Tyler rejected paid Apple enrollment for the current pilot. Use [the free Personal Team pilot plan](F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md). This file remains as decision history.
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](../SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 # F-006 — Installed iPad Ad Hoc pilot implementation plan
 
 Prepared: 2026-10-03, America/Toronto  

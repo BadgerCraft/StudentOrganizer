@@ -11,6 +11,7 @@ import type {
 import { ValidationError } from './markbookService';
 import { ConcurrencyError } from './participationService';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
+import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 
 export interface CreateEventTypeParams {
   classSectionId: UUID;
@@ -68,6 +69,31 @@ export interface RestoreEventTypeParams {
 
 export class ParticipationEventTypeService {
   constructor(private db: OntarioTeacherDB) {}
+
+  /** Deliberate, atomic setup for an empty workspace; never reset custom or archived buttons. */
+  async addStarterButtons(classSectionId: UUID, userId: UUID, deviceId: UUID, identityEpoch?: number): Promise<ParticipationEventType[]> {
+    const actor = captureLocalWriteActor({ userId, deviceId, identityEpoch });
+    return this.db.transaction('rw', [...AUTH_TABLES(this.db), this.db.devices, this.db.participationEventTypes,
+      this.db.auditEntries, this.db.syncMutations], async () => {
+      const check = await guardLocalWriteIdentity(this.db, actor);
+      await assertClassSectionWriteAccess(this.db, userId, classSectionId);
+      // Includes archived types so teachers who deliberately archived their buttons are not reseeded.
+      const existing = await this.listEventTypesForSection(classSectionId, true);
+      check();
+      if (existing.length) return [];
+      const starters: Pick<CreateEventTypeParams, 'name' | 'classification' | 'recordingMode' | 'defaultPoints'>[] = [
+        { name: 'Positive contribution', classification: 'positive', recordingMode: 'quick_tally', defaultPoints: 1 },
+        { name: 'General observation', classification: 'neutral', recordingMode: 'quick_tally', defaultPoints: 0 },
+        { name: 'Achievement level observation', classification: 'neutral', recordingMode: 'level_1_4', defaultPoints: 0 },
+        { name: 'Needs follow-up', classification: 'needs_followup', recordingMode: 'quick_tally', defaultPoints: 0 }
+      ];
+      const created: ParticipationEventType[] = [];
+      for (const starter of starters) created.push(await this.createEventType({ ...starter,
+        classSectionId, userId, deviceId, defaultCategoryCode: null }));
+      check();
+      return created;
+    });
+  }
 
   /**
    * Scoped read query resolving visible event types for a given class section:

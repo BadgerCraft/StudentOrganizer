@@ -1,5 +1,17 @@
 # Integrate Markinator into StudentOrganizer
 
+## Superseding approved follow-through — October 14, 2026
+
+Tyler approved combining the latest verified UI cleanup branch with modes/photo work, local annotated PDF export, and a dedicated Archive; implementation and final checks are in progress, not proven complete by this approval. Do not reuse stale PR26 status as the integration source. Refresh the actual UI branch head and preserve existing teacher/grade/history protections.
+
+Archive retains (1) student/class/assessment/date, (2) final K/T/C/A judgments and marks, (3) the rubric used and written feedback, and (4) relevant revision history. Default archival removes original student files/photos and image-dependent markup from active and internal history copies while retaining the structured record. **Keep student work**, default off in export/publish choices, opts selected work into retention. Existing exported backups remain outside retroactive deletion. Implement explicit irreversible-action confirmation and atomic failure/recovery safeguards; no blanket or silent deletion is authorized.
+
+Annotated PDF export is approved and no longer an excluded future feature: render photographed pages with visual markup/comments and deliberate rubric feedback locally. No remote converter, publishing service, OCR or AI processing. A phone capture companion is design investigation only; class/assignment selection, explicit roster matching and manual unresolved-item routing are desired, but no app/backend/automatic transfer is approved.
+
+All iPad-specific work is shelved unconditionally; preserve code and use [SHELVED_FEATURES.md](../SHELVED_FEATURES.md) to resume only on explicit request. Desktop Windows/Mac integration, export/archive checks and real installed runtime acceptance are the active sequence. Prior iPad camera/Files/touch/background/renewal “next” steps below are historical, not active gates. Existing static checks are bounded evidence only. Source review and automated integration checks belong to the agent; Tyler's later app walkthrough is classroom/product judgment, not a request to debug or verify source.
+
+Main merge, release/distribution, spending, provider adoption and real-student use remain reserved. Current exact heads, publication and measured results belong in FEATURE_QUEUE.md; approval is not evidence of completion.
+
 Implement an assessment-linked marking workflow in StudentOrganizer using the attached Markinator source and discovery review. Treat Markinator as a working workflow reference: reuse sound marking logic and useful UI, but redesign its storage, import, and export paths around StudentOrganizer. Do not embed the prototype wholesale or create a second markbook.
 
 ## Outcome

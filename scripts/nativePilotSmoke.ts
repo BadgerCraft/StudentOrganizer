@@ -172,7 +172,8 @@ async function main() {
     if (await removePhoto.isVisible()) await removePhoto.tap();
     await removePhoto.waitFor({ state: 'hidden' });
     await page.locator('[data-testid="student-photo-file-input"]').setInputFiles({ name: 'fictional.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1kAAAAASUVORK5CYII=', 'base64') });
-    // FileReader + image resizing complete asynchronously; wait before saving.
+    // FileReader + crop preview decode asynchronously. Apply through the real control before saving.
+    await page.getByTestId('apply-photo-crop-btn').tap();
     await removePhoto.waitFor({ state: 'visible' });
     assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), 'Fictional Tablet');
     await page.locator('[data-testid="save-student-settings-btn"]').tap();

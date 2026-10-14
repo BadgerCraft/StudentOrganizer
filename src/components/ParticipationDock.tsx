@@ -32,6 +32,7 @@ interface ParticipationDockProps {
     note?: string | null;
   }) => void;
   onClearSelection: () => void;
+  onConfigureButtons?: () => void;
   lastBatchUndo: {
     batchId: UUID;
     eventName: string;
@@ -48,6 +49,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   onHistoricalTimeChange,
   onRecordEvent,
   onClearSelection,
+  onConfigureButtons,
   lastBatchUndo,
   onUndo
 }) => {
@@ -58,6 +60,15 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
 
   const today = getSchoolLocalDate();
   const isHistorical = selectedSchoolDate !== today;
+
+  const describeButton = (et: ParticipationEventType) => {
+    const classification = et.classification === 'needs_followup' ? 'Needs follow-up' :
+      et.classification === 'positive' ? 'Positive contribution' : 'Neutral observation';
+    const mode = et.recordingMode === 'level_1_4' ? 'Choose Level 1–4 before recording; no tally points' :
+      `Records ${et.defaultPoints} tally point${Math.abs(et.defaultPoints) === 1 ? '' : 's'}`;
+    const category = categoryOverride === 'DEFAULT' ? et.defaultCategoryCode : categoryOverride;
+    return `${et.name}: ${classification}. ${mode}. ${category ? `Category ${category}` : 'No category'}. No formal grade impact.`;
+  };
 
   // Filter and sort active event types by classification and sortOrder
   const positiveEvents = eventTypes
@@ -254,7 +265,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
             >
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <h4 className="text-sm font-bold text-indigo-950 flex items-center space-x-1.5">
+                  <h4 className="text-sm font-bold text-indigo-950 flex flex-wrap items-center gap-1.5">
                     <span>Select Ontario Achievement Level:</span>
                     <span className="underline decoration-indigo-400">{pendingLevelEventType.name}</span>
                   </h4>
@@ -271,7 +282,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-4 gap-2 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                 <button
                   data-testid="level-1-btn"
                   onClick={() => handleSelectLevel(1)}
@@ -344,6 +355,11 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
           )}
 
           {/* Event Buttons: Positive, Neutral, and Needs Follow-up Groups */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <p className="text-xs text-slate-600">Observations and tallies have no formal grade impact.</p>
+            {onConfigureButtons && <button data-testid="configure-participation-btn" onClick={onConfigureButtons}
+              className="min-h-[44px] px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-blue-700">Configure buttons</button>}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Positive Events */}
             <div>
@@ -357,15 +373,16 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     key={et.id}
                     data-testid="participation-event-btn"
                     aria-label={`Record ${et.name}`}
+                    title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
                     className="flex flex-col justify-between bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-200/80 p-2 rounded-xl text-xs font-semibold transition text-left active:scale-95 shadow-sm min-h-[52px]"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                      <span className="truncate font-bold">{et.name}</span>
+                      <span className="break-words font-bold">{et.name}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-emerald-700 font-mono mt-1">
-                      <span>{et.recordingMode === 'level_1_4' ? '1–4 Level' : `+${et.defaultPoints} pt`}</span>
+                      <span>{et.recordingMode === 'level_1_4' ? '1–4 Level' : `${et.defaultPoints > 0 ? '+' : ''}${et.defaultPoints} pt`}</span>
                       {et.defaultCategoryCode && (
                         <span className="bg-emerald-200/70 text-emerald-800 px-1 rounded text-[9px] font-bold font-sans">
                           {et.defaultCategoryCode}
@@ -374,6 +391,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     </div>
                   </button>
                 ))}
+                {positiveEvents.length === 0 && <p className="col-span-2 text-xs text-slate-600 p-3 border border-dashed rounded-xl">No positive buttons. Use Configure buttons to add one.</p>}
               </div>
             </div>
 
@@ -389,12 +407,13 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     key={et.id}
                     data-testid="participation-event-btn"
                     aria-label={`Record ${et.name}`}
+                    title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
                     className="flex flex-col justify-between bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 p-2 rounded-xl text-xs font-semibold transition text-left active:scale-95 shadow-sm min-h-[52px]"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
-                      <span className="truncate font-bold">{et.name}</span>
+                      <span className="break-words font-bold">{et.name}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-600 font-mono mt-1">
                       <span>{et.recordingMode === 'level_1_4' ? '1–4 Level' : `${et.defaultPoints} pt`}</span>
@@ -408,7 +427,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                 ))}
                 {neutralEvents.length === 0 && (
                   <div className="col-span-2 text-center text-[11px] text-slate-400 py-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                    No neutral buttons
+                    No neutral buttons. Use Configure buttons to add one.
                   </div>
                 )}
               </div>
@@ -426,12 +445,13 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     key={et.id}
                     data-testid="participation-event-btn"
                     aria-label={`Record ${et.name}`}
+                    title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
                     className="flex flex-col justify-between bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200/80 p-2 rounded-xl text-xs font-semibold transition text-left active:scale-95 shadow-sm min-h-[52px]"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                      <span className="truncate font-bold">{et.name}</span>
+                      <span className="break-words font-bold">{et.name}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-amber-800 font-mono mt-1">
                       <span>{et.recordingMode === 'level_1_4' ? '1–4 Level' : `${et.defaultPoints} pt`}</span>
@@ -443,6 +463,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     </div>
                   </button>
                 ))}
+                {needsFollowupEvents.length === 0 && <p className="col-span-2 text-xs text-slate-600 p-3 border border-dashed rounded-xl">No follow-up buttons. Use Configure buttons to add one.</p>}
               </div>
             </div>
           </div>

@@ -1,5 +1,17 @@
 # P0 Codex execution order — Markinator modes and photo markup
 
+## Superseding approved follow-through — October 14, 2026
+
+Tyler approved combining the latest verified UI cleanup branch with modes/photo work, local annotated PDF export, and a dedicated Archive; implementation and final checks are in progress, not proven complete by this approval. Do not reuse stale PR26 status as the integration source. Refresh the actual UI branch head and preserve existing teacher/grade/history protections.
+
+Archive retains (1) student/class/assessment/date, (2) final K/T/C/A judgments and marks, (3) the rubric used and written feedback, and (4) relevant revision history. Default archival removes original student files/photos and image-dependent markup from active and internal history copies while retaining the structured record. **Keep student work**, default off in export/publish choices, opts selected work into retention. Existing exported backups remain outside retroactive deletion. Implement explicit irreversible-action confirmation and atomic failure/recovery safeguards; no blanket or silent deletion is authorized.
+
+Annotated PDF export is approved and no longer an excluded future feature: render photographed pages with visual markup/comments and deliberate rubric feedback locally. No remote converter, publishing service, OCR or AI processing. A phone capture companion is design investigation only; class/assignment selection, explicit roster matching and manual unresolved-item routing are desired, but no app/backend/automatic transfer is approved.
+
+All iPad-specific work is shelved unconditionally; preserve code and use [SHELVED_FEATURES.md](../SHELVED_FEATURES.md) to resume only on explicit request. Desktop Windows/Mac integration, export/archive checks and real installed runtime acceptance are the active sequence. Prior iPad camera/Files/touch/background/renewal “next” steps below are historical, not active gates. Existing static checks are bounded evidence only. Source review and automated integration checks belong to the agent; Tyler's later app walkthrough is classroom/product judgment, not a request to debug or verify source.
+
+Main merge, release/distribution, spending, provider adoption and real-student use remain reserved. Current exact heads, publication and measured results belong in FEATURE_QUEUE.md; approval is not evidence of completion.
+
 Owner: Codex implementation environment. Authorized by user October 13, 2026. Branch: codex/markinator-modes-photo-20261013 (based on main). Queue: docs/FEATURE_QUEUE.md F-008-MODES and F-008-PHOTO.
 
 ## Model routing
@@ -71,4 +83,15 @@ The dispatch tool accepted explicit `gpt-6.1-sol` selection: medium for bounded 
 
 The required `reuse-component-lessons` skill was searched in the cloud/executor catalogs and was unavailable. No current external lesson IDs/version or update is claimed; no authoritative collection was duplicated. Direct repository contracts and actual regression evidence guided the implementation.
 
-Next concrete batch: create/update the review PR once repository API access is available, inspect its exact-head CI, then perform the ordered native camera/Files/touch/background/restart/backup acceptance on disposable Windows/iPad devices (Mac/Xcode for iPad). Select GPT-6.1 Codex Sol if available, high reasoning for native permissions/storage; confirm selectable model in the receiving environment, escalate unresolved data/grade loss to independent review, and finish only with actual device/CI evidence or a named blocker. Review/integration with the separately verified UI cleanup branch is a distinct gate; no main merge or release is authorized by this checkpoint.
+Historical next-batch instruction (superseded by the October 14 approval above): create/update the review PR once repository API access is available, inspect its exact-head CI, then perform the ordered native camera/Files/touch/background/restart/backup acceptance on disposable Windows/iPad devices (Mac/Xcode for iPad). Select GPT-6.1 Codex Sol if available, high reasoning for native permissions/storage; confirm selectable model in the receiving environment, escalate unresolved data/grade loss to independent review, and finish only with actual device/CI evidence or a named blocker. Review/integration with the separately verified UI cleanup branch is a distinct gate; no main merge or release is authorized by this checkpoint.
+
+
+## October 14 follow-through — combined desktop, PDF and Archive
+
+User approved combining UI fixes, annotated PDF output and structured archive retention; explicitly shelved iPad and asked about a phone capture companion (design only). Coordinator obtained a working Git checkout, combined verified UI `66a3477` with modes/photo `63f9963`, preserving both parents and resolving overlapping validation/category-order/report controls. Archive/PDF implementations were delegated with disjoint file ownership under repository authorization. No main merge/release or model switch is claimed.
+
+Measured: 474 tests/49files, production build and diff checks pass. Independent review reproduced two archive issues (pending comment duplicate IDs, inactive student names), verified repairs and independently passed26 focused tests. Archive preserves structured grading/rubric/feedback/revision data while atomically removing known source files/text/quotes/anchors and historical internal copies by default. Keep student work is false unless deliberately selected; export itself never archives. Read-only Archive includes private oral observations excluded from student-facing reports. Legacy soft-delete archives are untouched and external prior backups remain separate copies.
+
+PDF output flattens photograph pixels/annotation geometry locally and adds rubric/comments; real Electron printToPDF uses an isolated scriptless, no-network renderer. Browser fallback is clearly named printable HTML. A post-decode identity guard prevents changed-teacher exports. No new dependencies or schema version. Native rendering/save dialogs remain unverified locally. CI includes actual packaged Electron PDF checks with a controlled test save destination; this is not a claim of physical OS dialog testing.
+
+Browser tests cannot run locally: no Chromium, Playwright download returned truncated ZIP, package fallback could not complete. New browser scripts and Windows/Mac package checks must provide exact-head remote evidence. Existing mixed-import/chunk-size warnings persist. iPad-only compile is explicitly shelved; shared Chromium/WebKit tests retained. Resume iPad only on Tyler's request. Phone capture stays dormant until this desktop batch is accepted; no roster transfer/cloud endpoint implemented.

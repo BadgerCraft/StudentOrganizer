@@ -1,21 +1,23 @@
-# Add local Markinator modes and recoverable photographed-page markup
+# Integrate classroom UI and Markinator with local PDF export and minimal Archive
 
-Previously assessment-linked marking required text documents. Teachers can now choose written document/image marking, an oral presentation checklist with private notes, or rubric-only evidence. Every mode pins a confirmed rubric and explicit student; evidence labels/checks stay separate from official category judgments and the existing deliberate finalization path.
+Teachers can use the verified classroom UI repairs together with all three marking modes and local multi-page photo markup. Finalized work now has a marked PDF action: Windows/Mac generate actual PDF bytes locally; browser development use downloads clearly labeled print-ready HTML. Photograph crop/rotation, strokes/highlights, numbered comments, written work, rubric and feedback are included without changing grades.
 
-Photographed JPEG/PNG/WebP pages stay local with immutable originals. Crop/rotation/order, pen/highlight/comment anchors and edits are stored separately and survive autosave, reopen and full backup restore. A metadata-neutral temporary decode copy prevents EXIF from changing coordinate axes; delayed previews cannot accept marks on the wrong page. Legacy written drafts remain usable, including first edits to new per-criterion feedback.
+A separate read-only Archive tab retains student/class/assessment/date, final judgments and marks, pinned rubric and written feedback, and revision records. **Keep student work** defaults off beside export controls. Explicit archive removes known submitted source files/text/quotes/visual anchors from current records and internal audit/outbox copies in one transaction; opt-in retains work. Export alone never archives. Dropped-student names, private oral observations and retained category feedback remain visible. Previously soft-deleted archives and previously exported backups are not automatically purged.
 
-Existing teacher/epoch/version authorization, atomic audit/mark/finalization/restore, manual-mark review, immutable history, completion policy and grade overrides are retained. Student reports include rubric feedback and textual page comments; original images/strokes and oral private observations remain excluded. No OCR, remote URLs, cloud processing, new dependencies or schema version.
+Tyler approved this integration, PDF output, archive rule and immediate iPad shelving October14. iPad source/config/scripts and historical evidence remain intact with [a resume map](../blob/codex/desktop-export-archive-20261014/docs/SHELVED_FEATURES.md). iPad-only compilation is disabled; shared Chromium/WebKit checks remain. Phone capture is design-only. No new dependencies or schema version.
 
-Normally pushed and independently read back. Verified implementation: **`0347d94535e67b19a3f54ee02170f7e3af1aee63`** on `codex/markinator-modes-photo-20261013`, based on `4bd96c6` / main `5a769cb`.
+## Validation
 
-- **392 tests / 37 files pass**; production TypeScript/Vite build passes.
-- **Nine modes/photo browser groups pass**: EXIF6/3/8/2 axes and original anchors, delayed decoders, four-page capture-file/import, pen/highlight/comment/crop/rotate/reorder, autosave/reload/edit/finalize/revision, oral/rubric-only recovery, legacy matrix, rejected domain boundaries and actual clean-profile full backup restore. Zero external requests/errors.
-- Final production marking browser, existing input/authority/portability and four category-recovery browser scenarios pass. Atomic storage failure and wrong-teacher/stale identity regressions preserve records and grades.
-- iOS asset sync/static audit and photo purpose descriptions pass; independent integration review reproduced and verified repairs to legacy feedback initialization, EXIF axes and stale canvas races.
-- Existing browser CI now runs the new acceptance command and retains result/screenshots; workflow parses. New-head CI remains unobserved.
+- 474 tests/49 files pass; production TypeScript/Vite build passes. Existing mixed-import/chunk warnings remain.
+- Typecheck for new browser scripts, Electron syntax checks, workflow YAML parsing and diff checks pass.
+- Independent review reproduced and verified repairs for duplicate archived comment IDs and archived names after unenrollment;26 focused tests pass independently.
+- Archive tests exercise source removal across live/audit/outbox/full backup, actual restore, grades/feedback preservation, opt-in, failed audit/identity rollback, repeat archive and stale authorization/version rejection.
+- New browser archive/PDF tests and actual packaged Electron PDF tests are wired to CI. Packaged tests control only the save-dialog destination; they do not claim physical OS-dialog acceptance.
 
-Remaining gates: physical Windows/Mac/iPad camera/file-picker/permission/touch/background/process-restart/recovery checks; simulator/Xcode unavailable here. Native large-photo storage/quota behavior is not established. Immutable originals plus audit snapshots grow local storage/backups. Full annotated-image export remains separately scoped. Mixed-import/chunk build warnings persist.
+## Review boundaries
 
-GitHub GraphQL and REST PR listing return Forbidden. Existing draft state cannot be checked; creation/update is pending API access. This file is the complete saved PR body. Main merge, release/distribution/signing/spending/provider adoption and real student data remain unauthorized. Preserve the independently verified UI cleanup branch; integration with it is a separate review gate.
+Remote final-head CI and native runtime remain pending. Local browser execution is unavailable because Chromium download returned truncated ZIP files. No browser/native pass is inferred from unit mocks. Windows/Mac physical file-picker/save-dialog/Gatekeeper/managed-device/capacity acceptance remains separate. iPad runtime is deliberately shelved.
 
-Full evidence and next routing: [approved work order](https://github.com/BadgerCraft/StudentOrganizer/blob/codex/markinator-modes-photo-20261013/docs/work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md) and [checkpoint](https://github.com/BadgerCraft/StudentOrganizer/blob/codex/markinator-modes-photo-20261013/docs/markinator/CHECKPOINT.md).
+This branch contains modes/photo PR30 source and latest verified UI cleanup66a3477 (not stale PR26 head), preserving their history. Review this combined candidate; do not merge older overlapping PRs independently without checking the final graph. Main merge, release/distribution, spending, service adoption and real-student use remain reserved.
+
+Current queue and execution evidence: docs/FEATURE_QUEUE.md and docs/work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md.

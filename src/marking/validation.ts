@@ -137,6 +137,17 @@ function normalized(value: unknown, label: string, positive = false): asserts va
   if (typeof value !== 'number' || !Number.isFinite(value) || value > 1 || value < 0 || (positive && value === 0)) fail(`${label} must be a bounded normalized coordinate.`);
 }
 function extraDraft(v: Record<string, unknown>) {
+  if (v.archivedFeedback !== undefined) {
+    arr(v.archivedFeedback, 'Archived written feedback', MARKING_LIMITS.annotations + MARKING_LIMITS.imagePages * MARKING_LIMITS.visualAnnotations + 1);
+    const ids: string[] = [];
+    for (const item of v.archivedFeedback) {
+      const entry = object(item, 'Archived written feedback');
+      if (Object.keys(entry).some(key => !['id', 'criterionId', 'level', 'text'].includes(key))) fail('Archived feedback cannot retain source anchors or quotations.');
+      str(entry.id, 'Archived feedback ID', 200); ids.push(entry.id); nullableId(entry.criterionId, 'Archived criterion');
+      str(entry.level, 'Archived level', 100, true); str(entry.text, 'Archived comment', 20000, true);
+    }
+    unique(ids, 'Archived feedback IDs');
+  }
   if (v.rubricFeedback !== undefined) {
     arr(v.rubricFeedback, 'Rubric evidence', MARKING_LIMITS.criteria);
     let total = 0; const ids: string[] = [];
@@ -182,6 +193,11 @@ function extraDraft(v: Record<string, unknown>) {
 export function assertAttemptDraft(draft: MarkingDraft, attempt: MarkingAttempt, rubric: MarkingRubric) {
   assertMarkingDraft(draft, rubric, attempt.documents);
   const mode = attempt.mode ?? 'written', pages = attempt.imagePages ?? [];
+  if (draft.archivedFeedback?.length && !attempt.archivedAt) fail('Archived written feedback belongs only to an archived attempt.');
+  if (attempt.archivedAt && !attempt.keepStudentWork && (draft.annotations.length || draft.pending || (draft.imageFeedback?.length ?? 0))) fail('Archived source material must have been removed.');
+  for (const entry of draft.archivedFeedback ?? []) {
+    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || !rubric.levels.includes(entry.level)))) fail('Archived feedback must use the pinned rubric.');
+  }
   if (mode !== 'oral' && draft.oral !== undefined) fail('Presentation evidence belongs only to an oral attempt.');
   if (mode === 'oral' && draft.oral === undefined) fail('Oral attempts must retain their presentation evidence.');
   const feedback = draft.imageFeedback ?? [];
@@ -233,9 +249,12 @@ export function assertMarkingRecord(table: MarkingTableName, value: unknown): as
   } else if (table === 'markingAttempts') {
     str(v.rubricId, 'Rubric ID', 200); nullableId(v.classEnrollmentId, 'Enrollment ID'); nullableId(v.previousAttemptId, 'Previous attempt ID');
     if (v.mode !== undefined && !['written', 'oral', 'rubric'].includes(v.mode as string)) fail('Unsupported marking mode.');
+    if (v.archivedAt !== undefined && v.archivedAt !== null) time(v.archivedAt, 'Archived date');
+    if (v.keepStudentWork !== undefined && typeof v.keepStudentWork !== 'boolean') fail('Student-work retention must be explicit.');
     if (v.imagePages !== undefined) assertMarkingImagePages(v.imagePages);
     const pages = (v.imagePages ?? []) as MarkingImagePage[];
-    assertMarkingDocuments(v.documents, v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0);
+    assertMarkingDocuments(v.documents, !!v.archivedAt || v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0);
+    if (v.archivedAt && !v.keepStudentWork && (v.documents.length || pages.length)) fail('Archived source material must have been removed.');
     if ((v.mode === 'oral' || v.mode === 'rubric') && (v.documents.length || pages.length)) fail('Oral and rubric-only attempts do not import written sources.');
   } else if (table === 'markingSessions') {
     str(v.attemptId, 'Attempt ID', 200); str(v.rubricId, 'Rubric ID', 200); integer(v.revision, 'Revision');

@@ -1,5 +1,5 @@
 import { safePhotoSource } from '../utils/localPhoto';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   X,
   BookOpen,
@@ -30,9 +30,11 @@ import type {
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
 import { StudentDomainService } from '../services/studentService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getIdentityEpoch } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
+import { RosterEnrollmentService } from '../services/rosterEnrollmentService';
+import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
 interface StudentProfileModalProps {
   enrollmentId: UUID;
@@ -88,6 +90,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [overrideRationale, setOverrideRationale] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const formIdentityEpoch = useRef(getIdentityEpoch());
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const isNoteDirty = newNoteContent.trim() !== '';
   const isCustomAssessmentDirty =
@@ -131,6 +136,22 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     setShowAddCustomAssessment(!showAddCustomAssessment);
   };
 
+  const handleRemoveFromClass = async () => {
+    if (isRemoving) return;
+    if (isProfileDirty) { setActionError('Save or discard the unfinished profile entries before removing this student.'); return; }
+    setIsRemoving(true);
+    setActionError(null);
+    try {
+      const identity = await getAppIdentity(db);
+      if (!userId || identity.userId !== userId || (deviceId && identity.deviceId !== deviceId) || formIdentityEpoch.current !== getIdentityEpoch()) throw new AuthorizationError('Acting teacher has changed. Reopen the profile.');
+      await new RosterEnrollmentService(db).removeFromClass({ enrollmentId, expectedVersion: enrollment.version,
+        userId: identity.userId, deviceId: identity.deviceId, identityEpoch: formIdentityEpoch.current });
+      onRefresh();
+      onClose();
+    } catch (err) { setActionError(err instanceof Error ? err.message : 'Failed to remove student from this class.'); }
+    finally { setIsRemoving(false); }
+  };
+
   const markbookService = new MarkbookDomainService(db);
   const studentService = new StudentDomainService(db);
 
@@ -152,7 +173,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     for (const a of assessments) {
       if (a.deletedAt !== null) continue;
       const sa = studentAssessments.find(s => s.classEnrollmentId === enrollmentId && s.assessmentId === a.id && s.deletedAt === null);
-      const cats = categories.filter(c => c.assessmentId === a.id && c.deletedAt === null);
+      const cats = sortCategoriesForDisplay(categories.filter(c => c.assessmentId === a.id && c.deletedAt === null));
       const results = cats.map(c => {
         const r = sa ? categoryResults.find(res => res.studentAssessmentId === sa.id && res.assessmentCategoryId === c.id && res.deletedAt === null) : null;
         return { category: c, result: r };
@@ -428,6 +449,19 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               </button>
             </div>
           </div>
+
+          {enrollment.enrollmentStatus === 'active' && <div className="px-6 py-3 bg-white border-b border-slate-200">
+            {!confirmRemoval ? <button type="button" data-testid="remove-from-class-btn" onClick={() => {
+              if (isProfileDirty) { setActionError('Save or discard the unfinished profile entries before removing this student.'); return; }
+              setConfirmRemoval(true);
+            }} className="text-xs text-red-700 font-semibold hover:underline">Remove from this class</button> : <div data-testid="remove-from-class-confirmation" className="space-y-2">
+              <p className="text-xs text-slate-700">Remove {student.preferredName || student.firstName} from this class roster and seating chart? Their student profile, marks, attendance and history will be kept. You can re-enroll them through roster import.</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={isRemoving} data-testid="cancel-remove-from-class-btn" onClick={() => setConfirmRemoval(false)} className="px-3 py-1.5 text-xs border rounded-lg">Keep in class</button>
+                <button type="button" disabled={isRemoving} data-testid="confirm-remove-from-class-btn" onClick={handleRemoveFromClass} className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg disabled:opacity-50">{isRemoving ? 'Removing...' : 'Confirm removal'}</button>
+              </div>
+            </div>}
+          </div>}
 
           {actionError && (
             <div

@@ -1,5 +1,7 @@
 # Installed iPad personal pilot — F-006
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 Tyler approved the [free installed-iPad plan](plans/F-006-FREE-IPAD-PILOT-IMPLEMENTATION-PLAN-2026-10-04.md) on October 5, 2026 (“Sure approved”). This replaces the earlier Home Screen/PWA delivery. No hosting, paid Apple account, real student use, release, distribution, or main merge is authorized. Historical PWA evidence remains in Git history; it is not native iPad evidence.
 
 ## Development and identity

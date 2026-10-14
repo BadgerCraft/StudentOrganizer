@@ -1,7 +1,7 @@
 import { ClassSettingsService } from '../services/classSettingsService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Calendar,
@@ -19,6 +19,9 @@ import type {
   UUID
 } from '../types/schema';
 import { db } from '../db/database';
+import { UnitService } from '../services/unitService';
+import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
+import { ModalDialog } from './ModalDialog';
 
 interface AssessmentHubViewProps {
   classSection: ClassSection;
@@ -45,14 +48,83 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 }) => {
   const [actionError, setActionError] = useState<string | null>(null);
   const service = new ClassSettingsService(db);
-  const actor = async () => {
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const context = useRef({ classSectionId: classSection.id, userId });
+  context.current = { classSectionId: classSection.id, userId };
+  const actor = async (epoch = getIdentityEpoch()) => {
+    const sectionId = classSection.id;
+    const current = () => mounted.current && !!userId && context.current.userId === userId &&
+      context.current.classSectionId === sectionId && getActiveTeacherId() === userId && getIdentityEpoch() === epoch;
+    if (!current()) throw new AuthorizationError('Acting teacher or class changed. Please reopen the editor.');
     const identity = await getAppIdentity(db);
-    if (!userId || identity.userId !== userId) throw new AuthorizationError('Acting teacher changed. Please refresh.');
-    return identity;
+    if (!current() || identity.userId !== userId) throw new AuthorizationError('Acting teacher or class changed. Please reopen the editor.');
+    return { ...identity, identityEpoch: epoch };
   };
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'summative' | 'formative'>('all');
   const [filterUnit, setFilterUnit] = useState<string>('all');
+  const [showUnits, setShowUnits] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [showUnitForm, setShowUnitForm] = useState(false);
+  const [unitCode, setUnitCode] = useState('');
+  const [unitTitle, setUnitTitle] = useState('');
+  const [unitOrder, setUnitOrder] = useState(0);
+  const [unitStartsOn, setUnitStartsOn] = useState('');
+  const [unitEndsOn, setUnitEndsOn] = useState('');
+  const [unitSaving, setUnitSaving] = useState(false);
+  const [unitBaseline, setUnitBaseline] = useState('');
+  const unitEpoch = useRef(getIdentityEpoch());
+  const assessmentEpoch = useRef(getIdentityEpoch());
+  useEffect(() => {
+    setShowUnitForm(false);
+    setShowCreateModal(false);
+    setFilterUnit('all');
+    setActionError(null);
+  }, [classSection.id, userId]);
+  useEffect(() => subscribeIdentityChange(() => {
+    setShowUnitForm(false);
+    setShowCreateModal(false);
+  }), []);
+  const unitDraft = JSON.stringify({ code: unitCode, title: unitTitle, sortOrder: unitOrder,
+    startsOn: unitStartsOn, endsOn: unitEndsOn });
+  const activeUnits = units.filter(u => u.deletedAt === null && u.classSectionId === classSection.id)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
+
+  const openUnitForm = (unit: Unit | null) => {
+    const order = unit?.sortOrder ?? Math.max(0, ...activeUnits.map(u => u.sortOrder)) + 1;
+    unitEpoch.current = getIdentityEpoch();
+    setEditingUnit(unit);
+    setUnitCode(unit?.code ?? '');
+    setUnitTitle(unit?.title ?? '');
+    setUnitOrder(order);
+    setUnitStartsOn(unit?.startsOn ?? '');
+    setUnitEndsOn(unit?.endsOn ?? '');
+    setUnitBaseline(JSON.stringify({ code: unit?.code ?? '', title: unit?.title ?? '',
+      sortOrder: order, startsOn: unit?.startsOn ?? '', endsOn: unit?.endsOn ?? '' }));
+    setActionError(null);
+    setShowUnitForm(true);
+  };
+
+  const saveUnit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (unitSaving) return;
+    setUnitSaving(true);
+    setActionError(null);
+    try {
+      const details = { code: unitCode, title: unitTitle, sortOrder: unitOrder,
+        startsOn: unitStartsOn || null, endsOn: unitEndsOn || null };
+      const unitService = new UnitService(db);
+      if (editingUnit) await unitService.updateUnit(editingUnit.id, editingUnit.version, details, await actor(unitEpoch.current));
+      else {
+        const unit = await unitService.createUnit(classSection.id, details, await actor(unitEpoch.current));
+        setSelectedUnitId(unit.id);
+      }
+      setShowUnitForm(false);
+      onRefresh();
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Unit could not be saved.'); }
+    finally { setUnitSaving(false); }
+  };
 
   // New assessment form state
   const [title, setTitle] = useState('');
@@ -94,7 +166,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       if (cChecked) categories.push({ categoryCode: 'C', maxScore: cMax, evidenceWeight: cWeight });
       if (aChecked) categories.push({ categoryCode: 'A', maxScore: aMax, evidenceWeight: aWeight });
       await service.createAssessment({ classSectionId: classSection.id, unitId: selectedUnitId,
-        title, assessmentType, dueAt: dueDate, categories, ...await actor() });
+        title, assessmentType, dueAt: dueDate, categories, ...await actor(assessmentEpoch.current) });
       setShowCreateModal(false);
       setTitle('');
       onRefresh();
@@ -133,7 +205,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => { assessmentEpoch.current = getIdentityEpoch(); setSelectedUnitId(activeUnits.find(u => u.id === selectedUnitId)?.id ?? activeUnits[0]?.id ?? ''); setShowCreateModal(true); }}
           className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition active:scale-95"
         >
           <Plus className="w-4 h-4" />
@@ -141,10 +213,24 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
         </button>
       </div>
 
+      <section className="bg-white rounded-2xl border border-slate-200 p-4 mb-6" aria-label="Units and assessment filters">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs font-bold">Assessment type <select aria-label="Assessment type filter" value={filterType} onChange={e => setFilterType(e.target.value as typeof filterType)} className="ml-2 border rounded-lg p-2"><option value="all">All types</option><option value="summative">Summative</option><option value="formative">Formative</option></select></label>
+          <label className="text-xs font-bold">Unit <select aria-label="Unit filter" value={filterUnit} onChange={e => setFilterUnit(e.target.value)} className="ml-2 border rounded-lg p-2"><option value="all">All units</option>{activeUnits.map(u => <option key={u.id} value={u.id}>{u.code}: {u.title}</option>)}</select></label>
+          <button type="button" onClick={() => setShowUnits(!showUnits)} aria-expanded={showUnits} className="text-blue-700 font-bold text-xs p-2">{showUnits ? 'Hide units' : 'Manage units'}</button>
+          <button type="button" disabled={!userId} onClick={() => { setShowUnits(true); openUnitForm(null); }} className="bg-blue-50 text-blue-700 font-bold text-xs rounded-lg p-2">New unit</button>
+        </div>
+        {showUnits && <div className="mt-4 space-y-2">
+          <p className="text-xs text-slate-600">Name, rename and schedule units here. Existing assessments keep their unit links.</p>
+          {activeUnits.map(unit => <div key={unit.id} className="flex items-center justify-between gap-3 border-t pt-2 text-sm"><span><strong>{unit.code}: {unit.title}</strong><span className="block text-xs text-slate-500">Order {unit.sortOrder}{unit.startsOn ? ` · ${unit.startsOn}` : ''}{unit.endsOn ? ` to ${unit.endsOn}` : ''}</span></span><button type="button" disabled={!userId} onClick={() => openUnitForm(unit)} aria-label={`Edit unit ${unit.code}`} className="text-blue-700 underline p-2">Edit unit</button></div>)}
+          {!activeUnits.length && <p className="text-sm text-slate-600">No units yet. Create a unit before an assessment.</p>}
+        </div>}
+      </section>
+
       {/* Assessment List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredAssessments.map(a => {
-          const cats = categories.filter(c => c.assessmentId === a.id && c.deletedAt === null);
+          const cats = sortCategoriesForDisplay(categories.filter(c => c.assessmentId === a.id && c.deletedAt === null));
           const unit = units.find(u => u.id === a.unitId);
 
           return (
@@ -154,7 +240,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                      {unit ? unit.code : 'Unit'}
+                      {unit ? `${unit.code}: ${unit.title}` : 'Unit'}
                     </span>
                     <h3 className="font-bold text-slate-900 text-sm mt-1">{a.title}</h3>
                   </div>
@@ -213,7 +299,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
               {actionError && <p role="alert" className="text-red-700">{actionError}</p>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Type</label>
-                <select value={assessmentType} onChange={e => setAssessmentType(e.target.value as any)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
+                <select aria-label="Assessment type" value={assessmentType} onChange={e => setAssessmentType(e.target.value as 'summative' | 'formative')} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
                   <option value="summative">Summative</option>
                   <option value="formative">Formative</option>
                 </select>
@@ -227,8 +313,8 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Unit</label>
-                  <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
-                    {units.map(u => (
+                  <select aria-label="Assessment unit" value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
+                    {activeUnits.map(u => (
                       <option key={u.id} value={u.id}>{u.code} - {u.title}</option>
                     ))}
                   </select>
@@ -291,12 +377,22 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
               <div className="flex justify-end space-x-2 pt-3 border-t">
                 <button type="button" onClick={() => setShowCreateModal(false)} className="px-3 py-1.5 text-xs text-slate-600">Cancel</button>
-                <button type="submit" className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-sm">Create Assessment</button>
+                <button type="submit" disabled={!activeUnits.length || !userId} className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-sm disabled:opacity-50">Create Assessment</button>
               </div>
             </form>
           </div>
         </div>
       )}
+      <ModalDialog isOpen={showUnitForm} onClose={() => { if (!unitSaving) setShowUnitForm(false); }} title={editingUnit ? 'Edit unit' : 'Create unit'} maxWidthClass="max-w-lg" isDirty={!unitSaving && unitDraft !== unitBaseline} confirmDiscardMessage="Discard your unsaved unit changes?" testId="unit-editor-modal">
+        {({ requestDismiss }) => <form onSubmit={saveUnit} className="space-y-4"><fieldset disabled={unitSaving} className="space-y-4">
+        {actionError && <p role="alert" className="text-red-700">{actionError}</p>}
+        <label className="block text-sm">Unit code<input aria-label="Unit code" autoFocus required maxLength={30} value={unitCode} onChange={e => setUnitCode(e.target.value)} className="block border rounded-lg p-2 w-full" placeholder="e.g. U2" /></label>
+        <label className="block text-sm">Unit name<input aria-label="Unit name" required maxLength={200} value={unitTitle} onChange={e => setUnitTitle(e.target.value)} className="block border rounded-lg p-2 w-full" /></label>
+        <label className="block text-sm">Display order<input aria-label="Unit display order" required type="number" min={0} step={1} value={unitOrder} onChange={e => setUnitOrder(e.target.valueAsNumber)} className="block border rounded-lg p-2 w-full" /></label>
+        <div className="grid grid-cols-2 gap-3"><label className="text-sm">Starts on<input aria-label="Unit starts on" type="date" value={unitStartsOn} onChange={e => setUnitStartsOn(e.target.value)} className="block border rounded-lg p-2 w-full" /></label><label className="text-sm">Ends on<input aria-label="Unit ends on" type="date" value={unitEndsOn} onChange={e => setUnitEndsOn(e.target.value)} className="block border rounded-lg p-2 w-full" /></label></div>
+        <div className="flex justify-end gap-3"><button type="button" disabled={unitSaving} onClick={requestDismiss} className="min-h-[44px] px-3">Cancel</button><button type="submit" disabled={unitSaving || !userId} className="bg-blue-600 text-white rounded-lg px-4 py-2 min-h-[44px] disabled:opacity-50">{unitSaving ? 'Saving…' : 'Save unit'}</button></div>
+        </fieldset></form>}
+      </ModalDialog>
     </div>
   );
 };

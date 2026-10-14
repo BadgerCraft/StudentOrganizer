@@ -30,11 +30,9 @@ The app stores its working data locally in IndexedDB. Keep real student names, n
 
 The V6.6 source is the current baseline. Earlier `main` uploads remain in Git history.
 
-## Installed iPad pilot
+## Platform priority and shelved iPad support
 
-F-006 now prepares a bundled Capacitor iPad app; Home Screen/PWA delivery is retired. Use `npm run ios:prepare` to build/synchronize assets and `npm run ios:open` on a Mac with Xcode 26+. Run `npm run test:ipad:assets` for bundle/configuration checks and `npm run test:ipad:browser` for the shared UI proxy. See [iPad installation, privacy and renewal checklist](docs/IPAD_SUPPORT.md). Native/device acceptance remains separate from browser verification; no real student use or distribution is authorized.
-
-
+Installed Windows and Mac are the current delivery and acceptance targets. Tyler shelved iPad-specific work on October 14, 2026; existing Capacitor/iOS code, assets and scripts are preserved. Do not treat iPad native acceptance as a desktop delivery gate. The [shelved feature resume map](docs/SHELVED_FEATURES.md) identifies source, commands, prior work orders and remaining device checks. Resume only on Tyler's explicit request.
 
 ## Windows QA handoff
 

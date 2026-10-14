@@ -20,7 +20,7 @@ import { TeacherSelectorModal } from './components/TeacherSelectorModal';
 import { ParticipationDomainService } from './services/participationService';
 import { ParticipationEventTypeService } from './services/eventTypeService';
 import { ClassSessionService } from './services/sessionService';
-import { getAppIdentity, selectActingTeacher, clearActiveTeacherId } from './services/identityService';
+import { getAppIdentity, selectActingTeacher, clearActiveTeacherId, getIdentityEpoch } from './services/identityService';
 import { AuthorizationError } from './services/authHelper';
 import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from './utils/dateUtils';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
@@ -240,6 +240,13 @@ export function App() {
     () => activeClassObj && activeSectionId ? db.classEnrollments.where('classSectionId').equals(activeSectionId).toArray() : [],
     [activeSectionId, activeClassObj?.section.id]
   ) || [];
+
+  // Keep dropped enrollment records available to history, but never leave
+  // them selected for a new attendance or participation write.
+  useEffect(() => {
+    const activeIds = new Set(activeEnrollments.filter(e => e.deletedAt === null && e.enrollmentStatus === 'active').map(e => e.id));
+    setSelectedEnrollmentIds(ids => ids.every(id => activeIds.has(id)) ? ids : ids.filter(id => activeIds.has(id)));
+  }, [activeEnrollments]);
 
   const activeUnits = useLiveQuery(
     () => activeClassObj && activeSectionId ? db.units.where('classSectionId').equals(activeSectionId).toArray() : [],
@@ -550,6 +557,7 @@ export function App() {
 
         {currentView === 'markbook' && activeSectionId && (
           <MarkbookView
+            key={`${activeSectionId}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             classSectionId={activeSectionId}
             reportingPeriodId={null}
             policy={activePolicy}
@@ -570,7 +578,7 @@ export function App() {
 
         {currentView === 'assessments' && activeClassObj && (
           <AssessmentHubView
-            key={activeClassObj.section.id}
+            key={`${activeClassObj.section.id}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             onOpenMarking={assessmentId => setMarkingTarget({assessmentId})}
             userId={appIdentity?.userId}
             classSection={activeClassObj.section}
@@ -608,7 +616,7 @@ export function App() {
 
         {currentView === 'settings' && (
           <SettingsView
-            key={activePolicy.id}
+            key={`${activePolicy.id}:${appIdentity?.userId}:${appIdentity?.deviceId}:${getIdentityEpoch()}`}
             policy={activePolicy}
             scaleEntries={markScaleEntries}
             activeSectionId={activeSectionId}
@@ -629,6 +637,7 @@ export function App() {
           onHistoricalTimeChange={setHistoricalTime}
           onRecordEvent={handleRecordParticipation}
           onClearSelection={() => setSelectedEnrollmentIds([])}
+          onConfigureButtons={() => handleViewChange('settings')}
           lastBatchUndo={lastUndo}
           onUndo={handleUndo}
         />

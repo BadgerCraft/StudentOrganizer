@@ -1,5 +1,9 @@
 # Working rules for Ontario Teacher Assessment
 
+## Current platform scope — October 14, 2026
+
+Tyler explicitly shelved **all iPad-specific work** and prioritized installed **Windows and Mac**. Preserve existing iOS code, assets, scripts and historical evidence; do not schedule iPad camera, touch, Files, simulator, physical-device, signing or renewal acceptance as a current next gate. Retained CI/static checks can remain regression evidence; their failure is not permission to resume iPad feature development. See [shelved feature resume map](docs/SHELVED_FEATURES.md) for exact source and prior work orders. Revisit only when Tyler explicitly reactivates iPad support. No main merge, release, spending or real-student use follows from this decision.
+
 ## Active operating contract — decision persistence (October 13, 2026)
 
 This short contract takes precedence over dated workflow examples below. Detailed history remains below for audit; dated statements are not a competing current queue.
@@ -113,7 +117,7 @@ Tyler explicitly confirmed that the iPad version must be an installed app that k
 
 This supersedes the earlier Safari/Home Screen delivery choice and the GitHub Pages fictional-data hosting proposal. Do not publish that site, provision hosting, or treat the PWA as the intended iPad product. Target an installed iPad app with bundled operational assets, local processing/storage, offline classroom operation, and deliberate user-controlled backup/transfer. Do not add automatic student-data uploads, telemetry, cloud sync, or remote AI processing. Development browser checks remain useful evidence for shared UI only.
 
-F-006 next work: inspect a viable installed iPad packaging/storage/file-access path and produce a revised concrete plan, including signing/distribution/access requirements and physical-device checks. Do not infer approval for paid accounts, credentials, services, merges or releases. Existing Windows/Mac packages and reusable touch/report-draft work remain available for review; passing packaging/browser tests do not establish closed-loop operation. Audit actual external connections before making that claim.
+Historical F-006 next work (shelved October 14; do not execute): inspect a viable installed iPad packaging/storage/file-access path and produce a revised concrete plan, including signing/distribution/access requirements and physical-device checks. Do not infer approval for paid accounts, credentials, services, merges or releases. Existing Windows/Mac packages and reusable touch/report-draft work remain available for review; passing packaging/browser tests do not establish closed-loop operation. Audit actual external connections before making that claim.
 
 F-007 central reporting requires its own explicit, optional boundary: no automatic record/page/screenshot attachments or background sending. Existing private-service proposals remain unadopted; reassess them against this requirement before asking for service approval.
 

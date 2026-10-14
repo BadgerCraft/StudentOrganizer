@@ -1,4 +1,4 @@
-name: Mac packages and iPad browser checks
+name: Mac packages and shared browser checks
 
 on:
   pull_request:
@@ -47,7 +47,9 @@ jobs:
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
       - name: Compile bundled iOS app without credentials
-        if: ${{ !cancelled() && matrix.arch == 'arm64' }}
+        # F-006 shelved October 14; restore this gate only after renewed approval.
+        # Resume map: docs/SHELVED_FEATURES.md and docs/IPAD_SUPPORT.md.
+        if: ${{ false }}
         shell: bash
         run: |
           set -euo pipefail
@@ -101,8 +103,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm run ios:prepare
-      - run: npm run test:ipad:assets
+      - run: npm run build
       - name: Require matching preinstalled browser engines
         run: |
           node -e "const { version } = require('playwright/package.json'); if (version !== '1.63.0') throw new Error('Update browser image and lockfile together'); const fs = require('node:fs'); const { chromium, webkit } = require('playwright'); [chromium, webkit].forEach(engine => fs.accessSync(engine.executablePath()));"
@@ -115,6 +116,8 @@ jobs:
           npm run test:marking:category-recovery
           npm run test:marking:acceptance
           npm run test:marking:modes-photo
+          npm run test:marking:pdf
+          npm run test:marking:archive
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/nativePilotSmoke.ts
@@ -123,13 +126,22 @@ jobs:
       - name: Check bug-report draft recovery and failures
         if: ${{ !cancelled() }}
         run: node --import tsx src/benchmarks/bugReportSmokeTest.ts
+      - name: Check approved UI repairs in Chromium
+        run: node --import tsx scripts/uiRepairsSmoke.ts
+      - name: Check approved UI repairs in WebKit
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/uiRepairsSmoke.ts
+        env:
+          UI_TEST_BROWSER: webkit
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: iPad-browser-evidence-${{ github.run_number }}
+          name: shared-browser-evidence-${{ github.run_number }}
           path: |
             screenshots/**
             /tmp/markinator-modes-photo-results.json
             /tmp/markinator-modes-photo-*.png
+            /tmp/annotated-report-smoke*
+            /tmp/markinator-archive*
           if-no-files-found: warn
           retention-days: 90

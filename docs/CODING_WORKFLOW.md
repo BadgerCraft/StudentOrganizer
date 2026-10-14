@@ -1,5 +1,9 @@
 # Daily development workflow
 
+## Current platform scope — October 14, 2026
+
+Tyler explicitly shelved **all iPad-specific work** and prioritized installed **Windows and Mac**. Preserve existing iOS code, assets, scripts and historical evidence; do not schedule iPad camera, touch, Files, simulator, physical-device, signing or renewal acceptance as a current next gate. Retained CI/static checks can remain regression evidence; their failure is not permission to resume iPad feature development. See [shelved feature resume map](SHELVED_FEATURES.md) for exact source and prior work orders. Revisit only when Tyler explicitly reactivates iPad support. No main merge, release, spending or real-student use follows from this decision.
+
 ## Active operating contract — decision persistence (October 13, 2026)
 
 This short contract takes precedence over dated workflow examples below. Detailed history remains below for audit; dated statements are not a competing current queue.

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CategoryChangeReview } from '../types';
 import { categorySignature, compatibleCategoryTarget } from '../categoryRecovery';
+import { sortCategoriesForDisplay } from '../../utils/categoryDisplay';
 
 interface Props {
   review: CategoryChangeReview;
@@ -18,8 +19,8 @@ export function CategoryRecoveryReview({ review, onReconcile, onCancel }: Props)
     <p>Pinned rubric: <strong>{review.rubricTitle}</strong></p>
     <ul>{review.criteria.map((criterion, index) => <li key={index}>{criterion.name} → {criterion.categoryCode}</li>)}</ul>
     <p>{review.compatible ? 'Pinned rubric is compatible with the current KTAC categories.' : review.reasons.join(' ')}</p>
-    <p>Current categories: {review.currentCategories.length ? review.currentCategories.map(c => `${c.categoryCode} (maximum ${c.maxScore}, weight ${c.evidenceWeight})`).join('; ') : 'none'}.</p>
-    {review.previousCategories.map(previous => <div key={previous.id} className="border rounded p-3 space-y-2">
+    <p>Current categories: {review.currentCategories.length ? sortCategoriesForDisplay(review.currentCategories).map(c => `${c.categoryCode} (maximum ${c.maxScore}, weight ${c.evidenceWeight})`).join('; ') : 'none'}.</p>
+    {sortCategoriesForDisplay(review.previousCategories).map(previous => <div key={previous.id} className="border rounded p-3 space-y-2">
       <p>Original {previous.categoryCode}: maximum {previous.maxScore}, weight {previous.evidenceWeight}.</p>
       <details><summary>Category identifiers and scales</summary><p>Original ID: {previous.id}; scale: {previous.markScaleVersionId ?? 'class default'}</p>{review.currentCategories.filter(c => c.categoryCode === previous.categoryCode).map(c => <p key={c.id}>Current ID: {c.id}; scale: {c.markScaleVersionId ?? 'class default'}</p>)}</details>
       <label className="block">Reconcile {previous.categoryCode} judgment<select aria-label={`Reconcile ${previous.categoryCode} judgment`} className="block w-full border rounded p-2" value={choices[previous.id]} onChange={event => setChoices({ ...choices, [previous.id]: event.target.value })}>

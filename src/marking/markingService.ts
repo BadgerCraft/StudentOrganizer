@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { archiveDraft, archiveSnapshot } from './archive';
 import type { OntarioTeacherDB } from '../db/database';
 import type { Assessment, AssessmentCategory, CategoryResult } from '../types/schema';
 import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
@@ -73,6 +74,7 @@ export class MarkingService {
   private async attemptContext(attemptId: string, actor: MarkingActor, write: boolean) {
     const attempt = this.owned(await this.db.markingAttempts.get(attemptId), actor, 'Submission');
     const context = await this.context(attempt.assessmentId, actor, write);
+    if (write && attempt.archivedAt) throw new ValidationError('Archived work is read-only. Import a new attempt to mark again.');
     const rubric = this.owned(await this.db.markingRubrics.get(attempt.rubricId), actor, 'Rubric');
     if (attempt.classSectionId !== context.assessment.classSectionId || rubric.assessmentId !== attempt.assessmentId || rubric.classSectionId !== attempt.classSectionId || !rubric.confirmed) throw new ValidationError('Submission and rubric links are inconsistent.');
     if (attempt.classEnrollmentId) await this.enrollment(context.assessment, attempt.classEnrollmentId, write);
@@ -121,12 +123,15 @@ export class MarkingService {
       const students = live(await this.db.students.where('id').anyOf(roster.map(e => e.studentId)).toArray()).filter(s => s.organizationId === auth.organizationId);
       const enrollments = roster.filter(e => e.enrollmentStatus === 'active' && students.some(s => s.id === e.studentId));
       const rubrics = live(await this.db.markingRubrics.where('assessmentId').equals(assessmentId).toArray()).filter(r => r.createdBy === actor.userId);
-      const attempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId) && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
-      const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && attempts.some(a => a.id === s.attemptId));
-      const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && attempts.some(a => a.id === c.attemptId));
+      const allAttempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId));
+      const archivedAttempts = allAttempts.filter(a => !!a.archivedAt);
+      const attempts = allAttempts.filter(a => !a.archivedAt && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
+      const visibleAttempts = [...attempts, ...archivedAttempts];
+      const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && visibleAttempts.some(a => a.id === s.attemptId));
+      const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && visibleAttempts.some(a => a.id === c.attemptId));
       const studentAssessments = live(await this.db.studentAssessments.where('assessmentId').equals(assessmentId).toArray()).filter(sa => enrollments.some(e => e.id === sa.classEnrollmentId));
       const currentResults = studentAssessments.length ? live(await this.db.categoryResults.where('studentAssessmentId').anyOf(studentAssessments.map(sa => sa.id)).toArray()) : [];
-      return { assessment, categories, enrollments, students, rubrics, attempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
+      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
     });
   }
   async saveRubric(assessmentId: string, content: RubricContent, actor: MarkingActor): Promise<MarkingRubric> {
@@ -312,6 +317,7 @@ export class MarkingService {
     return this.transaction(actor, true, async () => {
       const { session, attempt, rubric, assessment, categories } = await this.sessionContext(sessionId, actor, false);
       // Repeated clicks or restart retries return the original immutable receipt.
+      if (attempt.archivedAt) throw new ValidationError('Archived work is read-only.');
       if (session.status === 'finalized') {
         const existing = session.commitId && await this.db.markingCommits.get(session.commitId);
         if (!existing) throw new ValidationError('Finalized session is missing its commit receipt.');
@@ -361,12 +367,55 @@ export class MarkingService {
       return commit;
     });
   }
-  async archiveAttempt(id: string, expectedVersion: number, actor: MarkingActor): Promise<MarkingAttempt> {
+  async setKeepStudentWork(id: string, expectedVersion: number, keepStudentWork: boolean, actor: MarkingActor): Promise<MarkingAttempt> {
+    if (typeof keepStudentWork !== 'boolean') throw new ValidationError('Choose whether to keep student work.');
     return this.transaction(actor, true, async () => {
       const { attempt } = await this.attemptContext(id, actor, true); this.version(attempt, expectedVersion);
-      if (await this.db.markingCommits.where('attemptId').equals(id).count()) throw new ValidationError('A finalized submission must be retained with its original files and marking history.');
-      const now = new Date().toISOString(); const next = { ...attempt, deletedAt: now, updatedAt: now, version: attempt.version + 1 };
+      if ((attempt.keepStudentWork ?? false) === keepStudentWork) return attempt;
+      const next = { ...attempt, keepStudentWork, updatedAt: new Date().toISOString(), version: attempt.version + 1 };
       await this.db.markingAttempts.put(next); await this.audit('markingAttempts', next, attempt, actor); return next;
+    });
+  }
+  async archiveAttempt(id: string, expectedVersion: number, actor: MarkingActor, keepStudentWork?: boolean): Promise<MarkingAttempt> {
+    if (keepStudentWork !== undefined && typeof keepStudentWork !== 'boolean') throw new ValidationError('Choose whether to keep student work.');
+    return this.transaction(actor, true, async () => {
+      // Archiving is records management, not a grade write: closed reporting periods
+      // and inactive enrollments retain their history and may still be archived.
+      const { attempt } = await this.attemptContext(id, actor, false);
+      const keep = keepStudentWork ?? attempt.keepStudentWork ?? false;
+      if (attempt.archivedAt && keep === (attempt.keepStudentWork ?? false) && (expectedVersion === attempt.version || expectedVersion === attempt.version - 1)) return attempt;
+      this.version(attempt, expectedVersion);
+      if (attempt.archivedAt) throw new ValidationError('This attempt is already archived.');
+      const now = new Date().toISOString();
+      const sessions = await this.db.markingSessions.where('attemptId').equals(id).toArray();
+      const commits = await this.db.markingCommits.where('attemptId').equals(id).toArray();
+      if ([...sessions, ...commits].some(row => row.createdBy !== actor.userId || row.assessmentId !== attempt.assessmentId || row.classSectionId !== attempt.classSectionId)) throw new ValidationError('The marking history has inconsistent ownership. Archive was cancelled.');
+      const next: MarkingAttempt = { ...attempt, archivedAt: now, keepStudentWork: keep, ...(keep ? {} : { documents: [], imagePages: [] }), updatedAt: now, version: attempt.version + 1 };
+      const transactionId = crypto.randomUUID();
+      if (!keep) {
+        for (const [table, rows] of [[this.db.markingSessions, sessions], [this.db.markingCommits, commits]] as const) {
+          for (const row of rows) {
+            const redacted = { ...row, draft: archiveDraft(row.draft), updatedAt: now, version: row.version + 1 };
+            await table.put(redacted as MarkingSession & MarkingCommit);
+          }
+        }
+        const targets = new Map<string, Set<string>>([
+          ['markingAttempts', new Set([id])], ['markingSessions', new Set(sessions.map(row => row.id))], ['markingCommits', new Set(commits.map(row => row.id))]
+        ]);
+        for (const entry of await this.db.auditEntries.toArray()) {
+          if (!targets.get(entry.entityName)?.has(entry.entityId)) continue;
+          await this.db.auditEntries.put({ ...entry, previousStateJson: archiveSnapshot(entry.previousStateJson, entry.entityName, now), newStateJson: archiveSnapshot(entry.newStateJson, entry.entityName, now), diffJson: null });
+        }
+        for (const mutation of await this.db.syncMutations.toArray()) {
+          if (!targets.get(mutation.entityName)?.has(mutation.entityId)) continue;
+          await this.db.syncMutations.put({ ...mutation, payloadJson: archiveSnapshot(mutation.payloadJson, mutation.entityName, now)!, lastError: null });
+        }
+      }
+      await this.db.markingAttempts.put(next);
+      // The archive event must never reintroduce the pre-redaction originals.
+      const previous = keep ? attempt : JSON.parse(archiveSnapshot(JSON.stringify(attempt), 'markingAttempts', now)!);
+      await this.audit('markingAttempts', next, previous, actor, transactionId);
+      return next;
     });
   }
   async exportContext(commitId: string, actor: MarkingActor) {

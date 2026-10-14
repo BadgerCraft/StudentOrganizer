@@ -7,3 +7,7 @@ contextBridge.exposeInMainWorld('desktopUpdates', Object.freeze({
   cancel: () => ipcRenderer.invoke('installer-update:cancel'),
   install: (backupJSON, acknowledgeUnsigned) => ipcRenderer.invoke('installer-update:install', backupJSON, acknowledgeUnsigned)
 }));
+
+contextBridge.exposeInMainWorld('desktopReports', Object.freeze({
+  exportPdf: (filename, html) => ipcRenderer.invoke('assessment-report:pdf', filename, html)
+}));

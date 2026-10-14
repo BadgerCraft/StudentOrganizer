@@ -2,6 +2,7 @@ import type { Assessment, AssessmentCategory, Student } from '../types/schema';
 import { exportNativeBackup, usesNativeFiles } from '../services/nativeFiles';
 import type { MarkingAttempt, MarkingCommit, MarkingRubric } from './types';
 import { assertAttemptDraft } from './validation';
+import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
 export interface MarkingReportInput {
   commit: MarkingCommit;
@@ -20,9 +21,12 @@ export function renderMarkingReport({ commit, rubric, attempt, student, assessme
   if (commit.createdBy !== rubric.createdBy || commit.createdBy !== attempt.createdBy) throw new Error('The saved report records do not match.');
   assertAttemptDraft(commit.draft, attempt, rubric);
   const name = `${student.preferredName || student.firstName} ${student.lastName}`;
-  const judgments = commit.draft.judgments.map(judgment => {
+  const linkedJudgments = commit.draft.judgments.map(judgment => {
     const category = categories.find(value => value.id === judgment.assessmentCategoryId && value.assessmentId === assessment.id);
     if (!category) throw new Error('A saved category is unavailable for this report.');
+    return { categoryCode: category.categoryCode, category, judgment };
+  });
+  const judgments = sortCategoriesForDisplay(linkedJudgments).map(({ category, judgment }) => {
     return `<tr><th>${escape(categoryNames[category.categoryCode])}</th><td>${judgment.assessed ? `${escape(judgment.rawScore)} (${escape(judgment.inputFormat.replace(/_/g, ' '))})` : 'Not assessed'}</td><td>${escape(judgment.feedback)}</td></tr>`;
   }).join('');
   const evidence = commit.draft.annotations.map(annotation => {
@@ -47,8 +51,13 @@ export function renderMarkingReport({ commit, rubric, attempt, student, assessme
     }).join('');
   }).join('');
   const criterionSection = criterionFeedback ? `<h2>Criterion feedback</h2><table><thead><tr><th>Criterion</th><th>Achievement label</th><th>Feedback</th></tr></thead><tbody>${criterionFeedback}</tbody></table>` : '';
+  const archivedFeedback = (commit.draft.archivedFeedback ?? []).map(entry => {
+    const criterion = rubric.criteria.find(value => value.id === entry.criterionId);
+    return `<article><h3>${escape(criterion?.name || 'Written feedback')} — ${escape(entry.level || 'No achievement label')}</h3><p>${escape(entry.text)}</p></article>`;
+  }).join('');
+  const archivedSection = attempt.archivedAt ? `<h2>Archived assessment</h2><p>Archived ${escape(attempt.archivedAt)}. ${attempt.keepStudentWork ? 'Student work retained by teacher choice.' : 'Student work removed; assessment records and written feedback retained.'}</p>${archivedFeedback}` : '';
   const imageSection = imageEvidence ? `<h2>Supporting page comments</h2>${imageEvidence}` : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(assessment.title)} — ${escape(name)}</title><style>body{font-family:system-ui,sans-serif;color:#172033;max-width:65rem;margin:2rem auto;padding:0 1rem}h1,h2,h3{break-after:avoid}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #b9c1cc;padding:.6rem;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}p,blockquote{white-space:pre-wrap;overflow-wrap:anywhere}article{break-inside:avoid;border-top:1px solid #b9c1cc;padding:.5rem 0}blockquote{border-left:3px solid #b9c1cc;padding-left:1rem}.source,footer{font-size:.85rem;color:#475569}@media print{body{max-width:none;margin:0}table{font-size:10pt}}</style></head><body><h1>${escape(assessment.title)}</h1><p><strong>${escape(name)}</strong></p><p>Saved assessment report · ${escape(commit.createdAt)}</p><h2>Category judgments</h2><table><thead><tr><th>Category</th><th>Teacher judgment</th><th>Feedback</th></tr></thead><tbody>${judgments}</tbody></table><h2>Overall feedback</h2><p>${escape(commit.draft.overallFeedback)}</p>${criterionSection}<h2>Supporting quotations and feedback</h2>${evidence || '<p>No passage annotations.</p>'}${imageSection}<h2>Rubric: ${escape(rubric.title)}</h2><table><thead><tr><th>Criterion / KTAC</th>${rubric.levels.map(level => `<th>${escape(level)}</th>`).join('')}</tr></thead><tbody>${rubricRows}</tbody></table><footer><p>Saved commit ${escape(commit.id)} · attempt ${escape(attempt.id)} · rubric ${escape(rubric.id)}. Rubric labels are evidence; category judgments above are entered by the teacher. Use your browser’s Print / Save as PDF to create a PDF locally.</p></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(assessment.title)} — ${escape(name)}</title><style>body{font-family:system-ui,sans-serif;color:#172033;max-width:65rem;margin:2rem auto;padding:0 1rem}h1,h2,h3{break-after:avoid}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #b9c1cc;padding:.6rem;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}p,blockquote{white-space:pre-wrap;overflow-wrap:anywhere}article{break-inside:avoid;border-top:1px solid #b9c1cc;padding:.5rem 0}blockquote{border-left:3px solid #b9c1cc;padding-left:1rem}.source,footer{font-size:.85rem;color:#475569}@media print{body{max-width:none;margin:0}table{font-size:10pt}}</style></head><body><h1>${escape(assessment.title)}</h1><p><strong>${escape(name)}</strong></p><p>Saved assessment report · ${escape(commit.createdAt)}</p><h2>Category judgments</h2><table><thead><tr><th>Category</th><th>Teacher judgment</th><th>Feedback</th></tr></thead><tbody>${judgments}</tbody></table><h2>Overall feedback</h2><p>${escape(commit.draft.overallFeedback)}</p>${criterionSection}${archivedSection}<h2>Supporting quotations and feedback</h2>${evidence || '<p>No passage annotations.</p>'}${imageSection}<h2>Rubric: ${escape(rubric.title)}</h2><table><thead><tr><th>Criterion / KTAC</th>${rubric.levels.map(level => `<th>${escape(level)}</th>`).join('')}</tr></thead><tbody>${rubricRows}</tbody></table><footer><p>Saved commit ${escape(commit.id)} · attempt ${escape(attempt.id)} · rubric ${escape(rubric.id)}. Rubric labels are evidence; category judgments above are entered by the teacher. Use your browser’s Print / Save as PDF to create a PDF locally.</p></footer></body></html>`;
 }
 
 /** Deliberate local export; the report has no executable content or external resources. */
