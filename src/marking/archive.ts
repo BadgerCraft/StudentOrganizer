@@ -3,16 +3,25 @@ import type { ArchivedMarkingFeedback, MarkingDraft } from './types';
 /** Preserve teacher comments, never the student's source, quote or drawing coordinates. */
 export function archiveDraft(draft: MarkingDraft): MarkingDraft {
   const comments: ArchivedMarkingFeedback[] = [...(draft.archivedFeedback ?? [])];
+  // Source IDs can already fill the 200-character limit. Use bounded, deterministic
+  // archive-local IDs so matching session/commit snapshots still match on restore.
+  const ids = new Set(comments.map(comment => comment.id));
+  let sequence = 0;
+  const feedbackId = (kind: 'text' | 'image') => {
+    let id: string;
+    do { id = `${kind}:${sequence++}`; } while (ids.has(id));
+    ids.add(id); return id;
+  };
   // A pending edit can refer to an already saved comment. Preserve the edited
   // version once, rather than producing an invalid duplicate archive ID.
   const textAnnotations = new Map(draft.annotations.map(annotation => [annotation.id, annotation]));
   if (draft.pending) textAnnotations.set(draft.pending.id, draft.pending);
   for (const annotation of textAnnotations.values()) {
-    comments.push({ id: `text:${annotation.id}`, criterionId: annotation.criterionId, level: annotation.level, text: annotation.text });
+    comments.push({ id: feedbackId('text'), criterionId: annotation.criterionId, level: annotation.level, text: annotation.text });
   }
   for (const page of draft.imageFeedback ?? []) {
     for (const annotation of page.annotations) {
-      if (annotation.text || annotation.criterionId || annotation.level) comments.push({ id: `image:${annotation.id}`, criterionId: annotation.criterionId, level: annotation.level, text: annotation.text });
+      if (annotation.text || annotation.criterionId || annotation.level) comments.push({ id: feedbackId('image'), criterionId: annotation.criterionId, level: annotation.level, text: annotation.text });
     }
   }
   const { imageFeedback: _pages, ...rest } = draft;

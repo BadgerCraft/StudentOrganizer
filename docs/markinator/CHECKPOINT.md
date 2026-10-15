@@ -1,4 +1,18 @@
-# Current desktop integration checkpoint — October 14, 2026
+# Current phase — P0 teacher-use readiness
+
+Tyler's independent-review request supersedes the feature-expansion priorities below. Reviewed PR31 source `4335c29b0fa37d70962c189d381f65403d6548cf` had one demonstrated Archive/backup identifier-bound blocker; this follow-up applies the smallest repair with 53 focused tests passing, without relaxing validation. The two recent PDF/legacy comparison repairs were specifically inspected. Review findings, repair proof, follow-up cards and merge/build/device gates: [current review work order](../work-orders/PR31-INDEPENDENT-REVIEW.md). Older evidence below is preserved history, not a current feature queue.
+
+> **Current product phase: integrated teacher-use validation. Prefer making the existing workflow usable and trustworthy over adding new capabilities. New work should answer one of three questions: does it block Tyler from using the app, risk student data, or materially disrupt the marking/classroom workflow? If not, queue it as a follow-up.**
+
+> **Teacher-use readiness target:** Tyler can open the desktop app and complete a normal fictional classroom-to-marking-to-archive workflow without developer intervention, data loss, authorization ambiguity, or needing to understand implementation details.
+
+Order: (1) repaired PR31 review/explicit merge decision; (2) one clean Windows build from reviewed/merged source; (3) approved fictional-data pass on Tyler's actual Windows machine; (4) complete class/student setup, participation/classroom, assessment, all three marking modes, photo markup, rubric/feedback, marked PDF, Archive, history, backup/restore and restart; (5) bounded UX/device follow-ups unless data/privacy/authorization/recovery or material teacher-workflow risk; (6) documented actual-device fictional success/recovery plus school/board/IT privacy acceptance and separate explicit Tyler approval before real-student data; (7) keep iPad, phone capture, signing/publisher work, services and nonessential expansion shelved unless directly blocking teacher use and separately approved.
+
+No merge, release, distribution, real-student use or platform/service expansion is authorized by this checkpoint. Next gate is approval of the repaired merge candidate, followed by an explicitly approved private Windows build/handoff and short walkthrough. The current queue is [FEATURE_QUEUE.md](../FEATURE_QUEUE.md).
+
+---
+
+# Historical desktop integration checkpoint — October 14, 2026
 
 Branch `codex/desktop-export-archive-20261014` combines modes/photo `63f9963` and latest verified UI cleanup `66a3477`, then adds approved local annotated PDF output and a read-only Archive. iPad-specific work is shelved; [resume map](../SHELVED_FEATURES.md). Main merge/release remain reserved.
 

@@ -6,6 +6,7 @@ import { PortabilityService } from '../services/portabilityService';
 import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher, setActiveTeacherId } from '../services/identityService';
 import { MarkingService } from './markingService';
 import { parseMarkingFiles, sha256 } from './importDocuments';
+import { archiveDraft } from './archive';
 import type { MarkingActor, MarkingAttempt } from './types';
 
 const ASSESSMENT = 'fictional-archive';
@@ -26,7 +27,7 @@ describe('minimal marking archive and deliberate student-work retention', () => 
   async function snapshot() {
     return Object.fromEntries(await Promise.all(db.tables.map(async table => [table.name, (await table.toArray()).sort((a, b) => a.id.localeCompare(b.id))])));
   }
-  async function fixture(photo = false) {
+  async function fixture(photo = false, annotationId?: string) {
     const rubric = await service.saveRubric(ASSESSMENT, { title: 'Fictional archived rubric', levels: ['3'], criteria: [{ id: 'reason', name: 'Reasoning', categoryCode: 'T', descriptors: { '3': 'Support ideas.' } }] }, actor);
     const enrollment = (await db.classEnrollments.where('classSectionId').equals('class-eng4u-01').first())!;
     let attempt: MarkingAttempt;
@@ -42,12 +43,33 @@ describe('minimal marking archive and deliberate student-work retention', () => 
     const category = session.draft.judgments.find(j => j.assessmentCategoryId === 'archive-T')!;
     Object.assign(category, { assessed: true, rawScore: '3', feedback: 'Fictional category feedback.' });
     session.draft.rubricFeedback = [{ criterionId: 'reason', level: '3', feedback: 'Fictional criterion feedback.' }];
-    if (photo) session.draft.imageFeedback![0].annotations = [{ id: 'fictional-image-comment', kind: 'comment', points: [{ x: .3, y: .7 }], color: 'red', width: .01, text: 'Fictional passage comment.', criterionId: 'reason', level: '3' }];
-    else session.draft.annotations = [{ id: 'fictional-comment', documentId: attempt.documents[0].id, start: 0, end: SOURCE.length, quote: SOURCE, criterionId: 'reason', level: '3', text: 'Fictional passage comment.' }];
+    if (photo) session.draft.imageFeedback![0].annotations = [{ id: annotationId ?? 'fictional-image-comment', kind: 'comment', points: [{ x: .3, y: .7 }], color: 'red', width: .01, text: 'Fictional passage comment.', criterionId: 'reason', level: '3' }];
+    else session.draft.annotations = [{ id: annotationId ?? 'fictional-comment', documentId: attempt.documents[0].id, start: 0, end: SOURCE.length, quote: SOURCE, criterionId: 'reason', level: '3', text: 'Fictional passage comment.' }];
     const saved = await service.saveDraft(session.id, session.draft, session.version, actor);
     const commit = await service.finalize(saved.id, saved.version, actor);
     return { attempt, rubric, enrollment, commit };
   }
+  it.each([false, true])('keeps maximum-length valid %s annotation IDs recoverable after archival', async photo => {
+    const f = await fixture(photo, 'x'.repeat(200));
+    const portability = new PortabilityService(db);
+    const beforeArchive = await portability.createFullBackupJSON();
+    expect(() => portability.validateBackupJSON(beforeArchive)).not.toThrow();
+    await service.archiveAttempt(f.attempt.id, f.attempt.version, actor);
+    const backup = await portability.createFullBackupJSON();
+    expect(() => portability.validateBackupJSON(backup)).not.toThrow();
+    await portability.restoreFromJSON(backup);
+    expect((await db.markingCommits.get(f.commit.id))?.draft.archivedFeedback?.[0].text).toBe('Fictional passage comment.');
+  });
+  it('preserves existing archived feedback IDs without collisions and produces deterministic snapshots', async () => {
+    const f = await fixture();
+    const draft = { ...f.commit.draft, archivedFeedback: [{ id: 'text:0', criterionId: 'reason', level: '3', text: 'Fictional previously retained feedback.' }] };
+    const archivedDraft = archiveDraft(draft);
+    const feedback = archivedDraft.archivedFeedback!;
+    expect(new Set(feedback.map(comment => comment.id)).size).toBe(feedback.length);
+    expect(feedback[0]).toEqual(draft.archivedFeedback[0]);
+    expect(feedback.map(comment => comment.text)).toContain('Fictional passage comment.');
+    expect(archiveDraft(draft)).toEqual(archivedDraft);
+  });
   it.each([false, true])('purges %s source and anchors from live rows and audit snapshots while preserving feedback, rubric and official grades', async photo => {
     const f = await fixture(photo);
     const revision = await service.openSession(f.attempt.id, actor);
