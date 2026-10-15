@@ -1,5 +1,7 @@
 # F-006: prepare the free installed-iPad pilot
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](../SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 Target branch: `codex/mac-ipad-support`
 Implementation branch: `codex/f006-installed-ipad-pilot`
 Create as **draft**. No main merge or release authorization.

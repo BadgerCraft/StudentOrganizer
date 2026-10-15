@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, dialog } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
 const { existsSync } = require('node:fs');
@@ -12,6 +12,11 @@ const { createManualCheck, trustedCaller } = require('./manualUpdater.cjs');
 const manualCheck = createManualCheck({ platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion() });
 let updateWindow;
 let installerUpdates;
+const exportReportPdf = require('./reportPdf.cjs').createReportPdfExporter({ BrowserWindow, dialog, session, parent: () => updateWindow });
+ipcMain.handle('assessment-report:pdf', (event, ...args) => {
+  requireUpdateCaller(event, args, 2);
+  return exportReportPdf(args[0], args[1]);
+});
 function requireUpdateCaller(event, args, expectedCount) {
   const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
   if (args.length !== expectedCount || !updateWindow || !trustedCaller(event, updateWindow.webContents, indexUrl)) throw new Error('Update action denied');

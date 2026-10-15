@@ -75,6 +75,11 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
     const timer = setTimeout(() => {
       if (!dialogRef.current) return;
 
+      // React autofocus or a fast keyboard user may already have entered a
+      // field. Delayed setup must not redirect their typing to another input.
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && focused !== dialogRef.current && dialogRef.current.contains(focused)) return;
+
       // 1. Explicit initialFocusRef if provided and visible
       if (initialFocusRef?.current && isElementVisible(initialFocusRef.current)) {
         initialFocusRef.current.focus();

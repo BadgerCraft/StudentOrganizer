@@ -1,5 +1,7 @@
 # F-006 / DEC-005 — Installed iPad pilot distribution
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](../SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 Assigned: 2026-10-02, America/Toronto  
 Follow-up: resolved October 2; do not re-request this choice on October 3  
 Status: resolved — A, Ad Hoc registered-device pilot  

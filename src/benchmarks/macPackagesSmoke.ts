@@ -1,3 +1,4 @@
+import { runReportPdfDesktopAcceptance } from './reportPdfDesktopAcceptance';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import assert from 'node:assert/strict';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
@@ -101,6 +102,9 @@ async function checkApp(appPath: string, format: string) {
     app = await electron.launch({ executablePath, timeout: 45000 });
     const userDataPath = await app.evaluate(({ app }) => app.getPath('userData'));
     let page = await app.firstWindow();
+    await page.waitForURL('file://**');
+    await page.waitForFunction(() => typeof (window as any).desktopReports?.exportPdf === 'function');
+    await runReportPdfDesktopAcceptance(app, page, path.join(evidence, `${marker}-pdf`));
     page.on('pageerror', error => errors.push(error.message));
     await openClass(page);
     await page.locator('[data-testid="student-seat-card"]').first().click();
@@ -127,7 +131,8 @@ async function checkApp(appPath: string, format: string) {
       name: 'fictional-mac.png', mimeType: 'image/png', // Self-contained fictional PNG: photo recovery must not depend on retired PWA icons.
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGPQqNjyH4QZYAwATjwJTSZS7G8AAAAASUVORK5CYII=', 'base64')
     });
-    // Wait for the asynchronous image resize before committing the settings.
+    // Apply the actual local crop preview before committing the settings.
+    await page.getByTestId('apply-photo-crop-btn').click();
     await removePhoto.waitFor();
     assert.equal(await page.locator('[data-testid="student-preferred-name-input"]').inputValue(), preferredName);
     await page.locator('[data-testid="save-student-settings-btn"]').click();

@@ -1,0 +1,199 @@
+{
+  "source": "b9a8790f4841fa9fd5057e7cfef097f619cbac4a:src/marking/report.ts",
+  "provenance": "Generated with the unmodified pinned historical renderMarkingReport function and fictional input; not a Windows CI download.",
+  "input": {
+    "assessment": {
+      "id": "assessment",
+      "classSectionId": "class",
+      "unitId": "unit",
+      "reportingPeriodId": "period",
+      "code": "FIC",
+      "title": "Fictional Essay",
+      "assessmentType": "summative",
+      "assignedAt": "2026-10-06T12:00:00.000Z",
+      "dueAt": "2026-10-06T12:00:00.000Z",
+      "isLocked": false,
+      "createdAt": "2026-10-06T12:00:00.000Z",
+      "updatedAt": "2026-10-06T12:00:00.000Z",
+      "deletedAt": null,
+      "version": 1
+    },
+    "student": {
+      "id": "student",
+      "organizationId": "org",
+      "localStudentNumber": "FICTIONAL-1",
+      "oenEncrypted": null,
+      "firstName": "Fictional",
+      "lastName": "Learner",
+      "preferredName": null,
+      "pronouns": null,
+      "photoUrl": null,
+      "createdAt": "2026-10-06T12:00:00.000Z",
+      "updatedAt": "2026-10-06T12:00:00.000Z",
+      "deletedAt": null,
+      "version": 1
+    },
+    "categories": [
+      {
+        "id": "category-A",
+        "assessmentId": "assessment",
+        "categoryCode": "A",
+        "maxScore": 100,
+        "evidenceWeight": 1,
+        "markScaleVersionId": "scale",
+        "createdAt": "2026-10-06T12:00:00.000Z",
+        "updatedAt": "2026-10-06T12:00:00.000Z",
+        "deletedAt": null,
+        "version": 1
+      },
+      {
+        "id": "category-C",
+        "assessmentId": "assessment",
+        "categoryCode": "C",
+        "maxScore": 100,
+        "evidenceWeight": 2,
+        "markScaleVersionId": "scale",
+        "createdAt": "2026-10-06T12:00:00.000Z",
+        "updatedAt": "2026-10-06T12:00:00.000Z",
+        "deletedAt": null,
+        "version": 1
+      },
+      {
+        "id": "category-T",
+        "assessmentId": "assessment",
+        "categoryCode": "T",
+        "maxScore": 100,
+        "evidenceWeight": 3,
+        "markScaleVersionId": "scale",
+        "createdAt": "2026-10-06T12:00:00.000Z",
+        "updatedAt": "2026-10-06T12:00:00.000Z",
+        "deletedAt": null,
+        "version": 1
+      },
+      {
+        "id": "category-K",
+        "assessmentId": "assessment",
+        "categoryCode": "K",
+        "maxScore": 100,
+        "evidenceWeight": 4,
+        "markScaleVersionId": "scale",
+        "createdAt": "2026-10-06T12:00:00.000Z",
+        "updatedAt": "2026-10-06T12:00:00.000Z",
+        "deletedAt": null,
+        "version": 1
+      }
+    ],
+    "rubric": {
+      "assessmentId": "assessment",
+      "classSectionId": "class",
+      "createdBy": "teacher",
+      "createdAt": "2026-10-06T12:00:00.000Z",
+      "updatedAt": "2026-10-06T12:00:00.000Z",
+      "deletedAt": null,
+      "version": 1,
+      "id": "rubric",
+      "confirmed": true,
+      "title": "Argument",
+      "levels": [
+        "3+"
+      ],
+      "criteria": [
+        {
+          "id": "criterion",
+          "name": "Reasoning",
+          "categoryCode": "T",
+          "descriptors": {
+            "3+": "Supports claims with clear evidence."
+          }
+        }
+      ]
+    },
+    "attempt": {
+      "assessmentId": "assessment",
+      "classSectionId": "class",
+      "createdBy": "teacher",
+      "createdAt": "2026-10-06T12:00:00.000Z",
+      "updatedAt": "2026-10-06T12:00:00.000Z",
+      "deletedAt": null,
+      "version": 1,
+      "id": "attempt",
+      "classEnrollmentId": "enrollment",
+      "rubricId": "rubric",
+      "previousAttemptId": null,
+      "documents": [
+        {
+          "id": "document",
+          "name": "Fictional.txt",
+          "text": "A repeated idea. A repeated idea.",
+          "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "original": null
+        }
+      ]
+    },
+    "commit": {
+      "assessmentId": "assessment",
+      "classSectionId": "class",
+      "createdBy": "teacher",
+      "createdAt": "2026-10-06T12:00:00.000Z",
+      "updatedAt": "2026-10-06T12:00:00.000Z",
+      "deletedAt": null,
+      "version": 1,
+      "id": "commit",
+      "sessionId": "session",
+      "attemptId": "attempt",
+      "rubricId": "rubric",
+      "studentAssessmentId": "student-assessment",
+      "resultIds": [
+        "result"
+      ],
+      "previousCommitId": null,
+      "draft": {
+        "annotations": [
+          {
+            "id": "annotation",
+            "documentId": "document",
+            "start": 17,
+            "end": 33,
+            "quote": "A repeated idea.",
+            "criterionId": "criterion",
+            "level": "3+",
+            "text": "Support the second claim."
+          }
+        ],
+        "pending": null,
+        "judgments": [
+          {
+            "assessmentCategoryId": "category-A",
+            "assessed": true,
+            "rawScore": "3+",
+            "inputFormat": "scale_code",
+            "feedback": "Saved A feedback"
+          },
+          {
+            "assessmentCategoryId": "category-C",
+            "assessed": true,
+            "rawScore": "3+",
+            "inputFormat": "scale_code",
+            "feedback": "Saved C feedback"
+          },
+          {
+            "assessmentCategoryId": "category-T",
+            "assessed": true,
+            "rawScore": "3+",
+            "inputFormat": "scale_code",
+            "feedback": "Saved T feedback"
+          },
+          {
+            "assessmentCategoryId": "category-K",
+            "assessed": true,
+            "rawScore": "3+",
+            "inputFormat": "scale_code",
+            "feedback": "Saved K feedback"
+          }
+        ],
+        "overallFeedback": "Saved feedback only."
+      }
+    }
+  },
+  "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Fictional Essay — Fictional Learner</title><style>body{font-family:system-ui,sans-serif;color:#172033;max-width:65rem;margin:2rem auto;padding:0 1rem}h1,h2,h3{break-after:avoid}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #b9c1cc;padding:.6rem;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}p,blockquote{white-space:pre-wrap;overflow-wrap:anywhere}article{break-inside:avoid;border-top:1px solid #b9c1cc;padding:.5rem 0}blockquote{border-left:3px solid #b9c1cc;padding-left:1rem}.source,footer{font-size:.85rem;color:#475569}@media print{body{max-width:none;margin:0}table{font-size:10pt}}</style></head><body><h1>Fictional Essay</h1><p><strong>Fictional Learner</strong></p><p>Saved assessment report · 2026-10-06T12:00:00.000Z</p><h2>Category judgments</h2><table><thead><tr><th>Category</th><th>Teacher judgment</th><th>Feedback</th></tr></thead><tbody><tr><th>Application</th><td>3+ (scale code)</td><td>Saved A feedback</td></tr><tr><th>Communication</th><td>3+ (scale code)</td><td>Saved C feedback</td></tr><tr><th>Thinking</th><td>3+ (scale code)</td><td>Saved T feedback</td></tr><tr><th>Knowledge / Understanding</th><td>3+ (scale code)</td><td>Saved K feedback</td></tr></tbody></table><h2>Overall feedback</h2><p>Saved feedback only.</p><h2>Supporting quotations and feedback</h2><article><h3>Reasoning — 3+</h3><p class=\"source\">Fictional.txt · characters 18–33</p><blockquote>A repeated idea.</blockquote><p>Support the second claim.</p></article><h2>Rubric: Argument</h2><table><thead><tr><th>Criterion / KTAC</th><th>3+</th></tr></thead><tbody><tr><th>Reasoning<br>Thinking</th><td>Supports claims with clear evidence.</td></tr></tbody></table><footer><p>Saved commit commit · attempt attempt · rubric rubric. Rubric labels are evidence; category judgments above are entered by the teacher. Use your browser’s Print / Save as PDF to create a PDF locally.</p></footer></body></html>"
+}

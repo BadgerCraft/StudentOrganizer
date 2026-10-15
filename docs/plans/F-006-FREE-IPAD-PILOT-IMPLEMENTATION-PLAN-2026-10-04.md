@@ -1,5 +1,7 @@
 # F-006 — Free installed-iPad pilot implementation plan
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](../SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 Prepared: 2026-10-04, America/Toronto
 Status: approved by Tyler, 2026-10-05, America/Toronto
 Approval evidence: “Sure approved” in direct reply to the October 5 free iPad pilot review.

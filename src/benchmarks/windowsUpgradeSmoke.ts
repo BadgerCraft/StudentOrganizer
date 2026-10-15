@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { canonicalLegacyReport } from './legacyReportComparison';
 import { spawn, execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -348,7 +349,7 @@ async function runLegacyBootstrap() {
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
-    assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Legacy finalized report bytes must survive the bootstrap');
+    assert.equal(canonicalLegacyReport(fs.readFileSync(reportB, 'utf8')), canonicalLegacyReport(fs.readFileSync(marking.reportPath, 'utf8')), 'Legacy report must preserve all content, allowing only category display reordering');
     // A no-op restore could pass an equality check against identical data.
     // Persist a real later edit in B, then require the actual old backup to
     // replace it while preserving the original official records.
@@ -384,6 +385,10 @@ async function runLegacyBootstrap() {
     assert.equal(running.userData, profileA);
     assert.deepEqual(await snapshotAll(running.page), before, 'A second B restart must retain all restored legacy records');
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
+    const restoredReport = path.join(evidenceDir, 'markinator-report-restored-B.html');
+    await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), restoredReport);
+    assert.deepEqual(fs.readFileSync(restoredReport), fs.readFileSync(reportB), 'Current report bytes must survive legacy restore and restart');
     assert.deepEqual(running.errors, []);
     writeEvidence('bootstrap-results.json', {
       versions: pair, legacySource, currentSource: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), signatures,
@@ -391,7 +396,7 @@ async function runLegacyBootstrap() {
       installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])),
       tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), marking,
       checks: ['actual pinned metadata-only legacy source', 'actual complete UI backup readback', 'deliberate per-user NSIS manual bootstrap', 'same legacy userData and every record',
-        'future installer bridge available', 'visible marking originals/rubric/pending and official feedback', 'identical finalized report bytes', 'current UI replaces a later saved B edit from the actual legacy backup', 'second B restart'],
+        'future installer bridge available', 'visible marking originals/rubric/pending and official feedback', 'legacy report content unchanged except category display order', 'identical current report bytes after restore and restart', 'current UI replaces a later saved B edit from the actual legacy backup', 'second B restart'],
       limits: ['unsigned fictional CI only', 'no physical Windows/UAC/dialog or managed-device acceptance', 'manual bootstrap does not prove automatic updater reopening', 'no installation interruption or future-schema claim', 'no live GitHub delivery or public release']
     });
     console.log('PASS: Actual metadata-only legacy A manually bootstrapped to updater-enabled B; exact profile, all39 tables, originals/rubrics/pending/official feedback, report bytes and real legacy-backup UI restore survived another restart.');

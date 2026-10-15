@@ -1,5 +1,5 @@
 import type { MarkingAttempt, MarkingBase, MarkingCommit, MarkingSession } from './types';
-import { assertMarkingDraft, assertMarkingRecord, sessionCategories } from './validation';
+import { assertAttemptDraft, assertMarkingDraft, assertMarkingRecord, sessionCategories } from './validation';
 
 export const MARKING_TABLE_NAMES = ['markingRubrics', 'markingAttempts', 'markingSessions', 'markingCommits'] as const;
 
@@ -52,6 +52,7 @@ export function validateMarkingBackup(tables: BackupTables): void {
     // validated, assessment-bound session snapshot can stand in for a missing row.
     const savedCategories = sessionCategories('baseline' in record ? record : ref('markingSessions', record.sessionId));
     assertMarkingDraft(record.draft, rubric, attempt.documents, savedCategories?.map(c => c.id));
+    assertAttemptDraft(record.draft, attempt, rubric);
     for (const judgment of record.draft.judgments) {
       const category = maps.assessmentCategories?.get(judgment.assessmentCategoryId) ?? savedCategories?.find(c => c.id === judgment.assessmentCategoryId);
       if (!category) fail('judgment has no assessment category or retained snapshot');
@@ -160,11 +161,16 @@ function stableJSON(value: unknown): string {
 export async function validateMarkingBackupFiles(tables: BackupTables): Promise<void> {
   if (!tables.markingAttempts.length) return;
   const { sha256, normalizeMarkingText, validateRetainedOriginal } = await import('./importDocuments');
+  const { validateMarkingImageBytes } = await import('./importImages');
   for (const attempt of tables.markingAttempts as MarkingAttempt[]) {
     for (const document of attempt.documents) {
       if (document.text !== normalizeMarkingText(document.text) || await sha256(new TextEncoder().encode(document.text)) !== document.hash) fail('document text does not match its immutable hash');
       try { await validateRetainedOriginal(document); }
       catch (error) { fail(error instanceof Error ? error.message : 'original file is invalid'); }
+    }
+    for (const page of attempt.imagePages ?? []) {
+      try { await validateMarkingImageBytes(page); }
+      catch (error) { fail(error instanceof Error ? error.message : 'image original is invalid'); }
     }
   }
 }

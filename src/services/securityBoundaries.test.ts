@@ -6,6 +6,7 @@ import { ClassSettingsService } from './classSettingsService';
 import { StudentDomainService } from './studentService';
 import { PortabilityService } from './portabilityService';
 import { listAccessibleClassSections } from './authHelper';
+import { clearActiveTeacherId, selectActingTeacher } from './identityService';
 import { safePhotoSource } from '../utils/localPhoto';
 import { escapeCSVCell, formatCSVCell } from '../utils/csvUtils';
 
@@ -15,8 +16,8 @@ describe('Local data security regressions', () => {
   let db: OntarioTeacherDB;
   let service: ClassSettingsService;
   const snapshot = async () => Object.fromEntries(await Promise.all(db.tables.map(async t => [t.name, await t.toArray()])));
-  beforeEach(async () => { db = new OntarioTeacherDB(`security-${crypto.randomUUID()}`); await seedDatabase(db); service = new ClassSettingsService(db); });
-  afterEach(async () => { vi.restoreAllMocks(); await db.delete(); });
+  beforeEach(async () => { clearActiveTeacherId(); db = new OntarioTeacherDB(`security-${crypto.randomUUID()}`); await seedDatabase(db); actor.deviceId = (await selectActingTeacher(db, actor.userId)).deviceId; service = new ClassSettingsService(db); });
+  afterEach(async () => { clearActiveTeacherId(); vi.restoreAllMocks(); await db.delete(); });
 
   it.each(['https://collector.invalid/pixel?student=F001', '//collector.invalid/pixel', 'file:///tmp/pixel.png',
     'data:image/svg+xml;base64,PHN2Zy8+', 'data:image/png;base64,' + 'A'.repeat(65536), 'data:image/png;base64,not...base64'])

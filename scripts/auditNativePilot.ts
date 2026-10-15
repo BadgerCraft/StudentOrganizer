@@ -30,6 +30,9 @@ function compare(dir: string) {
   }
 }
 compare('');
+const plist = readFileSync('ios/App/App/Info.plist', 'utf8');
+for (const key of ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription']) assert.match(plist, new RegExp(`<key>${key}</key>\\s*<string>[^<]+</string>`), `Missing explicit local photo permission explanation: ${key}`);
+assert.doesNotMatch(plist, /NSMicrophoneUsageDescription|NSPhotoLibraryAddUsageDescription/, 'Photo import does not request microphone or library-write permissions');
 const project = readFileSync('ios/App/App.xcodeproj/project.pbxproj', 'utf8');
 for (const name of ['FilesPlugin', 'PilotViewController', 'NativeBoundaryPlugin']) assert.match(project, new RegExp(`${name}\\.swift in Sources`));
 const controller = readFileSync('ios/App/App/PilotViewController.swift', 'utf8');

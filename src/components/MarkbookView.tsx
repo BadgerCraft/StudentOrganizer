@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   ArrowUpDown,
@@ -21,9 +21,10 @@ import type {
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
 import { MarkbookDomainService } from '../services/markbookService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
+import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
 interface MarkbookViewProps {
   classSectionId: UUID;
@@ -41,6 +42,13 @@ interface MarkbookViewProps {
   onOpenStudentProfile: (enrollmentId: UUID) => void;
   onOpenMarking?: (assessmentId: string, enrollmentId: string) => void;
   onRefresh: () => void;
+}
+
+/** Display one assessment with the existing engine and a temporary formative policy. */
+export function calculateAssessmentSummary(enrollmentId: UUID, assessment: Assessment,
+  categories: AssessmentCategory[], assignments: StudentAssessment[], results: CategoryResult[], policy: GradingPolicy) {
+  return calculateOverallCourseGrade(enrollmentId, assessment.reportingPeriodId,
+    [assessment], categories, assignments, results, { ...policy, excludeFormative: false }, []);
 }
 
 export const MarkbookView: React.FC<MarkbookViewProps> = ({
@@ -65,9 +73,17 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   const [filterCategory, setFilterCategory] = useState<'all' | 'K' | 'T' | 'C' | 'A'>('all');
   const [sortField, setSortField] = useState<'lastName' | 'overall'>('lastName');
   const [sortAsc, setSortAsc] = useState(true);
+  const [collapsedAssessments, setCollapsedAssessments] = useState<Set<UUID>>(new Set());
+  const toggleAssessment = (id: UUID) => setCollapsedAssessments(previous => {
+    const next = new Set(previous);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   // Cell Editor Popover state
   const [activeCell, setActiveCell] = useState<{
+    identityEpoch: number;
+    classSectionId: UUID;
     enrollmentId: UUID;
     assessmentId: UUID;
     categoryId: UUID;
@@ -88,6 +104,13 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   const [editIsLate, setEditIsLate] = useState(false);
   const [editFeedback, setEditFeedback] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const mounted = useRef(true);
+  const context = useRef({ classSectionId, userId });
+  context.current = { classSectionId, userId };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { setActiveCell(null); setSaveError(null); }, [classSectionId, userId]);
+  useEffect(() => subscribeIdentityChange(() => setActiveCell(null)), []);
 
   const markbookService = new MarkbookDomainService(db);
 
@@ -113,11 +136,15 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   const columnDefs = useMemo(() => {
     const list: {
       assessment: Assessment;
-      category: AssessmentCategory;
+      category: AssessmentCategory | null;
     }[] = [];
 
     for (const a of filteredAssessments) {
-      const cats = categories.filter(c => c.assessmentId === a.id && c.deletedAt === null);
+      if (collapsedAssessments.has(a.id) && filterCategory === 'all') {
+        list.push({ assessment: a, category: null });
+        continue;
+      }
+      const cats = sortCategoriesForDisplay(categories.filter(c => c.assessmentId === a.id && c.deletedAt === null));
       for (const cat of cats) {
         if (filterCategory === 'all' || cat.categoryCode === filterCategory) {
           list.push({ assessment: a, category: cat });
@@ -125,7 +152,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
       }
     }
     return list;
-  }, [filteredAssessments, categories, filterCategory]);
+  }, [filteredAssessments, categories, filterCategory, collapsedAssessments]);
 
   // Prepare Student Row Data with Calculated Grades
   const studentRows = useMemo(() => {
@@ -189,6 +216,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     const cr = sa ? categoryResults.find(r => r.studentAssessmentId === sa.id && r.assessmentCategoryId === category.id && r.deletedAt === null) : null;
 
     setActiveCell({
+      identityEpoch: getIdentityEpoch(),
+      classSectionId,
       enrollmentId,
       assessmentId: assessment.id,
       categoryId: category.id,
@@ -217,8 +246,12 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     setSaveError(null);
 
     try {
+      const current = () => mounted.current && !!userId && context.current.userId === userId &&
+        context.current.classSectionId === activeCell.classSectionId && classSectionId === activeCell.classSectionId &&
+        getActiveTeacherId() === userId && getIdentityEpoch() === activeCell.identityEpoch;
+      if (!current()) throw new AuthorizationError('Acting teacher or class changed. Please reopen the cell editor.');
       const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
+      if (!current() || userId !== currentIdentity.userId || (deviceId && deviceId !== currentIdentity.deviceId)) {
         throw new AuthorizationError('Acting teacher has changed. Please refresh and try again.');
       }
 
@@ -348,6 +381,12 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
+        <button type="button" onClick={() => { setFilterCategory('all'); setCollapsedAssessments(new Set(filteredAssessments.map(a => a.id))); }} className="text-blue-700 font-bold border rounded-lg px-3 py-2">Collapse assessment details</button>
+        <button type="button" onClick={() => setCollapsedAssessments(new Set())} className="text-blue-700 font-bold border rounded-lg px-3 py-2">Expand assessment details</button>
+        <span className="text-slate-600">Assessment summaries use class category weights. Formative summaries do not change the course grade.</span>
+      </div>
+
       {/* Spreadsheet Master Markbook Table */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <div className="overflow-x-auto max-h-[72vh] relative">
@@ -400,21 +439,23 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                 {/* Assessment Category Columns */}
                 {columnDefs.map(({ assessment, category }) => (
                   <th
-                    key={`${assessment.id}-${category.id}`}
+                    key={`${assessment.id}-${category?.id ?? 'summary'}`}
+                    data-testid={`markbook-header-${assessment.id}-${category?.categoryCode ?? 'summary'}`}
                     className="px-3 py-2.5 border-r border-slate-200 min-w-[130px] font-semibold text-slate-800"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold truncate text-slate-900 block" title={assessment.title}>
                         {assessment.title}
                       </span>
-                      <span className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${getCategoryColor(category.categoryCode)}`}>
+                      {category && <span className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${getCategoryColor(category.categoryCode)}`}>
                         {category.categoryCode}
-                      </span>
+                      </span>}
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-slate-600 mt-0.5">
                       <span className="truncate max-w-[85px]">{assessment.assessmentType}</span>
-                      <span className="text-slate-600 font-mono">/{category.maxScore}</span>
+                      <span className="text-slate-600 font-mono">{category ? `/${category.maxScore}` : 'Overall %'}</span>
                     </div>
+                    {filterCategory === 'all' && <button type="button" aria-label={`${category ? 'Collapse' : 'Expand'} ${assessment.title} category details`} aria-expanded={!!category} onClick={() => toggleAssessment(assessment.id)} className="mt-1 min-h-[44px] px-2 text-blue-700 underline">{category ? 'Collapse' : 'Expand categories'}</button>}
                   </th>
                 ))}
               </tr>
@@ -495,6 +536,17 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                       const sa = studentAssessments.find(
                         s => s.classEnrollmentId === enr.id && s.assessmentId === assessment.id && s.deletedAt === null
                       );
+                      if (!category) {
+                        // Reuse the grading engine; this single-assessment display has no course overrides.
+                        // Include formative evidence here only, without modifying the saved/course policy.
+                        const summary = calculateAssessmentSummary(enr.id, assessment, categories, studentAssessments, categoryResults, policy);
+                        return <td key={`${assessment.id}-summary`} data-testid={`markbook-summary-${enr.id}-${assessment.id}`} className="px-3 py-2 text-center border-r border-slate-200">
+                          <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? `${summary.finalOverall}%` : '--'}</span>
+                          {sa?.completionStatus === 'missing' && <span className="block text-[10px] text-red-700">Missing</span>}
+                          {sa?.isLate && <span className="block text-[10px] text-amber-700">Late</span>}
+                          <button type="button" onClick={() => toggleAssessment(assessment.id)} aria-label={`Edit ${assessment.title} categories for ${std.preferredName || std.firstName} ${std.lastName}`} className="block mx-auto mt-1 text-blue-700 underline">Edit categories</button>
+                        </td>;
+                      }
                       const cr = sa
                         ? categoryResults.find(r => r.studentAssessmentId === sa.id && r.assessmentCategoryId === category.id && r.deletedAt === null)
                         : null;

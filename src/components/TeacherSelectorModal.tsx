@@ -29,6 +29,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [recentTeacherId, setRecentTeacherId] = useState<UUID | null>(null);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -43,7 +44,12 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
         await new Promise(r => setTimeout(r, 600));
         list = await getAvailableTeachers(db);
       }
-      setTeachers(list);
+      // This remembers only a suggestion. It never establishes an actor or
+      // bypasses explicit session confirmation and membership validation.
+      let recent: string | null = null;
+      try { recent = window.localStorage.getItem('ota.last-confirmed-teacher.v1'); } catch { /* Selection still works without storage. */ }
+      setRecentTeacherId(list.some(teacher => teacher.id === recent) ? recent : null);
+      setTeachers([...list].sort((a, b) => Number(b.id === recent) - Number(a.id === recent) || a.name.localeCompare(b.name)));
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to load teachers.');
     } finally {
@@ -159,6 +165,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
     setErrorMessage(null);
     try {
       await onSelectTeacher(userId);
+      try { window.localStorage.setItem('ota.last-confirmed-teacher.v1', userId); } catch { /* Optional convenience only. */ }
       setIsSubmitting(false);
       // NOTE: Do not call handleCancelAction() or onClose() here.
       // Selection is complete and distinct from cancellation.
@@ -196,7 +203,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
             </div>
             <div>
               <h2 id="teacher-selector-title" className="text-lg font-bold text-slate-900 leading-tight">
-                Select Acting Teacher
+                {canDismiss ? 'Switch teacher' : 'Confirm teacher for this session'}
               </h2>
               <span className="text-xs text-slate-500">
                 Local session attribution for marks, attendance, and audit records
@@ -219,7 +226,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
         <div className="px-6 py-3 bg-amber-50/80 border-b border-amber-100 flex items-start space-x-2.5 shrink-0">
           <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-800 leading-relaxed">
-            <strong>Local Attribution:</strong> This selection attributes edits and history on this device during this app session. It provides local teacher attribution, not secure multi-tenant network authentication.
+            Confirm who is using the app so marks, attendance and edits have the correct teacher's name. Your choice lasts for this session and across class changes. A new launch asks again to protect shared-device attribution; this is a local profile choice, not a password sign-in.
           </p>
         </div>
 
@@ -261,6 +268,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {teachers.map(teacher => {
                   const isCurrent = teacher.id === currentTeacherId;
+                  const isRecent = !canDismiss && teacher.id === recentTeacherId;
                   return (
                     <button
                       key={teacher.id}
@@ -289,7 +297,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
                             {teacher.name}
                           </p>
                           <p className="text-xs text-slate-500 truncate">
-                            {teacher.email}
+                            {isRecent ? 'Last confirmed on this device' : teacher.email}
                           </p>
                         </div>
                       </div>
@@ -300,7 +308,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
                           </span>
                         ) : (
                           <span className="text-xs font-medium text-slate-500 group-hover:text-blue-600">
-                            Select &rarr;
+                            {isRecent ? 'Continue →' : 'Select →'}
                           </span>
                         )}
                       </div>

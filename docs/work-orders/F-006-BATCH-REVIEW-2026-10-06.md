@@ -1,5 +1,7 @@
 # F-006 batch reconciliation review — October 6, 2026
 
+> **Superseded platform priority — October 14, 2026:** Tyler shelved all iPad-specific development and acceptance. This document is retained for source/evidence and future resumption, not an active iPad work order. Prior “next” device/signing/renewal steps are deferred until explicit reactivation; installed Windows/Mac take priority. See [the resume map](../SHELVED_FEATURES.md). No code/assets/scripts are removed.
+
 ## Exact sources and preservation
 
 Reviewed PR #15 source `a77fe406105f4153f9cb70f5c8af458fb0bee1aa` against PR #13 target `a6dd17365d3b474e50393dad3da64f1df74708ee`. Merged the target into the source branch only, producing `6887e7f5d52f0823bac408359d80dc20de5f3a3d`; this retains the target addition to `docs/BUG_REPORTS.md`. No target/main merge, release, signing account, distribution, or real student data is authorized or performed.

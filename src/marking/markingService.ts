@@ -1,11 +1,13 @@
 import Dexie from 'dexie';
+import { archiveDraft, archiveSnapshot } from './archive';
 import type { OntarioTeacherDB } from '../db/database';
 import type { Assessment, AssessmentCategory, CategoryResult } from '../types/schema';
 import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
 import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
-import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
-import { assertMarkingDocuments, assertMarkingDraft, assertRubricContent, sessionCategories } from './validation';
+import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
+import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertRubricContent, sessionCategories } from './validation';
+import { validateMarkingImageBytes } from './importImages';
 import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
 
 const live = <T extends { deletedAt: string | null }>(rows: T[]) => rows.filter(row => row.deletedAt === null);
@@ -72,6 +74,7 @@ export class MarkingService {
   private async attemptContext(attemptId: string, actor: MarkingActor, write: boolean) {
     const attempt = this.owned(await this.db.markingAttempts.get(attemptId), actor, 'Submission');
     const context = await this.context(attempt.assessmentId, actor, write);
+    if (write && attempt.archivedAt) throw new ValidationError('Archived work is read-only. Import a new attempt to mark again.');
     const rubric = this.owned(await this.db.markingRubrics.get(attempt.rubricId), actor, 'Rubric');
     if (attempt.classSectionId !== context.assessment.classSectionId || rubric.assessmentId !== attempt.assessmentId || rubric.classSectionId !== attempt.classSectionId || !rubric.confirmed) throw new ValidationError('Submission and rubric links are inconsistent.');
     if (attempt.classEnrollmentId) await this.enrollment(context.assessment, attempt.classEnrollmentId, write);
@@ -120,12 +123,15 @@ export class MarkingService {
       const students = live(await this.db.students.where('id').anyOf(roster.map(e => e.studentId)).toArray()).filter(s => s.organizationId === auth.organizationId);
       const enrollments = roster.filter(e => e.enrollmentStatus === 'active' && students.some(s => s.id === e.studentId));
       const rubrics = live(await this.db.markingRubrics.where('assessmentId').equals(assessmentId).toArray()).filter(r => r.createdBy === actor.userId);
-      const attempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId) && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
-      const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && attempts.some(a => a.id === s.attemptId));
-      const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && attempts.some(a => a.id === c.attemptId));
+      const allAttempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId));
+      const archivedAttempts = allAttempts.filter(a => !!a.archivedAt);
+      const attempts = allAttempts.filter(a => !a.archivedAt && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
+      const visibleAttempts = [...attempts, ...archivedAttempts];
+      const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && visibleAttempts.some(a => a.id === s.attemptId));
+      const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && visibleAttempts.some(a => a.id === c.attemptId));
       const studentAssessments = live(await this.db.studentAssessments.where('assessmentId').equals(assessmentId).toArray()).filter(sa => enrollments.some(e => e.id === sa.classEnrollmentId));
       const currentResults = studentAssessments.length ? live(await this.db.categoryResults.where('studentAssessmentId').anyOf(studentAssessments.map(sa => sa.id)).toArray()) : [];
-      return { assessment, categories, enrollments, students, rubrics, attempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
+      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
     });
   }
   async saveRubric(assessmentId: string, content: RubricContent, actor: MarkingActor): Promise<MarkingRubric> {
@@ -161,7 +167,38 @@ export class MarkingService {
       }
       const existing = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId);
       if (existing.some(a => a.classEnrollmentId === enrollmentId && a.documents.length === snapshot.length && a.documents.every((doc, index) => doc.hash === snapshot[index].hash && doc.original?.hash === snapshot[index].original?.hash))) throw new ValidationError('This exact submission is already imported for this student. Select its existing attempt.');
-      const attempt: MarkingAttempt = { ...this.base(assessment, actor), rubricId, documents: snapshot, classEnrollmentId: enrollmentId, previousAttemptId };
+      const attempt: MarkingAttempt = { ...this.base(assessment, actor), rubricId, mode: 'written', documents: snapshot, classEnrollmentId: enrollmentId, previousAttemptId };
+      await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
+    });
+  }
+  async createModeAttempt(assessmentId: string, rubricId: string, mode: 'oral' | 'rubric', enrollmentId: string, actor: MarkingActor): Promise<MarkingAttempt> {
+    this.checkActor(actor);
+    if (mode !== 'oral' && mode !== 'rubric') throw new ValidationError('Choose oral presentation or rubric-only marking.');
+    if (!enrollmentId) throw new ValidationError('Confirm a student before creating a marking attempt.');
+    return this.transaction(actor, true, async () => {
+      const { assessment } = await this.context(assessmentId, actor, true);
+      const rubric = this.owned(await this.db.markingRubrics.get(rubricId), actor, 'Rubric');
+      if (rubric.assessmentId !== assessmentId || rubric.classSectionId !== assessment.classSectionId || !rubric.confirmed) throw new ValidationError('Confirm a rubric for this assessment before marking.');
+      await this.enrollment(assessment, enrollmentId);
+      const attempt: MarkingAttempt = { ...this.base(assessment, actor), rubricId, mode, documents: [], classEnrollmentId: enrollmentId, previousAttemptId: null };
+      await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
+    });
+  }
+  async importImageAttempt(assessmentId: string, rubricId: string, pages: MarkingImagePage[], enrollmentId: string | null, actor: MarkingActor): Promise<MarkingAttempt> {
+    this.checkActor(actor); assertMarkingImagePages(pages);
+    if (!pages.length) throw new ValidationError('Import at least one image page.');
+    const snapshot = clone(pages);
+    // Digesting and decoding original bytes must finish before the live transaction.
+    try { for (const page of snapshot) await validateMarkingImageBytes(page); }
+    catch (error) { throw new ValidationError(error instanceof Error ? error.message : 'Unable to validate the retained image pages.'); }
+    return this.transaction(actor, true, async () => {
+      const { assessment } = await this.context(assessmentId, actor, true);
+      const rubric = this.owned(await this.db.markingRubrics.get(rubricId), actor, 'Rubric');
+      if (rubric.assessmentId !== assessmentId || rubric.classSectionId !== assessment.classSectionId || !rubric.confirmed) throw new ValidationError('Confirm a rubric for this assessment before importing.');
+      if (enrollmentId) await this.enrollment(assessment, enrollmentId);
+      const existing = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId);
+      if (existing.some(a => a.classEnrollmentId === enrollmentId && a.imagePages?.length === snapshot.length && a.imagePages.every((page, index) => page.hash.toLowerCase() === snapshot[index].hash.toLowerCase()))) throw new ValidationError('This exact submission is already imported for this student. Select its existing attempt.');
+      const attempt: MarkingAttempt = { ...this.base(assessment, actor), rubricId, mode: 'written', documents: [], imagePages: snapshot, classEnrollmentId: enrollmentId, previousAttemptId: null };
       await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
     });
   }
@@ -183,11 +220,23 @@ export class MarkingService {
       const { attempt, assessment, categories, rubric } = await this.attemptContext(attemptId, actor, true);
       if (!attempt.classEnrollmentId) throw new ValidationError('Confirm a student before marking this submission.');
       const history = live(await this.db.markingSessions.where('attemptId').equals(attemptId).toArray()).filter(s => s.createdBy === actor.userId).sort((a, b) => b.revision - a.revision);
-      const pending = history.find(s => s.status === 'draft'); if (pending) return pending;
+      const pending = history.find(s => s.status === 'draft');
+      if (pending) {
+        assertAttemptDraft(pending.draft, attempt, rubric);
+        assertMarkingDraft(pending.draft, rubric, attempt.documents, sessionCategories(pending).map(c => c.id));
+        return pending;
+      }
       const previous = history[0];
       const old = previous?.draft;
       const categorySnapshot = clone(previous ? sessionCategories(previous) : categories);
-      const draft: MarkingDraft = old ? clone(old) : { annotations: [], pending: null, overallFeedback: '', judgments: categorySnapshot.map(category => ({ assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' })) };
+      const draft: MarkingDraft = old ? clone(old) : {
+        annotations: [], pending: null, overallFeedback: '',
+        judgments: categorySnapshot.map(category => ({ assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' })),
+        rubricFeedback: rubric.criteria.map(criterion => ({ criterionId: criterion.id, level: '', feedback: '' })),
+        ...(attempt.mode === 'oral' ? { oral: { items: [], notes: '' } } : {}),
+        ...(attempt.imagePages?.length ? { imageFeedback: attempt.imagePages.map(page => ({ pageId: page.id, rotation: 0 as const, crop: { x: 0, y: 0, width: 1, height: 1 }, annotations: [] })) } : {}),
+      };
+      assertAttemptDraft(draft, attempt, rubric);
       assertMarkingDraft(draft, rubric, attempt.documents, categorySnapshot.map(c => c.id));
       const session: MarkingSession = { ...this.base(assessment, actor), attemptId, rubricId: rubric.id, revision: (previous?.revision ?? 0) + 1, status: 'draft', draft, categorySnapshot, retainedCategoryJudgments: clone(previous?.retainedCategoryJudgments ?? []), baseline: await this.baseline(assessment, categories, attempt.classEnrollmentId), commitId: null };
       await this.db.markingSessions.add(session); await this.audit('markingSessions', session, null, actor); return session;
@@ -201,6 +250,7 @@ export class MarkingService {
       // Saving pending work is separate from accepting changed assessment settings.
       // Preserve the IDs the teacher actually edited until explicit reconciliation.
       const categorySnapshot = sessionCategories(session);
+      assertAttemptDraft(snapshot, attempt, rubric);
       assertMarkingDraft(snapshot, rubric, attempt.documents, categorySnapshot.map(c => c.id));
       const next: MarkingSession = { ...session, draft: snapshot, categorySnapshot: clone(categorySnapshot), version: session.version + 1, updatedAt: new Date().toISOString() };
       await this.db.markingSessions.put(next); await this.audit('markingSessions', next, session, actor); return next;
@@ -224,6 +274,7 @@ export class MarkingService {
       if (!review.compatible) throw new ValidationError(review.reasons.join(' '));
       const previous = review.previousCategories;
       if (!decisions || typeof decisions !== 'object' || Array.isArray(decisions) || Object.keys(decisions).length !== previous.length || previous.some(c => !Object.prototype.hasOwnProperty.call(decisions, c.id))) throw new ValidationError('Explicitly review a destination or retain the original feedback for every saved category.');
+      assertAttemptDraft(session.draft, attempt, rubric);
       assertMarkingDraft(session.draft, rubric, attempt.documents, previous.map(c => c.id));
       const judgments: MarkingDraft['judgments'] = categories.map(c => ({ assessmentCategoryId: c.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' }));
       const retained = clone(session.retainedCategoryJudgments ?? []);
@@ -241,6 +292,8 @@ export class MarkingService {
       }
       if (retained.length > 200) throw new ValidationError('Recovery history is full. This draft is still preserved; export a backup before starting a new submission.');
       const next: MarkingSession = { ...session, categorySnapshot: clone(categories), retainedCategoryJudgments: retained, draft: { ...session.draft, judgments }, version: session.version + 1, updatedAt: new Date().toISOString() };
+      assertAttemptDraft(next.draft, attempt, rubric);
+      assertMarkingDraft(next.draft, rubric, attempt.documents, categories.map(c => c.id));
       // Do not accept newer official marks as a side effect of category recovery.
       await this.db.markingSessions.put(next); await this.audit('markingSessions', next, session, actor); return next;
     });
@@ -264,6 +317,7 @@ export class MarkingService {
     return this.transaction(actor, true, async () => {
       const { session, attempt, rubric, assessment, categories } = await this.sessionContext(sessionId, actor, false);
       // Repeated clicks or restart retries return the original immutable receipt.
+      if (attempt.archivedAt) throw new ValidationError('Archived work is read-only.');
       if (session.status === 'finalized') {
         const existing = session.commitId && await this.db.markingCommits.get(session.commitId);
         if (!existing) throw new ValidationError('Finalized session is missing its commit receipt.');
@@ -274,10 +328,12 @@ export class MarkingService {
       this.version(session, expectedVersion);
       if (!attempt.classEnrollmentId) throw new ValidationError('Confirm a student before finalization.');
       if (categorySignature(sessionCategories(session)) !== categorySignature(categories)) throw new ConcurrencyConflictError('Assessment categories changed. Review category changes and reconcile the saved feedback first.');
+      assertAttemptDraft(session.draft, attempt, rubric);
       assertMarkingDraft(session.draft, rubric, attempt.documents, categories.map(c => c.id));
       const categoryReview = categoryChangeReview(session, categories, rubric);
       if (!categoryReview.compatible) throw new ValidationError(categoryReview.reasons.join(' '));
       if (session.draft.pending) throw new ValidationError('Save or explicitly discard the pending comment before finalization.');
+      if (session.draft.imageFeedback?.some(page => page.annotations.some(annotation => annotation.kind === 'comment' && !annotation.text.trim()))) throw new ValidationError('Enter text for every image comment before finalization, or remove the empty comment.');
       if (session.baseline !== await this.baseline(assessment, categories, attempt.classEnrollmentId)) throw new ConcurrencyConflictError('The official mark or assessment settings changed. Review the current result, then explicitly accept the newer baseline before finalizing.');
       let sa = await this.db.studentAssessments.where({ assessmentId: assessment.id, classEnrollmentId: attempt.classEnrollmentId }).first();
       // Missing/excused completion policies override category scores in course
@@ -311,12 +367,55 @@ export class MarkingService {
       return commit;
     });
   }
-  async archiveAttempt(id: string, expectedVersion: number, actor: MarkingActor): Promise<MarkingAttempt> {
+  async setKeepStudentWork(id: string, expectedVersion: number, keepStudentWork: boolean, actor: MarkingActor): Promise<MarkingAttempt> {
+    if (typeof keepStudentWork !== 'boolean') throw new ValidationError('Choose whether to keep student work.');
     return this.transaction(actor, true, async () => {
       const { attempt } = await this.attemptContext(id, actor, true); this.version(attempt, expectedVersion);
-      if (await this.db.markingCommits.where('attemptId').equals(id).count()) throw new ValidationError('A finalized submission must be retained with its original files and marking history.');
-      const now = new Date().toISOString(); const next = { ...attempt, deletedAt: now, updatedAt: now, version: attempt.version + 1 };
+      if ((attempt.keepStudentWork ?? false) === keepStudentWork) return attempt;
+      const next = { ...attempt, keepStudentWork, updatedAt: new Date().toISOString(), version: attempt.version + 1 };
       await this.db.markingAttempts.put(next); await this.audit('markingAttempts', next, attempt, actor); return next;
+    });
+  }
+  async archiveAttempt(id: string, expectedVersion: number, actor: MarkingActor, keepStudentWork?: boolean): Promise<MarkingAttempt> {
+    if (keepStudentWork !== undefined && typeof keepStudentWork !== 'boolean') throw new ValidationError('Choose whether to keep student work.');
+    return this.transaction(actor, true, async () => {
+      // Archiving is records management, not a grade write: closed reporting periods
+      // and inactive enrollments retain their history and may still be archived.
+      const { attempt } = await this.attemptContext(id, actor, false);
+      const keep = keepStudentWork ?? attempt.keepStudentWork ?? false;
+      if (attempt.archivedAt && keep === (attempt.keepStudentWork ?? false) && (expectedVersion === attempt.version || expectedVersion === attempt.version - 1)) return attempt;
+      this.version(attempt, expectedVersion);
+      if (attempt.archivedAt) throw new ValidationError('This attempt is already archived.');
+      const now = new Date().toISOString();
+      const sessions = await this.db.markingSessions.where('attemptId').equals(id).toArray();
+      const commits = await this.db.markingCommits.where('attemptId').equals(id).toArray();
+      if ([...sessions, ...commits].some(row => row.createdBy !== actor.userId || row.assessmentId !== attempt.assessmentId || row.classSectionId !== attempt.classSectionId)) throw new ValidationError('The marking history has inconsistent ownership. Archive was cancelled.');
+      const next: MarkingAttempt = { ...attempt, archivedAt: now, keepStudentWork: keep, ...(keep ? {} : { documents: [], imagePages: [] }), updatedAt: now, version: attempt.version + 1 };
+      const transactionId = crypto.randomUUID();
+      if (!keep) {
+        for (const [table, rows] of [[this.db.markingSessions, sessions], [this.db.markingCommits, commits]] as const) {
+          for (const row of rows) {
+            const redacted = { ...row, draft: archiveDraft(row.draft), updatedAt: now, version: row.version + 1 };
+            await table.put(redacted as MarkingSession & MarkingCommit);
+          }
+        }
+        const targets = new Map<string, Set<string>>([
+          ['markingAttempts', new Set([id])], ['markingSessions', new Set(sessions.map(row => row.id))], ['markingCommits', new Set(commits.map(row => row.id))]
+        ]);
+        for (const entry of await this.db.auditEntries.toArray()) {
+          if (!targets.get(entry.entityName)?.has(entry.entityId)) continue;
+          await this.db.auditEntries.put({ ...entry, previousStateJson: archiveSnapshot(entry.previousStateJson, entry.entityName, now), newStateJson: archiveSnapshot(entry.newStateJson, entry.entityName, now), diffJson: null });
+        }
+        for (const mutation of await this.db.syncMutations.toArray()) {
+          if (!targets.get(mutation.entityName)?.has(mutation.entityId)) continue;
+          await this.db.syncMutations.put({ ...mutation, payloadJson: archiveSnapshot(mutation.payloadJson, mutation.entityName, now)!, lastError: null });
+        }
+      }
+      await this.db.markingAttempts.put(next);
+      // The archive event must never reintroduce the pre-redaction originals.
+      const previous = keep ? attempt : JSON.parse(archiveSnapshot(JSON.stringify(attempt), 'markingAttempts', now)!);
+      await this.audit('markingAttempts', next, previous, actor, transactionId);
+      return next;
     });
   }
   async exportContext(commitId: string, actor: MarkingActor) {

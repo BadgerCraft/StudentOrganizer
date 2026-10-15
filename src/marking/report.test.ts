@@ -20,6 +20,19 @@ function reportInput(): MarkingReportInput {
 }
 
 describe('saved marking report', () => {
+  it('shows KTCA order without changing saved judgments, category IDs or weights', () => {
+    const input = reportInput();
+    input.categories = (['A', 'C', 'T', 'K'] as const).map((code, index) => ({ ...input.categories[0], id: `category-${code}`, categoryCode: code, evidenceWeight: index + 1 }));
+    input.commit.draft.judgments = input.categories.map(c => ({ ...input.commit.draft.judgments[0], assessmentCategoryId: c.id, feedback: `Saved ${c.categoryCode} feedback` }));
+    const before = structuredClone(input);
+    const html = renderMarkingReport(input);
+    const names = ['Knowledge / Understanding', 'Thinking', 'Communication', 'Application'];
+    const positions = names.map(name => html.indexOf(`<th>${name}</th>`));
+    expect(positions.every(position => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    for (const code of ['K', 'T', 'C', 'A']) expect(html).toContain(`Saved ${code} feedback`);
+    expect(input).toEqual(before);
+  });
   it('exports saved judgments and exact repeated-text quote anchors with pinned rubric descriptors', () => {
     const input = reportInput();
     const html = renderMarkingReport(input);
@@ -72,5 +85,63 @@ describe('saved marking report', () => {
     expect(native.exportNativeBackup).toHaveBeenLastCalledWith('assessment-report-commit.html', expect.stringContaining('Saved feedback only.'));
     native.exportNativeBackup.mockResolvedValueOnce(false);
     expect(await exportMarkingReport(input)).toBe(false);
+  });
+  it.each(['oral', 'rubric'] as const)('exports explicit %s rubric feedback while retaining oral observations privately', mode => {
+    const input = reportInput();
+    input.attempt.mode = mode;
+    input.attempt.documents = [];
+    input.commit.draft.annotations = [];
+    input.commit.draft.rubricFeedback = [{ criterionId: 'criterion', level: '3+', feedback: 'The claim uses clear evidence.' }];
+    if (mode === 'oral') input.commit.draft.oral = { items: [{ id: 'eye-contact', label: 'PRIVATE CHECKLIST', checked: true, note: 'PRIVATE ITEM NOTE' }], notes: 'PRIVATE TEACHER NOTES' };
+    const html = renderMarkingReport(input);
+    expect(html).toContain('Criterion feedback');
+    expect(html).toContain('The claim uses clear evidence.');
+    expect(html).toContain('<th>Reasoning</th><td>3+</td>');
+    expect(html).not.toContain('PRIVATE');
+  });
+  it('exports escaped photo comments with pinned criterion evidence without original images or strokes', () => {
+    const input = reportInput();
+    input.attempt.mode = 'written';
+    input.attempt.documents = [];
+    const original = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==';
+    input.attempt.imagePages = [{ id: 'page', name: 'Fictional.png', mime: 'image/png', base64: original, size: atob(original).length, hash: 'b'.repeat(64), width: 1, height: 1 }];
+    input.commit.draft.annotations = [];
+    input.commit.draft.imageFeedback = [{ pageId: 'page', rotation: 90, crop: { x: 0, y: 0, width: 1, height: 1 }, annotations: [
+      { id: 'pen', kind: 'pen', points: [{ x: .1, y: .2 }, { x: .3, y: .4 }], color: 'red', width: .01, text: '', criterionId: null, level: '' },
+      { id: 'comment', kind: 'comment', points: [{ x: .5, y: .5 }], color: 'blue', width: .01, text: '<script>Fictional evidence</script>', criterionId: 'criterion', level: '3+' },
+    ] }];
+    const html = renderMarkingReport(input);
+    expect(html).toContain('Supporting page comments');
+    expect(html).toContain('Reasoning — 3+');
+    expect(html).toContain('Fictional.png');
+    expect(html).toContain('&lt;script&gt;Fictional evidence&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain(original);
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<svg');
+  });
+  it('exports archived written feedback without retaining deleted source quotations or images', () => {
+    const input = reportInput();
+    input.attempt.archivedAt = '2026-10-14T13:00:00.000Z'; input.attempt.keepStudentWork = false;
+    input.attempt.documents = []; input.commit.draft.annotations = [];
+    input.commit.draft.archivedFeedback = [{ id: 'archived-comment', criterionId: 'criterion', level: '3+', text: '<script>Archived feedback</script>' }];
+    const html = renderMarkingReport(input);
+    expect(html).toContain('Student work removed; assessment records and written feedback retained.');
+    expect(html).toContain('&lt;script&gt;Archived feedback&lt;/script&gt;');
+    expect(html).not.toContain('A repeated idea.');
+    expect(html).not.toContain('<script>');
+  });
+  it('rejects missing page and criterion references or teacher mismatches in saved reports', () => {
+    const input = reportInput();
+    input.commit.draft.rubricFeedback = [{ criterionId: 'missing', level: '3+', feedback: 'Fictional feedback' }];
+    expect(() => renderMarkingReport(input)).toThrow();
+    input.commit.draft.rubricFeedback = [{ criterionId: 'criterion', level: 'missing', feedback: 'Fictional feedback' }];
+    expect(() => renderMarkingReport(input)).toThrow();
+    delete input.commit.draft.rubricFeedback;
+    input.commit.draft.imageFeedback = [{ pageId: 'missing', rotation: 0, crop: { x: 0, y: 0, width: 1, height: 1 }, annotations: [] }];
+    expect(() => renderMarkingReport(input)).toThrow();
+    delete input.commit.draft.imageFeedback;
+    input.rubric.createdBy = 'other-teacher';
+    expect(() => renderMarkingReport(input)).toThrow('do not match');
   });
 });

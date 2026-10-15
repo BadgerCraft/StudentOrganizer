@@ -1,11 +1,23 @@
-# Assessment-linked local Markinator integration
+# Integrate classroom UI and Markinator with local PDF export and minimal Archive
 
-Teachers confirm a rubric's KTAC mapping, import and explicitly match local TXT/DOCX/pasted submissions, save passage feedback, and finalize category judgments through the existing markbook. Drafts preserve official results; originals, rubric/document versions and marking history participate in local full backup/restore. No remote parsing, automated grading or new schema preference changes.
+Teachers can use the verified classroom UI repairs together with all three marking modes and local multi-page photo markup. Finalized work now has a marked PDF action: Windows/Mac generate actual PDF bytes locally; browser development use downloads clearly labeled print-ready HTML. Photograph crop/rotation, strokes/highlights, numbered comments, written work, rubric and feedback are included without changing grades.
 
-Independent review repaired unresolved missing/excused completion handling, retained DOCX/text consistency and unsaved rubric tab/exit protection.
+A separate read-only Archive tab retains student/class/assessment/date, final judgments and marks, pinned rubric and written feedback, and revision records. **Keep student work** defaults off beside export controls. Explicit archive removes known submitted source files/text/quotes/visual anchors from current records and internal audit/outbox copies in one transaction; opt-in retains work. Export alone never archives. Dropped-student names, private oral observations and retained category feedback remain visible. Previously soft-deleted archives and previously exported backups are not automatically purged.
 
-Verified application/test source5443e15200383eee6c10341f5eac303920df6d3a:287 tests and build pass; Windows run37723697785 and Mac/browser run37723697784 all succeed. Actual Windows portable/installed and arm64/x64 Mac DMG/ZIP flows cover original file bytes/hashes, annotation and pending revision, official3+ T finalization, real inert report/full-backup downloads, confirmed restore reverting a later edit, process restart and visible recovery. Browser primary/recovery/expanded suites pass with no external attempts. Unsigned iOS compile passes. This follow-up changes documentation only; verified application/test content is unchanged.
+Tyler approved this integration, PDF output, archive rule and immediate iPad shelving October14. iPad source/config/scripts and historical evidence remain intact with [a resume map](../blob/codex/desktop-export-archive-20261014/docs/SHELVED_FEATURES.md). iPad-only compilation is disabled; shared Chromium/WebKit checks remain. Phone capture is design-only. No new dependencies or schema version.
 
-Initial native checks failed due to test navigation racing a reused document node; bounded document/draft/enabled-state waits fixed the harness, and exact-source reruns pass without production changes or weakened assertions.
+## Validation
 
-Remaining limits: actual iPad Files/touch/background/restart/recovery, native OS picker/Save As dialogs, system printing/PDF, managed-device/Gatekeeper acceptance and real-student authorization. No merge/release/distribution approved. Future marking modes/photo requests stay deferred. CHECKPOINT.md, INTEGRATION_REVIEW.md, UI_ACCEPTANCE.md and IPAD_SUPPORT.md carry scope, evidence and remaining steps.
+- 474 tests/49 files pass; production TypeScript/Vite build passes. Existing mixed-import/chunk warnings remain.
+- Typecheck for new browser scripts, Electron syntax checks, workflow YAML parsing and diff checks pass.
+- Independent review reproduced and verified repairs for duplicate archived comment IDs and archived names after unenrollment;26 focused tests pass independently.
+- Archive tests exercise source removal across live/audit/outbox/full backup, actual restore, grades/feedback preservation, opt-in, failed audit/identity rollback, repeat archive and stale authorization/version rejection.
+- New browser archive/PDF tests and actual packaged Electron PDF tests are wired to CI. Packaged tests control only the save-dialog destination; they do not claim physical OS-dialog acceptance.
+
+## Review boundaries
+
+Remote final-head CI and native runtime remain pending. Local browser execution is unavailable because Chromium download returned truncated ZIP files. No browser/native pass is inferred from unit mocks. Windows/Mac physical file-picker/save-dialog/Gatekeeper/managed-device/capacity acceptance remains separate. iPad runtime is deliberately shelved.
+
+This branch contains modes/photo PR30 source and latest verified UI cleanup66a3477 (not stale PR26 head), preserving their history. Review this combined candidate; do not merge older overlapping PRs independently without checking the final graph. Main merge, release/distribution, spending, service adoption and real-student use remain reserved.
+
+Current queue and execution evidence: docs/FEATURE_QUEUE.md and docs/work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md.

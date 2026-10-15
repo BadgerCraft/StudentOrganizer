@@ -493,12 +493,13 @@ describe('Assessment-linked marking integrity', () => {
     }
   );
 
-  it('archives draft work with recoverable originals instead of deleting it or allowing further writes', async () => {
+  it('archives draft work with explicit source retention and prevents further writes', async () => {
     const { attempt, session } = await savedDraft();
     const gradesBefore = await official();
-    await service.archiveAttempt(attempt.id, attempt.version, actor);
+    await service.archiveAttempt(attempt.id, attempt.version, actor, true);
     const stored = await db.markingAttempts.get(attempt.id);
-    expect(stored?.deletedAt).not.toBeNull();
+    expect(stored?.archivedAt).toBeTruthy();
+    expect(stored?.deletedAt).toBeNull();
     expect(stored?.documents).toEqual(attempt.documents);
     expect((await db.markingSessions.get(session.id))?.draft).toEqual(session.draft);
     await expect(service.saveDraft(session.id, session.draft, session.version, actor)).rejects.toThrow();
@@ -509,7 +510,6 @@ describe('Assessment-linked marking integrity', () => {
   it('retains finalized originals and returns the same receipt after locking the assessment without reopening marking', async () => {
     const { attempt, session } = await savedDraft();
     const commit = await service.finalize(session.id, session.version, actor);
-    await expect(service.archiveAttempt(attempt.id, attempt.version, actor)).rejects.toThrow(ValidationError);
     await db.assessments.update(ASSESSMENT, { isLocked: true });
     const before = await snapshot();
     expect(await service.finalize(session.id, session.version, actor)).toEqual(commit);

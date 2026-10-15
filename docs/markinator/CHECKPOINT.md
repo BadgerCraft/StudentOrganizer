@@ -1,3 +1,51 @@
+# Current phase — P0 teacher-use readiness
+
+Tyler's independent-review request supersedes the feature-expansion priorities below. Reviewed PR31 source `4335c29b0fa37d70962c189d381f65403d6548cf` had one demonstrated Archive/backup identifier-bound blocker; this follow-up applies the smallest repair with 53 focused tests passing, without relaxing validation. The two recent PDF/legacy comparison repairs were specifically inspected. Review findings, repair proof, follow-up cards and merge/build/device gates: [current review work order](../work-orders/PR31-INDEPENDENT-REVIEW.md). Older evidence below is preserved history, not a current feature queue.
+
+> **Current product phase: integrated teacher-use validation. Prefer making the existing workflow usable and trustworthy over adding new capabilities. New work should answer one of three questions: does it block Tyler from using the app, risk student data, or materially disrupt the marking/classroom workflow? If not, queue it as a follow-up.**
+
+> **Teacher-use readiness target:** Tyler can open the desktop app and complete a normal fictional classroom-to-marking-to-archive workflow without developer intervention, data loss, authorization ambiguity, or needing to understand implementation details.
+
+Order: (1) repaired PR31 review/explicit merge decision; (2) one clean Windows build from reviewed/merged source; (3) approved fictional-data pass on Tyler's actual Windows machine; (4) complete class/student setup, participation/classroom, assessment, all three marking modes, photo markup, rubric/feedback, marked PDF, Archive, history, backup/restore and restart; (5) bounded UX/device follow-ups unless data/privacy/authorization/recovery or material teacher-workflow risk; (6) documented actual-device fictional success/recovery plus school/board/IT privacy acceptance and separate explicit Tyler approval before real-student data; (7) keep iPad, phone capture, signing/publisher work, services and nonessential expansion shelved unless directly blocking teacher use and separately approved.
+
+No merge, release, distribution, real-student use or platform/service expansion is authorized by this checkpoint. Next gate is approval of the repaired merge candidate, followed by an explicitly approved private Windows build/handoff and short walkthrough. The current queue is [FEATURE_QUEUE.md](../FEATURE_QUEUE.md).
+
+---
+
+# Historical desktop integration checkpoint — October 14, 2026
+
+Branch `codex/desktop-export-archive-20261014` combines modes/photo `63f9963` and latest verified UI cleanup `66a3477`, then adds approved local annotated PDF output and a read-only Archive. iPad-specific work is shelved; [resume map](../SHELVED_FEATURES.md). Main merge/release remain reserved.
+
+Local evidence: **474 tests /49 files and production build pass**, plus independent archive/export review. Browser and actual packaged PDF runtime are pending remote checks; local Chromium download was truncated. Archive removes known source payloads and internal copies by default, retaining four structured record groups; Keep student work is opt-in. Earlier soft-deleted archives and previously exported backups are not automatically purged. Current status and approval details: [queue](../FEATURE_QUEUE.md). Older checkpoints below are preserved history.
+
+---
+
+# Current checkpoint — Markinator modes/photo, October 14, 2026
+
+## Superseding approved follow-through — October 14, 2026
+
+Tyler approved combining the latest verified UI cleanup branch with modes/photo work, local annotated PDF export, and a dedicated Archive; implementation and final checks are in progress, not proven complete by this approval. Do not reuse stale PR26 status as the integration source. Refresh the actual UI branch head and preserve existing teacher/grade/history protections.
+
+Archive retains (1) student/class/assessment/date, (2) final K/T/C/A judgments and marks, (3) the rubric used and written feedback, and (4) relevant revision history. Default archival removes original student files/photos and image-dependent markup from active and internal history copies while retaining the structured record. **Keep student work**, default off in export/publish choices, opts selected work into retention. Existing exported backups remain outside retroactive deletion. Implement explicit irreversible-action confirmation and atomic failure/recovery safeguards; no blanket or silent deletion is authorized.
+
+Annotated PDF export is approved and no longer an excluded future feature: render photographed pages with visual markup/comments and deliberate rubric feedback locally. No remote converter, publishing service, OCR or AI processing. A phone capture companion is design investigation only; class/assignment selection, explicit roster matching and manual unresolved-item routing are desired, but no app/backend/automatic transfer is approved.
+
+All iPad-specific work is shelved unconditionally; preserve code and use [SHELVED_FEATURES.md](../SHELVED_FEATURES.md) to resume only on explicit request. Desktop Windows/Mac integration, export/archive checks and real installed runtime acceptance are the active sequence. Prior iPad camera/Files/touch/background/renewal “next” steps below are historical, not active gates. Existing static checks are bounded evidence only. Source review and automated integration checks belong to the agent; Tyler's later app walkthrough is classroom/product judgment, not a request to debug or verify source.
+
+Main merge, release/distribution, spending, provider adoption and real-student use remain reserved. Current exact heads, publication and measured results belong in FEATURE_QUEUE.md; approval is not evidence of completion.
+
+**Development verified; ready for review.** Branch `codex/markinator-modes-photo-20261013`, verified implementation **`0347d94535e67b19a3f54ee02170f7e3af1aee63`**, base work order `4bd96c6` / main `5a769cb`. Current authority: [approved P0 order](../work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md). Its execution section contains exact results, review findings, routing and recovery instructions. Earlier checkpoints below are historical and cannot reset this authorization/status.
+
+Delivered: written document/image, oral checklist/private notes, rubric-only; pinned criterion evidence; multi-page local camera-file fallback/import, immutable originals, non-destructive crop/rotate/reorder/pen/highlight/comments; autosave/reopen/full backup restore through existing guarded grading/audit services. Legacy optional records remain usable. No OCR, cloud transfer, dependency or schema-version change.
+
+**PASS: 392 tests/37 files, production build, nine-group modes/photo Chromium acceptance, final production marking browser, existing input/authority/portability/category-recovery browser checks, iOS sync/static asset audit.** Browser verified EXIF6/3/8/2 raw-pixel coordinates, delayed-preview rejection, draft restart, comment editing, all three mode recoveries, exact clean-profile full restore and deliberate grade finalization. No external app requests/browser exceptions. Three reproduced integration defects were repaired and independently reviewed. New browser checks are wired into the existing CI job; remote CI is not observed.
+
+Git works; GitHub GraphQL/REST PR APIs return Forbidden. PR creation/update and exact-head CI inspection remain blocked. [PR text](PR_DRAFT.md) is prepared. Implementation `0347d94` was normally pushed and its exact remote head independently read back. This evidence/CI documentation follows in a separate commit; no existing PR state is assumed. Physical camera/native Windows/Mac/iPad interactions and iOS simulator checks remain unverified; no merge/release/distribution/real-student use authorized.
+
+Current next batch: integrate the latest verified UI cleanup source with modes/photo, implement and verify local annotated PDF export and Archive, then inspect exact-head CI and Windows/Mac installed behaviour. UI cleanup `66a3477` is the earlier checkpoint, not authority to ignore newer source. iPad device work is shelved; preserve its resume map. Model recommendation for a receiving native batch: confirm GPT-6.1 Codex Sol is selectable; high reasoning for native local storage/permissions, escalate data/grade loss to independent review; completion requires measured device evidence or exact blocker. Scheduled execution/tool availability remains unverified.
+
+---
+
 # Markinator integration — resumable checkpoint, October 7, 2026
 
 ## October 9 — current approved merge reconciliation
