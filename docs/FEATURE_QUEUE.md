@@ -39,6 +39,12 @@ PR31 merged after Tyler's explicit “Merge” at 08:54 America/Toronto. Exact a
 
 Delivery preparation branch: `codex/windows-drive-delivery-20261015`, based on the merge commit. Next: select one normal Windows installer with exact source/version/checksum (exclude deliberately failing recovery fixtures), prepare installation/backup/recovery/fictional-walkthrough instructions and known limits, and verify private Drive delivery. Keep working databases and student content out of personal Drive. Actual-device fictional acceptance remains unverified; iPad/signing/publisher work remain shelved. Mobile scanner remains design-only and follows usable desktop delivery; Control Panel follows actual multi-user support need.
 
+### October 15 — requested installation handoff
+
+Tyler explicitly requested “Okay give me something to click and install,” authorizing this private fictional-data installation handoff. Retrieved normal Windows artifact 11943213521 from successful run38668245592; excluded recovery/legacy test installer bundles. Artifact ZIP SHA256 matched GitHub digest `b5fc7cfb194a8dd048d93a4f316ccffb6a73896b1a13beba4439d28022ebe498`; extracted normal NSIS installer SHA256 matched bundled sums `c519cbf1df707a96b7191ccbd47985d540c7bdaad1f7072d457e6a86ba9e3cbf`. Version `1.0.0-qa.261.1`; 115605058 bytes; unsigned. Build identifies GitHub PR test-merge `0efa28c91d2869e9bec17c5055cd885c42dbdf8a`, containing reviewed head `0fe0e0c1`; comparison with approved main merge `495ba2af` returns no changed files.
+
+Installer supplied by direct ChatGPT download as `StudentOrganizer-Setup-V1.0.0-qa.261.1.exe`. Connected Drive upload failed before action invocation with HTTP413: 115605058 bytes exceeds the action's 104857600-byte limit. No installer upload succeeded; do not claim otherwise. Setup instructions uploaded and metadata verified: https://drive.google.com/file/d/11k8tjNSTFW9vM92rE-_v_i92ukE1o1tH/view?usp=drivesdk in version folder https://drive.google.com/drive/folders/1GPMxKRmhFFzwjYZzBfuB2KGdlxWuXhJm . User can upload the downloaded executable manually. Next gate is actual Windows installation and fictional workflow/backup/restart walkthrough. No public release, physical-device pass or real-student approval is claimed.
+
 ## Active feature register
 
 | ID | Feature / requested outcome | Current disposition | Next step / source |
