@@ -45,6 +45,17 @@ async function eventually<T>(page: Page, read: () => Promise<T | undefined>, mes
 /** The document node is reused across students; mounted alone does not mean navigation finished. */
 async function openDraft(page: Page, attemptId: string, expectedText: string) {
   await page.getByTestId(`marking-session-open-${attemptId}`).click();
+  if (await page.getByTestId('evidence-import-wizard').count() > 0) {
+    // Current navigation is read-only for finalized work; a revision is deliberate.
+    await eventually(page, async () => {
+      const document = page.getByTestId('marking-document');
+      const session = page.locator('section[aria-label="Marking session"]');
+      if (!(await document.count()) || !(await session.count())) return undefined;
+      return (await document.innerText()).includes(expectedText) ? true : undefined;
+    }, `Submission did not settle for ${attemptId}`);
+    const reopen = page.getByRole('button', { name: 'Reopen as draft revision', exact: true });
+    if (await reopen.isVisible()) await reopen.click();
+  }
   await eventually(page, async () => {
     const document = page.getByTestId('marking-document');
     const save = page.getByRole('button', { name: 'Save now', exact: true });
@@ -99,12 +110,25 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   const beforeOfficial = await snapshot(page, assessment.id);
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
-  await page.getByLabel('Paste rubric text or table').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning');
-  await page.getByRole('button', { name: 'Preview pasted rubric' }).click();
-  await page.getByLabel('Rubric title', { exact: true }).fill('Fictional packaged descriptor rubric');
-  await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
-  await page.getByRole('checkbox', { name: /reviewed the descriptor matrix/ }).check();
-  await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
+  // A retained old package is the upgrade baseline. Keep its original controls intact.
+  const guided = await page.getByTestId('evidence-import-wizard').count() > 0;
+  const rubricText = 'Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning';
+  if (guided) {
+    await page.locator('summary').filter({ hasText: /^Paste rubric text or table$/ }).click();
+    await page.getByTestId('marking-rubric-paste').fill(rubricText);
+    await page.getByTestId('marking-rubric-preview').click();
+    await page.getByLabel('Rubric title', { exact: true }).fill('Fictional packaged descriptor rubric');
+    await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
+    await page.getByTestId('marking-rubric-confirm').check();
+    await page.getByRole('button', { name: 'Save confirmed rubric version', exact: true }).click();
+  } else {
+    await page.getByLabel('Paste rubric text or table').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning');
+    await page.getByRole('button', { name: 'Preview pasted rubric' }).click();
+    await page.getByLabel('Rubric title', { exact: true }).fill('Fictional packaged descriptor rubric');
+    await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
+    await page.getByRole('checkbox', { name: /reviewed the descriptor matrix/ }).check();
+    await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
+  }
 
   const text = 'Echo phrase. Middle words. Echo phrase. End. <img src="https://fictional.invalid/essay">';
   const docx = Buffer.from(zipSync({
@@ -116,14 +140,44 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
     { name: 'Fictional-desktop-one.txt', mimeType: 'text/plain', buffer: Buffer.from(text) },
     { name: 'Fictional-desktop-two.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: docx }
   ];
-  await page.getByTestId('marking-files').setInputFiles(inputFiles);
-  const firstChoice = page.getByLabel(`Confirm student for ${inputFiles[0].name}`);
-  await firstChoice.waitFor();
-  const students = await firstChoice.locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value).filter(Boolean));
-  assert.ok(students.length >= 2, 'Fictional package QA requires two enrolled students');
-  await firstChoice.selectOption(students[0]);
-  await page.getByLabel(`Confirm student for ${inputFiles[1].name}`).selectOption(students[1]);
-  await page.getByTestId('marking-import-confirm').click();
+  let students: string[];
+  if (guided) {
+    const wizard = page.getByTestId('evidence-import-wizard');
+    await wizard.getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
+    await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
+    await wizard.getByLabel('Choose text/document files', { exact: true }).setInputFiles(inputFiles);
+    await wizard.getByRole('button', { name: 'Add work and select students', exact: true }).click();
+    await wizard.getByRole('radio', { name: 'Several students', exact: true }).check();
+    const people = await records(page, 'students');
+    const roster = (await records(page, 'classEnrollments')).filter(row => row.classSectionId === assessment.classSectionId && row.deletedAt === null && row.enrollmentStatus === 'active'
+      && people.some(person => person.id === row.studentId && person.deletedAt === null)).slice(0, 2);
+    students = roster.map(row => row.id);
+    assert.equal(students.length, 2, 'Fictional package QA requires two enrolled students');
+    const labels = roster.map(row => {
+      const person = people.find(person => person.id === row.studentId);
+      return `${person.firstName} ${person.lastName} (${person.localStudentNumber})`;
+    });
+    const classList = wizard.getByRole('group', { name: 'Class students', exact: true });
+    for (const label of labels) await classList.getByRole('checkbox', { name: label, exact: true }).check();
+    await wizard.getByRole('button', { name: 'Continue to matching', exact: true }).click();
+    for (let index = 0; index < inputFiles.length; index++) {
+      await wizard.getByRole('radio', { name: inputFiles[index].name, exact: true }).check();
+      const escaped = labels[index].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      await wizard.getByRole('radio', { name: new RegExp(`^${escaped}`) }).check();
+      await wizard.getByRole('button', { name: 'Confirm match', exact: true }).click();
+    }
+    await wizard.getByRole('button', { name: 'Review matches', exact: true }).click();
+    await wizard.getByRole('button', { name: 'Confirm and start marking', exact: true }).click();
+  } else {
+    await page.getByTestId('marking-files').setInputFiles(inputFiles);
+    const firstChoice = page.getByLabel(`Confirm student for ${inputFiles[0].name}`);
+    await firstChoice.waitFor();
+    students = await firstChoice.locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value).filter(Boolean));
+    assert.ok(students.length >= 2, 'Fictional package QA requires two enrolled students');
+    await firstChoice.selectOption(students[0]);
+    await page.getByLabel(`Confirm student for ${inputFiles[1].name}`).selectOption(students[1]);
+    await page.getByTestId('marking-import-confirm').click();
+  }
   const attempts = await eventually(page, async () => {
     const rows = (await records(page, 'markingAttempts')).filter(row => row.assessmentId === assessment.id);
     return rows.length === 2 ? rows : undefined;
@@ -146,8 +200,14 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByTestId('marking-feedback').fill('Packaged feedback on repeated passage');
   await page.getByLabel('Evidence level (optional)').selectOption('Level 3');
   await page.getByTestId('marking-comment-save').click();
-  await page.getByRole('checkbox', { name: 'Assess T', exact: true }).check();
-  await page.getByRole('combobox', { name: 'Official T judgment', exact: true }).selectOption('3+');
+  if (guided) {
+    const judgment = page.getByRole('group', { name: 'T category judgment', exact: true });
+    await judgment.getByRole('button', { name: 'Level', exact: true }).click();
+    await judgment.getByRole('group', { name: 'Official T level', exact: true }).getByRole('button', { name: '3+', exact: true }).click();
+  } else {
+    await page.getByRole('checkbox', { name: 'Assess T', exact: true }).check();
+    await page.getByRole('combobox', { name: 'Official T judgment', exact: true }).selectOption('3+');
+  }
   await page.getByLabel('Category T feedback').fill('Use relevant evidence.');
   const officialFeedback = 'Fictional packaged summary <script>literal text</script>.';
   await page.getByLabel('Overall student-facing feedback').fill(officialFeedback);
@@ -161,6 +221,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.equal(official.overallFeedback, officialFeedback);
   const category = finalized.categoryResults.filter(row => row.studentAssessmentId === official.id);
   assert.equal(category.length, 1); assert.equal(category[0].rawScore, '3+');
+  if (guided) { assert.equal(category[0].inputFormat, 'classroom_level'); assert.equal(category[0].normalizedPercentage, 78); }
   const reportPath = path.join(artifactsDir, 'markinator-report.html');
   await download(() => page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportPath);
   const report = await fs.readFile(reportPath, 'utf8');
@@ -214,7 +275,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByText(/Database successfully restored/).waitFor();
   assert.deepEqual(await snapshot(page, assessment.id), snapshots, 'Confirmed actual backup restore must recover marking originals, pending revision and official records');
   return { assessmentId: assessment.id, assessmentTitle, firstAttemptId: first.id, secondAttemptId: second.id, pendingFeedback, reportPath, backupPath, snapshots,
-    checks: ['visible rubric/import/finalization UI', 'TXT and DOCX original bytes and hashes', 'draft leaves official marks unchanged', 'finalized KTAC/feedback', 'real inert HTML report download', 'real full backup with marking records', 'saved pending revision', 'actual full backup preview and confirmed restore replaces later edit'] };
+    checks: ['visible rubric/import/finalization UI', 'TXT and DOCX original bytes and hashes', 'draft leaves official marks unchanged', 'finalized KTCA/feedback', 'real inert HTML report download', 'real full backup with marking records', 'saved pending revision', 'actual full backup preview and confirmed restore replaces later edit'] };
 }
 
 /** Caller must relaunch the same disposable profile and reopen its Assessment Hub first. */

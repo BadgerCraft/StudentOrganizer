@@ -1,31 +1,34 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database';
 import { getAppIdentity, getIdentityEpoch, getActiveTeacherId, subscribeIdentityChange } from '../services/identityService';
 import { MarkingService } from '../marking/markingService';
 import type { MarkingActor, MarkingDocument, MarkingDraft, MarkingSession, MarkingAnnotation, MarkingAttempt, MarkingContext, KTAC, CategoryChangeReview, MarkingMode, MarkingImagePage } from '../marking/types';
-import { parseMarkingFiles, createPastedDocument } from '../marking/importDocuments';
-import { parseMarkingImages } from '../marking/importImages';
+import { EvidenceImportWizard } from '../marking/ui/EvidenceImportWizard';
+import { LevelPicker } from './LevelPicker';
+import { classroomLevelOptions } from '../services/classroomLevels';
+
 import { MarkingModePicker, OralEvidenceEditor, RubricEvidenceEditor } from '../marking/ui/ModeEvidence';
 import { ImageMarkup } from '../marking/ui/ImageMarkup';
 import { exportMarkingReport } from '../marking/report';
 import { exportAnnotatedMarkingReport, supportsDesktopPdfExport } from '../marking/annotatedReport';
+import { CommentBankPicker } from '../marking/ui/CommentBankPicker';
 import { RubricEditor } from '../marking/ui/RubricEditor';
 import { CategoryRecoveryReview } from '../marking/ui/CategoryRecoveryReview';
 import { categorySignature } from '../marking/categoryRecovery';
 import { assertMarkingImagePages, sessionCategories } from '../marking/validation';
 import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
-const button = 'border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white disabled:opacity-50';
+const button = 'border border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed';
 const field = 'border border-slate-300 rounded-lg p-2 w-full bg-white text-slate-900';
 const service = new MarkingService(db);
-interface Props { assessmentId: string; userId: string; initialEnrollmentId?: string; onClose: () => void; onRefresh: () => void; onSwitchTeacher?: () => void }
+interface Props { assessmentId: string; userId: string; initialEnrollmentId?: string; onClose: () => void; onRefresh: () => void; onSwitchTeacher?: () => void; onReturnToMarkbook?: () => void }
 function studentName(context: MarkingContext, enrollmentId: string | null) {
   const enrollment = context.historicalEnrollments?.find(e => e.id === enrollmentId) ?? context.enrollments.find(e => e.id === enrollmentId);
   const student = context.students.find(s => s.id === enrollment?.studentId);
   return student ? `${student.firstName} ${student.lastName} (${student.localStudentNumber})` : 'Unmatched submission';
 }
-export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, onClose, onRefresh, onSwitchTeacher }: Props) {
+export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, onClose, onRefresh, onSwitchTeacher, onReturnToMarkbook }: Props) {
   const epoch = useSyncExternalStore(subscribeIdentityChange, getIdentityEpoch);
   const [actor, setActor] = useState<MarkingActor | null>(null);
   const [error, setError] = useState('');
@@ -39,23 +42,35 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
   const [saveStatus, setSaveStatus] = useState('Saved locally');
   const [busy, setBusy] = useState(false), [previewFinal, setPreviewFinal] = useState(false);
   const busyRef = useRef(false);
-  const rubricDirty = useRef(false);
+  const rubricDirty = useRef(false), importDirty = useRef(false), composerDirty = useRef(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const importBusyRef = useRef(false);
+  const [composerRevision, setComposerRevision] = useState(0);
+  const importBusyChanged = useCallback((value: boolean) => { importBusyRef.current = value; setImportBusy(value); }, []);
+  const composerSources = useRef(new Set<string>());
+  const trackComposer = useCallback((source: string, dirty: boolean) => {
+    if (dirty) composerSources.current.add(source); else composerSources.current.delete(source);
+    composerDirty.current = composerSources.current.size > 0;
+  }, []);
+  const textComposerDirty = useCallback((dirty: boolean) => trackComposer('text', dirty), [trackComposer]);
+  const rubricComposerDirty = useCallback((dirty: boolean) => trackComposer('rubric', dirty), [trackComposer]);
+  const imageComposerDirty = useCallback((dirty: boolean) => trackComposer('image', dirty), [trackComposer]);
+  const importDirtyChanged = useCallback((dirty: boolean) => { importDirty.current = dirty; }, []);
+  function confirmComposerDeparture() {
+    if (composerDirty.current && !confirm('Discard the unfinished comment-bank import review? Comments already added to student work are saved.')) return false;
+    if (composerDirty.current) setComposerRevision(value => value + 1);
+    composerSources.current.clear(); composerDirty.current = false; return true;
+  }
+
   const [conflictReview, setConflictReview] = useState(false);
   const [categoryReview, setCategoryReview] = useState<CategoryChangeReview | null>(null);
   const [selectedFeedbackIds, setSelectedFeedbackIds] = useState<string[]>([]);
   const [allStudents, setAllStudents] = useState(!initialEnrollmentId);
   const [activeDocument, setActiveDocument] = useState('');
   const [rubricId, setRubricId] = useState('');
-  const [paste, setPaste] = useState(''), [importError, setImportError] = useState('');
   const [importMode, setImportMode] = useState<MarkingMode>('written');
-  const imagePreviewGeneration = useRef(0);
-  const [readingImages, setReadingImages] = useState(false);
-  const [incomingImages, setIncomingImages] = useState<MarkingImagePage[]>([]);
   const [modeEnrollment, setModeEnrollment] = useState(initialEnrollmentId ?? '');
-  const [incoming, setIncoming] = useState<MarkingDocument[]>([]);
-  const [match, setMatch] = useState<Record<string,string>>({});
-  const [previous, setPrevious] = useState<Record<string,string>>({});
-  const [groupFiles, setGroupFiles] = useState(false), [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('all');
   const selectionRoot = useRef<HTMLDivElement>(null);
   const validActor = () => {
     const value = actorRef.current;
@@ -79,7 +94,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     if (context && !rubricId && context.rubrics.length) setRubricId(context.rubrics[context.rubrics.length - 1].id);
   }, [context, rubricId]);
   function change(next: MarkingDraft) {
-    if (busyRef.current || sessionRef.current?.status !== 'draft') return;
+    if (busyRef.current || importBusyRef.current || sessionRef.current?.status !== 'draft') return;
     try { validActor(); } catch { return; }
     draftRef.current = next; setDraft(next); generation.current++; setSaveStatus('Saving…'); setPreviewFinal(false); setCategoryReview(null);
   }
@@ -103,11 +118,11 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     return () => clearTimeout(timer);
   }, [draft]);
   useEffect(() => {
-    const guard = (event: BeforeUnloadEvent) => { if (rubricDirty.current || savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
+    const guard = (event: BeforeUnloadEvent) => { if (rubricDirty.current || importDirty.current || composerDirty.current || savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, []);
   async function action(work: () => Promise<void>, rethrow = false) {
-    if (busyRef.current) return; busyRef.current = true; setBusy(true); setError('');
+    if (busyRef.current || importBusyRef.current) return; busyRef.current = true; setBusy(true); setError('');
     try { validActor(); await flush(); validActor(); await work(); } catch (e) { setError(e instanceof Error ? e.message : 'Operation failed.'); if (rethrow) throw e; } finally { busyRef.current = false; setBusy(false); }
   }
   function useSession(next: MarkingSession, attempt: MarkingAttempt) {
@@ -121,6 +136,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     validActor(); setCategoryReview(review); setConflictReview(false); setPreviewFinal(false);
   }
   async function open(attempt: MarkingAttempt, reopen = false) {
+    if (!confirmComposerDeparture()) return;
     await action(async () => {
       const fresh = await service.getContext(assessmentId, validActor());
       const history = fresh.sessions.filter(s => s.attemptId === attempt.id).sort((a,b) => b.revision-a.revision);
@@ -145,20 +161,6 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     if (draft.pending) { setError('Save or cancel your current comment before selecting another passage. Your draft is retained.'); return; }
     change({ ...draft, pending: { id: crypto.randomUUID(), documentId: doc.id, start, end: start + quote.length, quote, criterionId: rubric.criteria[0].id, level: '', text: '' } });
     selected.removeAllRanges();
-  }
-  async function previewImages(files: File[], append = false) {
-    if (!files.length) return; // Cancelling the picker preserves the existing preview.
-    const request = ++imagePreviewGeneration.current;
-    setReadingImages(true);
-    try {
-      const started = validActor();
-      const result = await parseMarkingImages(files);
-      if (request !== imagePreviewGeneration.current || validActor() !== started) return;
-      const pages = append ? [...incomingImages, ...result.pages] : result.pages;
-      assertMarkingImagePages(pages);
-      setIncomingImages(pages);
-      setImportError(result.errors.map(e => `${e.name}: ${e.message}`).join('\n'));
-    } catch(e) { if (request === imagePreviewGeneration.current) setImportError(e instanceof Error ? e.message : 'Images could not be read.'); } finally { if (request === imagePreviewGeneration.current) setReadingImages(false); }
   }
   function saveComment() {
     if (!draft?.pending || (!draft.pending.text.trim() && !draft.pending.level)) return;
@@ -196,6 +198,31 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     if (revisions.some(s => s.status === 'draft')) return revisions.some(s => s.status === 'finalized') ? 'revision' : 'draft';
     return revisions.length ? 'finalized' : 'ready';
   };
+  async function saveFinal(destination: 'stay' | 'next' | 'markbook') {
+    if (!confirmComposerDeparture()) return;
+    await action(async () => {
+      const current = sessionRef.current;
+      if (!current || !activeAttempt) return;
+      if (categoriesChanged) { await reviewCategories(); return; }
+      if (draftRef.current?.pending) throw new Error('Save or cancel your unfinished comment before saving the assessment.');
+      await service.finalize(current.id, current.version, validActor());
+      const fresh = await service.getContext(assessmentId, validActor());
+      const saved = fresh.sessions.find(item => item.id === current.id);
+      if (!saved) throw new Error('The assessment was saved. Reopen marking to see its saved status.');
+      useSession(saved, activeAttempt); setSaveStatus('Assessment saved to Markbook'); onRefresh();
+      if (destination === 'markbook') { (onReturnToMarkbook ?? onClose)(); return; }
+      if (destination === 'next') {
+        const list = fresh.attempts.filter(item => item.deletedAt === null && item.classEnrollmentId);
+        const index = list.findIndex(item => item.id === activeAttempt.id);
+        const next = list[index + 1];
+        if (next) {
+          const history = fresh.sessions.filter(item => item.attemptId === next.id).sort((a,b)=>b.revision-a.revision);
+          const opened = history[0]?.status === 'finalized' ? history[0] : await service.openSession(next.id, validActor());
+          useSession(opened, next);
+        } else { setSaveStatus('Assessment saved to Markbook. No next student in this queue.'); }
+      }
+    });
+  }
   const exportCommit = async (commitId: string, annotated = false) => {
     const saved = await service.exportContext(commitId, validActor());
     validActor();
@@ -204,27 +231,34 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     setExportStatus(exported ? (annotated && !supportsDesktopPdfExport() ? 'Print-ready report downloaded. Open it and choose Print / Save as PDF.' : 'Report exported locally.') : 'Export cancelled. Saved work is unchanged.');
   };
   return <div className="max-w-7xl mx-auto p-4 space-y-4 text-slate-900">
-    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => void action(async () => { if (!rubricDirty.current || confirm('Discard your unsaved rubric edits and close marking?')) onClose(); })}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy} onClick={() => void action(async () => { if (!rubricDirty.current || confirm('Discard your unsaved rubric edits and switch teacher?')) onSwitchTeacher(); })}>Switch teacher</button>}</div></header>
+    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy || importBusy} onClick={() => void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Leave marking and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onClose(); })}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy || importBusy} onClick={() => void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Switch teacher and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onSwitchTeacher(); })}>Switch teacher</button>}</div></header>
     {error && <div role="alert" className="bg-red-50 border border-red-200 p-3 whitespace-pre-wrap">{error}<button className={`${button} ml-3`} onClick={() => void action(async () => {})}>Retry save</button></div>}
     {exportStatus && <p role="status">{exportStatus}</p>}
     <fieldset disabled={busy} className="space-y-4">
-    <nav className="flex gap-2">{(['queue','rubric','import','archive'] as const).map(t => <button className={button} key={t} disabled={busy} aria-pressed={tab === t} onClick={() => void action(async () => setTab(t))}>{t === 'queue' ? 'Marking queue' : t === 'rubric' ? 'Rubric editor' : t === 'archive' ? 'Archive' : 'Import submissions'}</button>)}</nav>
+    <nav className="flex gap-2">{(['queue','rubric','import','archive'] as const).map(t => <button className={button} key={t} disabled={busy || importBusy} aria-pressed={tab === t} onClick={() => void action(async () => setTab(t))}>{t === 'queue' ? 'Marking queue' : t === 'rubric' ? 'Rubric editor' : t === 'archive' ? 'Archive' : 'Import submissions'}</button>)}</nav>
     <div hidden={tab !== 'rubric'}><RubricEditor onDirtyChange={dirty => { rubricDirty.current = dirty; }} rubrics={context.rubrics} categories={context.categories.map(c => c.categoryCode as KTAC)} onSave={content => action(async () => { const saved = await service.saveRubric(assessmentId,content,validActor()); validActor(); setRubricId(saved.id); setTab('import'); }, true)} /></div>
-    {tab === 'import' && <section className="bg-white border rounded-xl p-4 space-y-3"><h2 className="font-bold">Prepare marking evidence</h2><label className="block">Marking mode<select data-testid="marking-import-mode" className={field} value={importMode} onChange={e=>setImportMode(e.target.value as MarkingMode)}><option value="written">Written markup + rubric</option><option value="oral">Oral presentation + rubric</option><option value="rubric">Rubric only</option></select></label>
-      <label className="block">Confirmed rubric<select className={field} value={rubricId} onChange={e => setRubricId(e.target.value)}><option value="">Choose a confirmed rubric</option>{context.rubrics.map(r => <option key={r.id} value={r.id}>{r.title} · {r.createdAt}</option>)}</select></label>
+    <section hidden={tab !== 'import'} className="bg-white border rounded-xl p-4 space-y-3"><h2 className="font-bold">Add student work</h2><label className="block">Marking mode<select data-testid="marking-import-mode" disabled={importBusy} className={field} value={importMode} onChange={e=>setImportMode(e.target.value as MarkingMode)}><option value="written">Written markup + rubric</option><option value="oral">Oral presentation + rubric</option><option value="rubric">Rubric only</option></select></label>
+      <label className="block">Confirmed rubric<select className={field} value={rubricId} disabled={importBusy} onChange={e => setRubricId(e.target.value)}><option value="">Choose a confirmed rubric</option>{context.rubrics.map(r => <option key={r.id} value={r.id}>{r.title} · {r.createdAt}</option>)}</select></label>
       {!context.rubrics.length && <p>Create and confirm a rubric before importing.</p>}
       {importMode !== 'written' && <div className="space-y-3"><p>{importMode === 'oral' ? 'Customize presentation checks and private notes alongside the pinned rubric. Checks do not calculate grades.' : 'Assess the pinned rubric without attaching student work.'}</p><label className="block">Confirm student<select data-testid="marking-mode-student" className={field} value={modeEnrollment} onChange={e=>setModeEnrollment(e.target.value)}><option value="">Choose and confirm student</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label><button data-testid="marking-mode-create" className={button} disabled={!rubricId || !modeEnrollment || busy} onClick={()=>void action(async()=>{const attempt=await service.createModeAttempt(assessmentId,rubricId,importMode,modeEnrollment,validActor());const opened=await service.openSession(attempt.id,validActor());useSession(opened,attempt);})}>Create marking session</button></div>}
-      {importMode === 'written' && <><p className="text-sm">TXT, DOCX or pasted text: up to 10 files, 2 MB each and 10 MB per batch. Original files stay local.</p>
-      <label className="block">Student files<input data-testid="marking-files" className={field} type="file" multiple accept=".txt,.docx" onChange={async e => {const files=Array.from(e.target.files ?? []); e.target.value=''; try { const result=await parseMarkingFiles(files); validActor(); setIncoming(result.documents); setImportError(result.errors.map(e => `${e.name}: ${e.message}`).join('\n')); setMatch({}); setPrevious({}); } catch(e) { setImportError(e instanceof Error ? e.message : 'Files could not be parsed.'); }}} /></label>
-      <label className="block">Paste student text<textarea data-testid="marking-paste-text" className={field} value={paste} onChange={e=>setPaste(e.target.value)} /></label><button className={button} disabled={!paste.trim()} onClick={async()=>{try {const document=await createPastedDocument('Pasted text',paste);validActor();setIncoming([document]);setImportError('');setMatch({});setPrevious({});}catch(e){setImportError(String(e));}}}>Preview pasted text</button>
-      <label className="flex gap-2"><input type="checkbox" checked={groupFiles} onChange={e=>setGroupFiles(e.target.checked)} />Keep all these files as separate attachments within one student's attempt</label>
-      {importError && <p role="alert" className="text-red-700 whitespace-pre-wrap">{importError}</p>}
-      {incoming.map((document,index)=><div key={document.id} className="border rounded-lg p-3"><h3 className="font-semibold">{document.name}</h3><details><summary>Review normalized text ({document.text.length} characters)</summary><pre className="whitespace-pre-wrap max-h-64 overflow-auto">{document.text}</pre></details>{(!groupFiles || index===0) && <><label className="block">Confirm student for {document.name}<select className={field} value={match[document.id]||''} onChange={e=>{setMatch({...match,[document.id]:e.target.value});setPrevious({...previous,[document.id]:''});}}><option value="">Unmatched — resolve in queue</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label><label className="block">Attempt relationship<select className={field} value={previous[document.id]||''} onChange={e=>setPrevious({...previous,[document.id]:e.target.value})}><option value="">New attempt</option>{context.attempts.filter(a=>a.classEnrollmentId===match[document.id]).map(a=><option key={a.id} value={a.id}>Resubmission after {a.createdAt}</option>)}</select></label></>}</div>)}
-      <button data-testid="marking-import-confirm" className={`${button} bg-blue-700 text-white`} disabled={!incoming.length || !rubricId || busy} onClick={()=>void action(async()=>{const groups=groupFiles?[incoming]:incoming.map(d=>[d]);for(const documents of groups){const id=documents[0].id;await service.importAttempt(assessmentId,rubricId,documents,match[id]||null,previous[id]||null,validActor());validActor();setIncoming(items=>items.filter(item=>!documents.some(saved=>saved.id===item.id)));}setIncoming([]);setPaste('');setTab('queue');})}>Confirm import and roster matches</button>
-      <p className="text-xs">Each attempt is committed atomically. If a later item fails, earlier successful imports remain visible in the queue; duplicate imports are rejected.</p>
-      <section className="border-t pt-4 space-y-3" aria-label="Photographed work import"><h3 className="font-bold">Photographed handwritten pages</h3><p>Choose up to 10 JPEG, PNG or WebP pages, 8 MB each and 32 MB total. Originals stay local and unchanged. Crop, rotation and markup are saved separately. Text is not extracted.</p><label className="block">Photographed pages<input data-testid="marking-image-files" disabled={readingImages} className={field} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';void previewImages(files);}} /></label><label className="block">Take a page photo<input data-testid="marking-image-capture" disabled={readingImages} className={field} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';void previewImages(files,true);}} /></label><p className="text-xs">The camera option depends on your device; choose local files when capture is unavailable. Selecting local files replaces this unsaved preview; each camera photo adds a page.</p>{incomingImages.map(page=><div className="border rounded p-2" key={page.id}><p>{page.name} · {page.width} × {page.height}</p><img alt={`Preview ${page.name}`} className="max-h-48" src={`data:${page.mime};base64,${page.base64}`} /></div>)}<label className="block">Confirm photographed-page student<select data-testid="marking-image-student" className={field} value={modeEnrollment} onChange={e=>setModeEnrollment(e.target.value)}><option value="">Choose and confirm student</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label><button data-testid="marking-image-confirm" className={button} disabled={!incomingImages.length || !rubricId || !modeEnrollment || busy || readingImages} onClick={()=>void action(async()=>{const attempt=await service.importImageAttempt(assessmentId,rubricId,incomingImages,modeEnrollment,validActor());const opened=await service.openSession(attempt.id,validActor());useSession(opened,attempt);setIncomingImages([]);})}>Confirm image pages and student</button></section></>}
-    </section>}
-    {tab === 'queue' && <><MarkingModePicker disabled={busy} onSelect={mode=>void action(async()=>{setImportMode(mode);setTab(context.rubrics.length?'import':'rubric');})}/><section className="border rounded-xl bg-white p-4 space-y-3">{initialEnrollmentId && <label className="flex gap-2"><input type="checkbox" checked={allStudents} onChange={e=>setAllStudents(e.target.checked)}/>Show entire class queue</label>}<label>Queue filter<select className={field} value={filter} onChange={e=>setFilter(e.target.value)}>{['all','unmatched','ready','draft','finalized','revision'].map(f=><option key={f}>{f}</option>)}</select></label>{!attempts.length && <p>No submissions yet. Confirm a rubric, then import student work.</p>}
+      <div hidden={importMode !== 'written'}><EvidenceImportWizard context={context} rubricId={rubricId} identityKey={`${userId}:${epoch}:${assessmentId}`} validateTeacher={validActor} disabled={busy}
+        onDirtyChange={importDirtyChanged} onBusyChange={importBusyChanged}
+        onCreate={async group => {
+          await flush(); validActor();
+          const attempt = group.kind === 'pictures'
+            ? await service.importImageAttempt(assessmentId, rubricId, group.pages, group.enrollmentId, validActor())
+            : await service.importAttempt(assessmentId, rubricId, group.documents, group.enrollmentId, group.previousAttemptId, validActor());
+          return { attemptId: attempt.id };
+        }} onStart={async ids => {
+          await flush(); validActor();
+          const fresh = await service.getContext(assessmentId, validActor());
+          const attempt = fresh.attempts.find(item => item.id === ids[0]);
+          if (!attempt) throw new Error('Saved work is unavailable. Reopen it from the marking queue.');
+          const opened = await service.openSession(attempt.id, validActor());
+          useSession(opened, attempt); return true;
+        }} /></div>
+    </section>
+    {tab === 'queue' && <fieldset disabled={importBusy}><MarkingModePicker disabled={busy} onSelect={mode=>void action(async()=>{setImportMode(mode);setTab(context.rubrics.length?'import':'rubric');})}/><section className="border rounded-xl bg-white p-4 space-y-3">{initialEnrollmentId && <label className="flex gap-2"><input type="checkbox" checked={allStudents} onChange={e=>setAllStudents(e.target.checked)}/>Show entire class queue</label>}<label>Queue filter<select className={field} value={filter} onChange={e=>setFilter(e.target.value)}>{['all','unmatched','ready','draft','finalized','revision'].map(f=><option key={f}>{f}</option>)}</select></label>{!attempts.length && <p>No submissions yet. Confirm a rubric, then import student work.</p>}
       {attempts.filter(a=>filter==='all'||status(a)===filter).map(a=><div className="border-b py-3 flex flex-wrap gap-3 items-center" key={a.id}><div className="flex-1"><strong>{studentName(context,a.classEnrollmentId)}</strong><p className="text-sm">{a.documents.map(d=>d.name).concat((a.imagePages??[]).map(p=>p.name)).join(', ') || (a.mode==='oral'?'Oral presentation':'Rubric only')} · {a.mode ?? 'written'} · {status(a)} · {a.createdAt}</p></div>{a.classEnrollmentId ? <button data-testid={`marking-session-open-${a.id}`} className={button} disabled={busy} onClick={()=>void open(a,status(a)==='finalized')}>{status(a)==='finalized'?'Reopen as draft revision':'Open marking'}</button> : <label>Match student<select className={field} defaultValue="" onChange={e=>{const id=e.target.value;if(id)void action(async()=>{await service.matchAttempt(a.id,id,a.version,validActor());});}}><option value="">Choose and confirm student</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label>}
       <div className="space-y-2"><label className="flex items-center gap-2 text-sm"><input type="checkbox" aria-label={`Keep student work for ${a.id}`} checked={a.keepStudentWork === true} disabled={busy} onChange={event=>{const checked=event.target.checked;void action(async()=>{await service.setKeepStudentWork(a.id,a.version,checked,validActor());});}} />Keep student work</label><p className="text-xs">When off, archiving removes submitted files, source text and visual markup from this app. Marks, rubric, written feedback and revision records remain. Exporting does not archive.</p>
       {context.commits.filter(c=>c.attemptId===a.id).map(c=><div className="flex flex-wrap gap-2" key={c.id}><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id))}>Report {c.createdAt}</button><button data-testid={`marking-pdf-${c.id}`} className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id,true))}>{supportsDesktopPdfExport() ? 'Export marked PDF' : 'Download marked report for PDF'}</button></div>)}
@@ -235,22 +269,43 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
       {categoryReview && <CategoryRecoveryReview key={categoryReview.token} review={categoryReview} onCancel={()=>setCategoryReview(null)} onReconcile={mapping=>void action(async()=>{const current=sessionRef.current!;const next=await service.reconcileCategoryChanges(current.id,current.version,categoryReview.token,mapping,validActor());validActor();sessionRef.current=next;draftRef.current=next.draft;setSession(next);setDraft(next.draft);setCategoryReview(null);setConflictReview(false);setPreviewFinal(false);setSaveStatus('Saved locally');})}/>}
       {!!session.retainedCategoryJudgments?.length && <section className="border rounded bg-white p-3 space-y-2" aria-label="Retained category feedback"><h3 className="font-bold">Retained category feedback</h3><p>Original judgments from category recovery are preserved here and in backups. They do not change official marks.</p>{session.retainedCategoryJudgments.map((item,index)=><div className="border rounded p-2" key={index}><p>{item.category.categoryCode} · {item.judgment.assessed ? `${item.judgment.rawScore} (${item.judgment.inputFormat})` : 'Unassessed'} · original maximum {item.category.maxScore}</p><p className="whitespace-pre-wrap">{item.judgment.feedback}</p></div>)}</section>}
       <details className="bg-white border p-3"><summary>Rubric descriptors · {rubric.title}</summary>{rubric.criteria.map(c=><div key={c.id}><h3 className="font-semibold">{c.name} ({c.categoryCode})</h3>{rubric.levels.map(l=><p key={l}><strong>{l}:</strong> {c.descriptors[l]}</p>)}</div>)}</details>
-      {activeAttempt.documents.length > 0 && <div className="grid lg:grid-cols-2 gap-4"><article className="bg-white border rounded-xl p-4"><label>Document<select className={field} value={activeDocument} onChange={e=>setActiveDocument(e.target.value)}>{activeAttempt.documents.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><p className="text-xs my-2">Select a passage, then choose Add selected passage. Orange passages have overlapping feedback.</p><button className={button} disabled={session.status!=='draft'} onMouseDown={e=>e.preventDefault()} onClick={captureSelection}>Add selected passage</button><div ref={selectionRoot} data-testid="marking-document" tabIndex={0} className="whitespace-pre-wrap leading-8 mt-4 select-text" onMouseUp={captureSelection}>{renderDocument()}</div></article>
-      <aside className="bg-white border rounded-xl p-4 space-y-3"><h3 className="font-bold">Passage feedback</h3>{draft.pending && <div className="border rounded-lg p-3 space-y-2"><blockquote className="whitespace-pre-wrap">{draft.pending.quote}</blockquote><label>Criterion<select className={field} value={draft.pending.criterionId} onChange={e=>change({...draft,pending:{...draft.pending!,criterionId:e.target.value}})}>{rubric.criteria.map(c=><option key={c.id} value={c.id}>{c.name} ({c.categoryCode})</option>)}</select></label><label>Evidence level (optional)<select className={field} value={draft.pending.level} onChange={e=>change({...draft,pending:{...draft.pending!,level:e.target.value}})}><option value="">No evidence level</option>{rubric.levels.map(l=><option key={l}>{l}</option>)}</select></label><label>Comment<textarea data-testid="marking-feedback" className={field} value={draft.pending.text} onChange={e=>change({...draft,pending:{...draft.pending!,text:e.target.value}})} /></label><button data-testid="marking-comment-save" className={button} disabled={!draft.pending.text.trim() && !draft.pending.level} onClick={saveComment}>Save comment</button><button className={button} onClick={()=>{if(confirm('Discard this unfinished comment?'))change({...draft,pending:null});}}>Cancel comment</button></div>}
-      {selectedFeedbackIds.length > 0 && <p className="text-sm">Highlighted passage has {selectedFeedbackIds.length} feedback item(s). Matching feedback is outlined below.</p>}{draft.annotations.map(a=><div data-selected-feedback={selectedFeedbackIds.includes(a.id) ? 'true' : undefined} key={a.id} className={`border rounded-lg p-3 ${selectedFeedbackIds.includes(a.id) ? 'ring-2 ring-blue-500' : ''}`}><p className="text-xs">{rubric.criteria.find(c=>c.id===a.criterionId)?.name} · {a.level} · {activeAttempt.documents.find(d=>d.id===a.documentId)?.name}</p><blockquote>{a.quote}</blockquote><p className="whitespace-pre-wrap">{a.text}</p><button className={button} disabled={session.status!=='draft'} onClick={()=>{if(draft.pending){setError('Save or cancel your unfinished comment first.');return;}setActiveDocument(a.documentId);change({...draft,pending:{...a}});}}>Edit feedback</button><button className={button} disabled={session.status!=='draft'} onClick={()=>change({...draft,annotations:draft.annotations.filter(item=>item.id!==a.id),pending:draft.pending?.id===a.id?null:draft.pending})}>Delete feedback</button></div>)}
+      {activeAttempt.documents.length > 0 && <div className="grid lg:grid-cols-2 gap-4"><article className="bg-white border rounded-xl p-4"><label>Document<select className={field} value={activeDocument} onChange={e=>setActiveDocument(e.target.value)}>{activeAttempt.documents.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><p className="text-xs my-2">Select a passage, then choose Add selected passage. Orange passages have overlapping feedback.</p><button className={button} disabled={session.status!=='draft'} onMouseDown={e=>e.preventDefault()} onClick={captureSelection}>Write a comment on selected text</button><div ref={selectionRoot} data-testid="marking-document" tabIndex={0} className="whitespace-pre-wrap leading-8 mt-4 select-text" onMouseUp={captureSelection}>{renderDocument()}</div></article>
+      <aside className="bg-white border rounded-xl p-4 space-y-3"><h3 className="font-bold">Passage feedback</h3>{draft.pending && <div className="border rounded-lg p-3 space-y-2"><blockquote className="whitespace-pre-wrap">{draft.pending.quote}</blockquote><label>Criterion<select className={field} value={draft.pending.criterionId} onChange={e=>change({...draft,pending:{...draft.pending!,criterionId:e.target.value}})}>{rubric.criteria.map(c=><option key={c.id} value={c.id}>{c.name} ({c.categoryCode})</option>)}</select></label><label>Evidence level (optional)<select className={field} value={draft.pending.level} onChange={e=>change({...draft,pending:{...draft.pending!,level:e.target.value}})}><option value="">No evidence level</option>{classroomLevelOptions(rubric.levels).map(l=><option key={l}>{l}</option>)}</select></label><label>Comment<textarea data-testid="marking-feedback" className={field} value={draft.pending.text} onChange={e=>change({...draft,pending:{...draft.pending!,text:e.target.value}})} /></label><CommentBankPicker key={composerRevision} actor={actor!} disabled={busy} onDirtyChange={textComposerDirty} onSelect={text=>change({...draft,pending:{...draft.pending!,text}})}/><button data-testid="marking-comment-save" className={button} disabled={!draft.pending.text.trim() && !draft.pending.level} onClick={saveComment}>Save comment</button><button className={button} onClick={()=>{if(confirm('Discard this unfinished comment?'))change({...draft,pending:null});}}>Cancel comment</button></div>}
+      {!draft.pending && selectedFeedbackIds.length > 0 && <p className="text-sm">Highlighted passage has {selectedFeedbackIds.length} feedback item(s). Matching feedback is outlined below.</p>}{!draft.pending && draft.annotations.map(a=><div data-selected-feedback={selectedFeedbackIds.includes(a.id) ? 'true' : undefined} key={a.id} className={`border rounded-lg p-3 ${selectedFeedbackIds.includes(a.id) ? 'ring-2 ring-blue-500' : ''}`}><p className="text-xs">{rubric.criteria.find(c=>c.id===a.criterionId)?.name} · {a.level} · {activeAttempt.documents.find(d=>d.id===a.documentId)?.name}</p><blockquote>{a.quote}</blockquote><p className="whitespace-pre-wrap">{a.text}</p><button className={button} disabled={session.status!=='draft'} onClick={()=>{if(draft.pending){setError('Save or cancel your unfinished comment first.');return;}setActiveDocument(a.documentId);change({...draft,pending:{...a}});}}>Edit feedback</button><button className={button} disabled={session.status!=='draft'} onClick={()=>change({...draft,annotations:draft.annotations.filter(item=>item.id!==a.id),pending:draft.pending?.id===a.id?null:draft.pending})}>Delete feedback</button></div>)}
       </aside></div>}
-      {!!activeAttempt.imagePages?.length && <ImageMarkup key={activeAttempt.id} pages={activeAttempt.imagePages} feedback={draft.imageFeedback??[]} rubric={rubric} disabled={busy || session.status!=='draft'} onChange={imageFeedback=>change({...draft,imageFeedback})} onReorder={ids=>change({...draft,imageFeedback:ids.map(id=>draft.imageFeedback!.find(page=>page.pageId===id)!)})}/>}
+      {!!activeAttempt.imagePages?.length && <ImageMarkup actor={actor ?? undefined} onComposerDirtyChange={imageComposerDirty} key={`image:${activeAttempt.id}:${composerRevision}`} pages={activeAttempt.imagePages} feedback={draft.imageFeedback??[]} rubric={rubric} disabled={busy || session.status!=='draft'} onChange={imageFeedback=>change({...draft,imageFeedback})} onReorder={ids=>change({...draft,imageFeedback:ids.map(id=>draft.imageFeedback!.find(page=>page.pageId===id)!)})}/>}
       {activeAttempt.mode === 'oral' && draft.oral && <OralEvidenceEditor value={draft.oral} disabled={busy || session.status!=='draft'} onChange={oral=>change({...draft,oral})}/>}
-      <RubricEvidenceEditor rubric={rubric} value={draft.rubricFeedback} disabled={busy || session.status!=='draft'} onChange={rubricFeedback=>change({...draft,rubricFeedback})}/>
-      <section className="bg-white border rounded-xl p-4 space-y-4"><h3 className="font-bold">Review and official category judgments</h3><p>Evidence labels do not calculate grades. Select the official judgment using the assessment's grading scale. Unassessed is never zero; an existing official mark must be explicitly confirmed or changed.</p>
-      {displayJudgments.map(({judgment:j,index:i})=>{const cat=savedCategories.find(c=>c.id===j.assessmentCategoryId);const set=(patch:Partial<typeof j>)=>change({...draft,judgments:draft.judgments.map((old,n)=>n===i?{...old,...patch}:old)});return <fieldset className="border p-3 rounded-lg space-y-2" key={j.assessmentCategoryId} disabled={session.status!=='draft'}><legend>{cat?.categoryCode}</legend><label className="flex gap-2"><input type="checkbox" checked={j.assessed} onChange={e=>set({assessed:e.target.checked})} />Assess {cat?.categoryCode}</label>{j.assessed && <><label>Score representation<select className={field} value={j.inputFormat} onChange={e=>set({inputFormat:e.target.value as typeof j.inputFormat,rawScore:''})}><option value="scale_code">Existing achievement scale</option><option value="percentage">Direct percentage</option><option value="raw_points">Points earned</option><option value="descriptive">Descriptive evidence</option></select></label><label>Official {cat?.categoryCode} judgment{j.inputFormat==='scale_code'?<select aria-label={`Official ${cat?.categoryCode} judgment`} className={field} value={j.rawScore} onChange={e=>set({rawScore:e.target.value})}><option value="">Choose supported level</option>{Array.from(new Set([...(context.scaleOptions[cat?.id||'']||[]), ...(j.rawScore ? [j.rawScore] : [])])).map(l=><option key={l}>{l}</option>)}</select>:<input aria-label={`Official ${cat?.categoryCode} judgment`} className={field} value={j.rawScore} onChange={e=>set({rawScore:e.target.value})}/>}</label></>}<label>Category {cat?.categoryCode} feedback<textarea className={field} value={j.feedback} onChange={e=>set({feedback:e.target.value})}/></label></fieldset>})}
+      <RubricEvidenceEditor key={`rubric:${activeAttempt.id}:${composerRevision}`} actor={actor ?? undefined} annotations={draft.annotations} imageFeedback={draft.imageFeedback} onComposerDirtyChange={rubricComposerDirty} rubric={rubric} value={draft.rubricFeedback} disabled={busy || session.status!=='draft'} onChange={rubricFeedback=>change({...draft,rubricFeedback})}/>
+      <section className="bg-white border rounded-xl p-4 space-y-4"><h3 className="font-bold">Category levels and feedback</h3><p>Choose a category level when you are ready. Criterion evidence stays separate until you deliberately select a category level. Feedback only does not assign a grade.</p>
+      {displayJudgments.map(({judgment:j,index:i})=>{
+        const cat=savedCategories.find(c=>c.id===j.assessmentCategoryId);
+        const names: Record<string,string> = {K:'Knowledge/Understanding',T:'Thinking',C:'Communication',A:'Application'};
+        const set=(patch:Partial<typeof j>)=>change({...draft,judgments:draft.judgments.map((old,n)=>n===i?{...old,...patch}:old)});
+        return <fieldset className="border p-3 rounded-lg space-y-3" key={j.assessmentCategoryId} disabled={session.status!=='draft'} aria-label={`${cat?.categoryCode} category judgment`}>
+          <legend className="font-semibold">{cat?.categoryCode} — {names[cat?.categoryCode ?? '']}</legend>
+          <div className="flex gap-2" role="group" aria-label={`${cat?.categoryCode} feedback or level`}>
+            <button type="button" className={`${button} ${!j.assessed?'ring-2 ring-blue-700 font-semibold':''}`} aria-pressed={!j.assessed} onClick={()=>set({assessed:false,rawScore:'',inputFormat:'classroom_level'})}>{!j.assessed?'✓ ':''}Feedback only</button>
+            <button type="button" className={`${button} ${j.assessed?'ring-2 ring-blue-700 font-semibold':''}`} aria-pressed={j.assessed} onClick={()=>set({assessed:true,...(!j.assessed?{inputFormat:'classroom_level' as const,rawScore:''}:{})})}>{j.assessed?'✓ ':''}Level</button>
+          </div>
+          {j.assessed && <><LevelPicker label={`Official ${cat?.categoryCode} level`} value={j.inputFormat==='classroom_level'?j.rawScore:''} onChange={rawScore=>set({rawScore,inputFormat:'classroom_level',assessed:true})}/>
+            {j.inputFormat!=='classroom_level' && j.rawScore && <p>Previously recorded judgment: {j.rawScore}. Its original calculation is retained unless you select a new level.</p>}
+          </>}
+          <label className="block">Category {cat?.categoryCode} feedback<textarea className={field} value={j.feedback} onChange={e=>set({feedback:e.target.value})}/></label>
+        </fieldset>;
+      })}
+      <section aria-label="Overall KTCA summary" className="rounded-lg bg-blue-50 p-3"><h4 className="font-bold">Overall KTCA summary</h4>{displayJudgments.map(({judgment:j})=><p key={j.assessmentCategoryId}>{savedCategories.find(c=>c.id===j.assessmentCategoryId)?.categoryCode}: {j.assessed ? (j.rawScore || 'Choose a level') : (j.feedback.trim() ? 'Feedback only' : 'Unassessed')}</p>)}</section>
       {session.status==='finalized' && <button className={button} onClick={()=>void open(activeAttempt,true)}>Reopen as draft revision</button>}<label className="block">Overall student-facing feedback<textarea className={field} disabled={session.status!=='draft'} value={draft.overallFeedback} onChange={e=>change({...draft,overallFeedback:e.target.value})}/></label>
       {session.status==='draft' && <><button data-testid="marking-finalize-preview" className={`${button} bg-blue-700 text-white`} disabled={busy} onClick={()=>void action(async()=>{if(categoriesChanged){await reviewCategories();return;}if(draftRef.current?.pending){throw new Error('Save or cancel the pending comment before finalizing.');}if(draftRef.current?.imageFeedback?.some(page=>page.annotations.some(mark=>mark.kind==='comment'&&!mark.text.trim()))){throw new Error('Finish or delete each unfinished image comment before finalizing. Your draft is saved locally.');}setPreviewFinal(true);})}>Review finalization</button><button className={button} disabled={busy} onClick={()=>void action(async()=>{if(categoriesChanged){await reviewCategories();return;}setConflictReview(true);})}>Resolve newer manual mark conflict</button></>}
       <section className="border rounded-lg p-3 bg-slate-50" aria-label="Current official results"><h4 className="font-bold">Current official results</h4>{sortCategoriesForDisplay(context.categories).map(category=>{const result=currentResults.find(r=>r.assessmentCategoryId===category.id);return <div key={category.id}><p>{category.categoryCode}: {result ? `${result.rawScore} (${result.inputFormat})` : 'Unassessed'}</p>{result?.feedback && <p className="whitespace-pre-wrap">{result.feedback}</p>}</div>;})}<p className="whitespace-pre-wrap">{currentStudentAssessment?.overallFeedback || 'No official overall feedback.'}</p><p className="text-xs">The official markbook remains authoritative. Opening another attempt or changing this draft does not change these results.</p></section>
       {conflictReview && session.status==='draft' && <section className="border-2 border-amber-600 p-4 space-y-2" aria-label="Review official mark conflict"><h4 className="font-bold">Review the current official results above</h4><p>Your draft stays separate. Accepting the current results as a baseline allows a later confirmed finalization to replace them with your reviewed draft. It does not copy or change a mark now.</p><button className={button} onClick={()=>void action(async()=>{const shown=officialSignature(context);const fresh=await service.getContext(assessmentId,validActor());if(officialSignature(fresh)!==shown)throw new Error('Official results changed again. Review the current values before accepting them.');const next=await service.refreshBaseline(session.id,sessionRef.current!.version,validActor(),shown);validActor();sessionRef.current=next;draftRef.current=next.draft;setSession(next);setDraft(next.draft);setConflictReview(false);setPreviewFinal(false);setSaveStatus('Saved locally');})}>Accept reviewed official baseline</button><button className={button} onClick={()=>setConflictReview(false)}>Cancel conflict review</button></section>}
-      {previewFinal && <div className="border-2 border-blue-700 p-4 space-y-2" role="region" aria-label="Finalization preview"><h4 className="font-bold">Commit to {studentName(context,activeAttempt.classEnrollmentId)} · {context.assessment.title}</h4>{displayJudgments.map(({judgment:j})=><p key={j.assessmentCategoryId}>{context.categories.find(c=>c.id===j.assessmentCategoryId)?.categoryCode}: {j.assessed?j.rawScore:'Unassessed'} — {j.feedback}</p>)}<p className="whitespace-pre-wrap">{draft.overallFeedback}</p><p>This saves the category results and feedback to this student assessment. It replaces official results only after a successful atomic save.</p><button data-testid="marking-finalize-confirm" className={`${button} bg-blue-700 text-white`} disabled={busy} onClick={()=>void action(async()=>{await service.finalize(session.id,sessionRef.current!.version,validActor());const fresh=await service.getContext(assessmentId,validActor());const saved=fresh.sessions.find(s=>s.id===session.id)!;sessionRef.current=saved;setSession(saved);setPreviewFinal(false);onRefresh();})}>Confirm finalization</button></div>}
+      {previewFinal && <div className="border-2 border-blue-700 p-4 space-y-2" role="region" aria-label="Finalization preview"><h4 className="font-bold">Commit to {studentName(context,activeAttempt.classEnrollmentId)} · {context.assessment.title}</h4>{displayJudgments.map(({judgment:j})=><p key={j.assessmentCategoryId}>{context.categories.find(c=>c.id===j.assessmentCategoryId)?.categoryCode}: {j.assessed?j.rawScore:'Unassessed'} — {j.feedback}</p>)}<p className="whitespace-pre-wrap">{draft.overallFeedback}</p><p>This saves the category results and feedback to this student assessment. It replaces official results only after a successful atomic save.</p><button data-testid="marking-finalize-confirm" className={`${button} bg-blue-700 text-white`} disabled={busy} onClick={()=>void saveFinal('stay')}>Confirm finalization</button></div>}
+      <div className="flex flex-wrap gap-3 border-t pt-4" aria-label="Save assessment actions">
+        <button data-testid="marking-save-next" className="rounded-lg bg-blue-700 text-white font-semibold px-4 py-3 disabled:opacity-50" disabled={busy || categoriesChanged} onClick={()=>void saveFinal('next')}>Save and next student</button>
+        <button data-testid="marking-save-markbook" className="rounded-lg border-2 border-blue-700 text-blue-900 bg-white font-semibold px-4 py-3 disabled:opacity-50" disabled={busy || categoriesChanged} onClick={()=>void saveFinal('markbook')}>Save and return to Markbook</button>
+      </div>
+      <p className="text-sm">These actions save the reviewed category levels and feedback to this student's Markbook. Your work stays here if saving fails.</p>
       </section>
-    </section>}</>}
+    </section>}</fieldset>}
     {tab === 'archive' && <section className="space-y-4 rounded-xl border bg-white p-4" aria-label="Archived assessments"><h2 className="font-bold">Archive</h2><p>Retained assessment records: student, class, assessment and date; final category judgments and marks; rubric version and written feedback; revision history. Archived work is read-only.</p>{!(context.archivedAttempts ?? []).length && <p>No archived attempts for this assessment.</p>}{(context.archivedAttempts ?? []).filter(a=>allStudents || !initialEnrollmentId || a.classEnrollmentId===initialEnrollmentId).map(a=><article key={a.id} className="space-y-2 border-t py-3" data-testid={`marking-archived-${a.id}`}><h3 className="font-semibold">{studentName(context,a.classEnrollmentId)}</h3><p>{context.assessment.title} · Archived {a.archivedAt} · {a.keepStudentWork ? 'Student work retained' : 'Student work removed'}</p><p>Rubric: {context.rubrics.find(r=>r.id===a.rubricId)?.title}</p>{context.sessions.filter(item=>item.attemptId===a.id).sort((x,y)=>x.revision-y.revision).map(item=><details key={item.id}><summary>Revision {item.revision} · {item.status} · {item.updatedAt}</summary><p className="whitespace-pre-wrap">{item.draft.overallFeedback}</p>{item.draft.judgments.map(j=><p key={j.assessmentCategoryId}>{sessionCategories(item).find(c=>c.id===j.assessmentCategoryId)?.categoryCode}: {j.assessed?`${j.rawScore} (${j.inputFormat.replace(/_/g,' ')})`:'Not assessed'} · {j.feedback}</p>)}{(item.draft.rubricFeedback??[]).map(f=><p key={f.criterionId}>{context.rubrics.find(r=>r.id===a.rubricId)?.criteria.find(c=>c.id===f.criterionId)?.name}: {f.level} · {f.feedback}</p>)}{(item.draft.archivedFeedback??[]).map(f=><p key={f.id} className="whitespace-pre-wrap">{f.level} {f.text}</p>)}{item.draft.oral && <section aria-label="Private archived observations"><h4 className="font-semibold">Private presentation observations</h4><p className="whitespace-pre-wrap">{item.draft.oral.notes}</p>{item.draft.oral.items.map(check=><p key={check.id}>{check.checked?'Checked':'Unchecked'}: {check.label} · {check.note}</p>)}</section>}{item.retainedCategoryJudgments?.map((retained,index)=><p key={`retained-${index}`}>Retained {retained.category.categoryCode}: {retained.judgment.rawScore} · {retained.judgment.feedback}</p>)}</details>)}{context.commits.filter(c=>c.attemptId===a.id).map(c=><div className="flex flex-wrap gap-2" key={c.id}><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id))}>Report {c.createdAt}</button><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id,true))}>{supportsDesktopPdfExport() ? 'Export marked PDF' : 'Download marked report for PDF'}</button></div>)}</article>)}</section>}
     </fieldset>
   </div>;

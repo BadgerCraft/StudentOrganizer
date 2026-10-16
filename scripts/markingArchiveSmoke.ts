@@ -1,3 +1,5 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
+import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { preview } from 'vite';
@@ -31,6 +33,7 @@ async function waitRecord(page: Page, table: string, predicate: (row: any) => bo
   throw new Error(`Expected fictional ${table} row was not persisted.`);
 }
 async function selectText(page: Page, length: number) {
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
   await page.getByTestId('marking-document').evaluate((root, length) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), node = walk.nextNode();
     if (!node || (node.textContent?.length ?? 0) < length) throw new Error('Missing fictional selection');
@@ -56,7 +59,7 @@ try {
     if (route.request().url().startsWith(origin + '/')) return route.continue();
     external.push(route.request().url()); return route.abort();
   });
-  await page.goto(origin);
+  await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   await page.waitForFunction(() => !!sessionStorage.getItem('ontario_active_user_id'));
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
@@ -69,22 +72,16 @@ try {
   const assessment = await waitRecord(page, 'assessments', row => row.title === 'Fictional Archive Acceptance');
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
-  await page.getByLabel('Paste rubric text or table').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nReasoning\tLimited\tSome\tClear\tThorough');
-  await page.getByRole('button', { name: 'Preview pasted rubric', exact: true }).click();
+  await revealRubricPaste(page); await page.getByTestId('marking-rubric-paste').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nReasoning\tLimited\tSome\tClear\tThorough');
+  await page.getByTestId('marking-rubric-preview').click();
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional Archive Rubric');
-  await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
-  await page.getByRole('checkbox', { name: /reviewed the descriptor matrix/ }).check();
+  await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
+  await page.getByTestId('marking-rubric-confirm').check();
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
-  await page.getByTestId('marking-files').setInputFiles([
+  const students = await importDocumentsForStudents(page, [
     { name: 'Fictional-remove.txt', mimeType: 'text/plain', buffer: Buffer.from(removedSource) },
     { name: 'Fictional-keep.txt', mimeType: 'text/plain', buffer: Buffer.from(retainedSource) }
   ]);
-  const firstSelect = page.getByLabel('Confirm student for Fictional-remove.txt'); await firstSelect.waitFor();
-  const students = await firstSelect.locator('option').evaluateAll(nodes => nodes.map(node => ({ value: (node as HTMLOptionElement).value, label: node.textContent! })).filter(option => !!option.value));
-  assert.ok(students.length >= 2);
-  await firstSelect.selectOption(students[0].value);
-  await page.getByLabel('Confirm student for Fictional-keep.txt').selectOption(students[1].value);
-  await page.getByTestId('marking-import-confirm').click();
   const first = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[0].value);
   const second = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[1].value);
   for (const [attempt, source, keep] of [[first, removedSource, false], [second, retainedSource, true]] as const) {
@@ -93,8 +90,7 @@ try {
     await selectText(page, source.length);
     await page.getByTestId('marking-feedback').fill('Fictional teacher passage feedback retained after archive.');
     await page.getByTestId('marking-comment-save').click();
-    await page.getByRole('checkbox', { name: 'Assess T', exact: true }).check();
-    await page.getByRole('combobox', { name: 'Official T judgment', exact: true }).selectOption('3+');
+    await chooseOfficialLevel(page, 'T', '3+');
     await page.getByLabel('Category T feedback').fill('Fictional archived category feedback.');
     await page.getByLabel('Overall student-facing feedback').fill('Fictional archived overall feedback.');
     await page.getByRole('button', { name: 'Save now', exact: true }).click();

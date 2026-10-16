@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runReportPdfDesktopAcceptance } from './reportPdfDesktopAcceptance';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import assert from 'node:assert/strict';
@@ -41,6 +42,8 @@ async function waitForRecords(page: Page, table: string, matches: (rows: any[]) 
 }
 async function openClass(page: Page) {
   await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'visible', timeout: 30000 });
+  await Promise.race([page.getByPlaceholder('Enter Teacher here').waitFor(), page.locator('[data-testid^="select-teacher-"]').first().waitFor()]);
+  if (await page.getByPlaceholder('Enter Teacher here').isVisible()) await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'hidden' });
   await page.locator('[data-testid="nav-dashboard-btn"]').click();

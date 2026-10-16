@@ -2,7 +2,6 @@ import { listAccessibleClassSections } from './services/authHelper';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
-import { seedDatabase } from './db/seeds';
 import { Header } from './components/Header';
 import { BugReportModal } from './components/BugReportModal';
 import { DashboardView } from './components/DashboardView';
@@ -63,9 +62,9 @@ export function App() {
   const [markingTarget, setMarkingTarget] = useState<{assessmentId:string; enrollmentId?:string} | null>(null);
   useEffect(() => {
     const workspace = document.getElementById('app-workspace');
-    workspace?.toggleAttribute('inert', !!markingTarget);
+    workspace?.toggleAttribute('inert', !!markingTarget || isTeacherSelectorOpen);
     return () => workspace?.removeAttribute('inert');
-  }, [markingTarget]);
+  }, [markingTarget, isTeacherSelectorOpen]);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
@@ -86,11 +85,6 @@ export function App() {
       setSuspendedProfileEnrollmentId(null);
     }
   };
-
-  // Initialize DB Seeds first
-  useEffect(() => {
-    seedDatabase(db).catch(console.error);
-  }, []);
 
   // Resolve explicit session identity on mount (independent of active class)
   useEffect(() => {
@@ -133,7 +127,7 @@ export function App() {
     setIsTeacherSelectorOpen(true);
   };
 
-  const handleSelectTeacher = async (userId: UUID) => {
+  const handleSelectTeacher = async (userId: UUID, keepOpen = false) => {
     // Synchronously commit selection to prevent any cancel/close callback from rolling back
     isSelectionCommittedRef.current = true;
     const prevId = switchingFromTeacherIdRef.current;
@@ -145,7 +139,7 @@ export function App() {
       setAppIdentity({ userId: identity.userId, deviceId: identity.deviceId });
       setCurrentUser(identity.user);
       setIdentityError(null);
-      setIsTeacherSelectorOpen(false);
+      setIsTeacherSelectorOpen(keepOpen);
     } catch (err: any) {
       // If selection failed, restore previous switch ref so user can still cancel or retry
       isSelectionCommittedRef.current = false;
@@ -157,8 +151,10 @@ export function App() {
   };
 
   const handleCancelSwitchTeacher = async () => {
-    // If a selection has been committed or is in progress, ignore cancellation
+    // Editing explicitly chooses a teacher while keeping the profile dialog open.
+    // Its close action keeps that actor, rather than restoring a previous one.
     if (isSelectionCommittedRef.current) {
+      setIsTeacherSelectorOpen(false);
       return;
     }
 
@@ -180,7 +176,7 @@ export function App() {
   };
 
   // Live queries
-  const userPref = useLiveQuery(() => db.userPreferences.toCollection().first());
+  const userPref = useLiveQuery(() => appIdentity ? db.userPreferences.where('userId').equals(appIdentity.userId).first() : undefined, [appIdentity?.userId]);
   const classSections = useLiveQuery(() => listAccessibleClassSections(db, appIdentity?.userId ?? null), [appIdentity?.userId]) || [];
   const courses = useLiveQuery(() => db.courses.filter(c => c.deletedAt === null).toArray()) || [];
   const terms = useLiveQuery(() => db.terms.filter(t => t.deletedAt === null).toArray()) || [];
@@ -434,7 +430,7 @@ export function App() {
       <div
         id="app-workspace"
         className={`flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
-        aria-hidden={isSelectionRequired || markingTarget ? 'true' : undefined}
+        aria-hidden={isTeacherSelectorOpen || markingTarget ? 'true' : undefined}
       >
         {/* Persistent Navigation Header */}
         <Header
@@ -686,7 +682,7 @@ export function App() {
       </div>
 
       {markingTarget && appIdentity && <div className="fixed inset-0 z-40 overflow-auto bg-slate-50" role="dialog" aria-modal="true" aria-label="Assessment marking">
-        <MarkingWorkspace key={`${appIdentity.userId}:${markingTarget.assessmentId}`} assessmentId={markingTarget.assessmentId} initialEnrollmentId={markingTarget.enrollmentId} userId={appIdentity.userId} onClose={() => setMarkingTarget(null)} onSwitchTeacher={handleStartSwitchTeacher} onRefresh={() => {}} />
+        <MarkingWorkspace key={`${appIdentity.userId}:${markingTarget.assessmentId}`} assessmentId={markingTarget.assessmentId} initialEnrollmentId={markingTarget.enrollmentId} userId={appIdentity.userId} onClose={() => setMarkingTarget(null)} onReturnToMarkbook={() => { setMarkingTarget(null); handleViewChange('markbook'); }} onSwitchTeacher={handleStartSwitchTeacher} onRefresh={() => {}} />
       </div>}
 
       {/* Teacher Selector Modal */}

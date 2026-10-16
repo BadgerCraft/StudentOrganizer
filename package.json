@@ -32,7 +32,8 @@
     "test:ui:cleanup": "tsx scripts/uiRepairsSmoke.ts",
     "test:marking:acceptance": "npm run test:marking:inputs && npm run test:marking:authority && npm run test:marking:portability",
     "test:marking:pdf": "tsx scripts/annotatedReportSmoke.ts",
-    "test:marking:archive": "tsx scripts/markingArchiveSmoke.ts"
+    "test:marking:archive": "tsx scripts/markingArchiveSmoke.ts",
+    "test:classroom": "node --import tsx scripts/teacherProfilesSmoke.ts && node --import tsx scripts/classroomUseSmoke.ts && node --import tsx scripts/classroomEvidencePopupSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

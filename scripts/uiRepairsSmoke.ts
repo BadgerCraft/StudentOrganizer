@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { preview } from 'vite';
@@ -63,6 +64,7 @@ try {
     const page = await context.newPage();
     try {
       await page.goto(origin);
+      await installFictionalClassroom(page);
       if (name !== 'teacher-confirmation') {
         await page.locator('[data-testid^="select-teacher-"]').first().click();
         await page.getByTestId('teacher-selector-modal').waitFor({ state: 'hidden' });

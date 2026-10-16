@@ -24,6 +24,7 @@ import { MarkbookDomainService } from '../services/markbookService';
 import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
+import { LevelPicker } from './LevelPicker';
 import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 
 interface MarkbookViewProps {
@@ -51,6 +52,16 @@ export function calculateAssessmentSummary(enrollmentId: UUID, assessment: Asses
     [assessment], categories, assignments, results, { ...policy, excludeFormative: false }, []);
 }
 
+/** Display only the saved representation; never infer a level from a percentage. */
+export function getMarkbookResultLabel(result: CategoryResult | null | undefined): string {
+  if (!result) return 'Unassessed';
+  if (result.inputFormat === 'classroom_level' || result.inputFormat === 'scale_code') {
+    if (result.rawScore.trim()) return result.rawScore;
+  }
+  if (result.normalizedPercentage !== null) return 'Direct mark';
+  return result.feedback?.trim() || result.rawScore.trim() ? 'Feedback only' : 'Unassessed';
+}
+
 export const MarkbookView: React.FC<MarkbookViewProps> = ({
   classSectionId,
   reportingPeriodId,
@@ -69,6 +80,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   onOpenMarking
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showPercentages, setShowPercentages] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'summative' | 'formative'>('all');
   const [filterCategory, setFilterCategory] = useState<'all' | 'K' | 'T' | 'C' | 'A'>('all');
   const [sortField, setSortField] = useState<'lastName' | 'overall'>('lastName');
@@ -99,7 +111,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
   } | null>(null);
 
   const [editScore, setEditScore] = useState('');
-  const [editFormat, setEditFormat] = useState<ScoreInputFormat>('scale_code');
+  const [editFormat, setEditFormat] = useState<ScoreInputFormat>('classroom_level');
   const [editCompletion, setEditCompletion] = useState<CompletionStatus>('complete');
   const [editIsLate, setEditIsLate] = useState(false);
   const [editFeedback, setEditFeedback] = useState('');
@@ -226,14 +238,14 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
       categoryCode: category.categoryCode,
       maxScore: category.maxScore,
       currentRawScore: cr?.rawScore || '',
-      currentFormat: cr?.inputFormat || 'scale_code',
+      currentFormat: cr?.inputFormat || 'classroom_level',
       currentCompletion: sa?.completionStatus || 'complete',
       currentIsLate: sa?.isLate || false,
       currentFeedback: cr?.feedback || ''
     });
 
     setEditScore(cr?.rawScore || '');
-    setEditFormat(cr?.inputFormat || 'scale_code');
+    setEditFormat(cr?.inputFormat || 'classroom_level');
     setEditCompletion(sa?.completionStatus || 'complete');
     setEditIsLate(sa?.isLate || false);
     setEditFeedback(cr?.feedback || '');
@@ -364,7 +376,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
         <div className="flex items-center space-x-3 text-xs">
           <span className="flex items-center space-x-1">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-            <span className="text-slate-600">K (Knowledge)</span>
+            <span className="text-slate-600">K (Knowledge/Understanding)</span>
           </span>
           <span className="flex items-center space-x-1">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
@@ -384,7 +396,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
       <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
         <button type="button" onClick={() => { setFilterCategory('all'); setCollapsedAssessments(new Set(filteredAssessments.map(a => a.id))); }} className="text-blue-700 font-bold border rounded-lg px-3 py-2">Collapse assessment details</button>
         <button type="button" onClick={() => setCollapsedAssessments(new Set())} className="text-blue-700 font-bold border rounded-lg px-3 py-2">Expand assessment details</button>
-        <span className="text-slate-600">Assessment summaries use class category weights. Formative summaries do not change the course grade.</span>
+        <button type="button" aria-pressed={showPercentages} onClick={() => setShowPercentages(value => !value)} className="inline-flex items-center gap-2 text-blue-700 font-bold border rounded-lg px-3 py-2"><Eye className="w-4 h-4" />{showPercentages ? 'Hide percentage details' : 'Show percentage details'}</button>
+        <span className="text-slate-600">Recorded levels appear as assigned. Calculated summaries have percentage details; historical percentages are never converted to levels. Assessment summaries use class category weights. Formative summaries do not change the course grade.</span>
       </div>
 
       {/* Spreadsheet Master Markbook Table */}
@@ -408,6 +421,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                   </button>
                 </th>
 
+                {showPercentages && <>
                 {/* Overall Course Mark */}
                 <th className="px-4 py-3 font-extrabold text-blue-900 bg-blue-50/70 border-r border-blue-200 text-center w-28">
                   <button
@@ -417,25 +431,26 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                     }}
                     className="flex items-center justify-center space-x-1 w-full"
                   >
-                    <span>Overall %</span>
+                    <span>Course summary</span>
                     <ArrowUpDown className="w-3 h-3 text-blue-400" />
                   </button>
                 </th>
 
                 {/* K, T, C, A Summary Columns */}
-                <th className="px-2.5 py-3 font-bold text-blue-700 bg-blue-50/40 border-r border-slate-200 text-center w-16">
-                  K %
+                <th className="px-3 py-3 font-bold text-blue-700 bg-blue-50/40 border-r border-slate-200 text-center min-w-[150px]">
+                  Knowledge/Understanding
                 </th>
-                <th className="px-2.5 py-3 font-bold text-purple-700 bg-purple-50/40 border-r border-slate-200 text-center w-16">
-                  T %
+                <th className="px-3 py-3 font-bold text-purple-700 bg-purple-50/40 border-r border-slate-200 text-center min-w-[120px]">
+                  Thinking
                 </th>
-                <th className="px-2.5 py-3 font-bold text-emerald-700 bg-emerald-50/40 border-r border-slate-200 text-center w-16">
-                  C %
+                <th className="px-3 py-3 font-bold text-emerald-700 bg-emerald-50/40 border-r border-slate-200 text-center min-w-[120px]">
+                  Communication
                 </th>
-                <th className="px-2.5 py-3 font-bold text-amber-700 bg-amber-50/40 border-r border-slate-200 text-center w-16">
-                  A %
+                <th className="px-3 py-3 font-bold text-amber-700 bg-amber-50/40 border-r border-slate-200 text-center min-w-[120px]">
+                  Application
                 </th>
 
+                </>}
                 {/* Assessment Category Columns */}
                 {columnDefs.map(({ assessment, category }) => (
                   <th
@@ -447,7 +462,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                       <span className="font-bold truncate text-slate-900 block" title={assessment.title}>
                         {assessment.title}
                       </span>
-                      {category && <span className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${getCategoryColor(category.categoryCode)}`}>
+                      {category && <span title={category.categoryCode === 'K' ? 'Knowledge/Understanding' : category.categoryCode === 'T' ? 'Thinking' : category.categoryCode === 'C' ? 'Communication' : 'Application'} className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${getCategoryColor(category.categoryCode)}`}>
                         {category.categoryCode}
                       </span>}
                     </div>
@@ -501,11 +516,12 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                       </div>
                     </td>
 
+                    {showPercentages && <>
                     {/* Overall Calculated % */}
                     <td className="px-4 py-2.5 font-extrabold text-center border-r border-blue-200 bg-blue-50/20 text-blue-900 text-sm">
                       {gradeResult.finalOverall !== null ? (
                         <span className="flex items-center justify-center space-x-1">
-                          <span>{gradeResult.finalOverall}%</span>
+                          <span>{showPercentages ? `${gradeResult.finalOverall}%` : 'Calculated'}</span>
                           {gradeResult.isOverridden && (
                             <span className="text-[10px] text-amber-600 font-bold" title={gradeResult.overrideRationale || 'Manual Override'}>
                               *
@@ -519,18 +535,19 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
 
                     {/* K, T, C, A Category Averages */}
                     <td className="px-2 py-2.5 text-center font-bold text-blue-700 border-r border-slate-200">
-                      {kScore !== null ? `${kScore.toFixed(0)}%` : '--'}
+                      {kScore !== null ? (showPercentages ? `${kScore.toFixed(policy.decimalPrecision)}%` : 'Calculated') : 'Unassessed'}
                     </td>
                     <td className="px-2 py-2.5 text-center font-bold text-purple-700 border-r border-slate-200">
-                      {tScore !== null ? `${tScore.toFixed(0)}%` : '--'}
+                      {tScore !== null ? (showPercentages ? `${tScore.toFixed(policy.decimalPrecision)}%` : 'Calculated') : 'Unassessed'}
                     </td>
                     <td className="px-2 py-2.5 text-center font-bold text-emerald-700 border-r border-slate-200">
-                      {cScore !== null ? `${cScore.toFixed(0)}%` : '--'}
+                      {cScore !== null ? (showPercentages ? `${cScore.toFixed(policy.decimalPrecision)}%` : 'Calculated') : 'Unassessed'}
                     </td>
                     <td className="px-2 py-2.5 text-center font-bold text-amber-700 border-r border-slate-200">
-                      {aScore !== null ? `${aScore.toFixed(0)}%` : '--'}
+                      {aScore !== null ? (showPercentages ? `${aScore.toFixed(policy.decimalPrecision)}%` : 'Calculated') : 'Unassessed'}
                     </td>
 
+                    </>}
                     {/* Assessment Subcolumn Cells */}
                     {columnDefs.map(({ assessment, category }) => {
                       const sa = studentAssessments.find(
@@ -541,7 +558,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                         // Include formative evidence here only, without modifying the saved/course policy.
                         const summary = calculateAssessmentSummary(enr.id, assessment, categories, studentAssessments, categoryResults, policy);
                         return <td key={`${assessment.id}-summary`} data-testid={`markbook-summary-${enr.id}-${assessment.id}`} className="px-3 py-2 text-center border-r border-slate-200">
-                          <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? `${summary.finalOverall}%` : '--'}</span>
+                          <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? (showPercentages ? `${summary.finalOverall}%` : 'Calculated') : sa?.overallFeedback?.trim() ? 'Feedback only' : 'Unassessed'}</span>
                           {sa?.completionStatus === 'missing' && <span className="block text-[10px] text-red-700">Missing</span>}
                           {sa?.isLate && <span className="block text-[10px] text-amber-700">Late</span>}
                           <button type="button" onClick={() => toggleAssessment(assessment.id)} aria-label={`Edit ${assessment.title} categories for ${std.preferredName || std.firstName} ${std.lastName}`} className="block mx-auto mt-1 text-blue-700 underline">Edit categories</button>
@@ -559,6 +576,10 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                         <td
                           key={`${assessment.id}-${category.id}`}
                           data-testid={`markbook-cell-${enr.id}-${category.id}`}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Edit ${assessment.title}, ${category.categoryCode}, ${std.preferredName || std.firstName} ${std.lastName}`}
+                          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleCellClick(enr.id, assessment, category, `${std.preferredName || std.firstName} ${std.lastName}`); } }}
                           onClick={() => handleCellClick(enr.id, assessment, category, `${std.preferredName || std.firstName} ${std.lastName}`)}
                           className="px-3 py-2 text-center border-r border-slate-200 hover:bg-blue-100/40 cursor-pointer transition select-none group"
                         >
@@ -574,10 +595,11 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                               </span>
                             ) : cr ? (
                               <span className="font-bold text-slate-800 text-xs">
-                                {cr.rawScore}
+                                {getMarkbookResultLabel(cr)}
+                                {showPercentages && cr.normalizedPercentage !== null && <span className="block text-[10px] font-normal text-slate-600">{cr.normalizedPercentage}%</span>}
                               </span>
                             ) : (
-                              <span className="text-slate-600 group-hover:text-slate-600">--</span>
+                              <span className="text-slate-600 group-hover:text-slate-600">Unassessed</span>
                             )}
 
                             {/* Orthogonal Late Badge (never overwriting mark!) */}
@@ -611,6 +633,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
               </div>
               <button
                 onClick={() => setActiveCell(null)}
+                aria-label="Close result editor"
                 className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
               >
                 <X className="w-5 h-5" />
@@ -635,43 +658,21 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                 </span>
               </div>
 
-              {/* Score Input & Format */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Result Score
-                  </label>
-                  <input
-                    type="text"
-                    value={editScore}
-                    onChange={e => setEditScore(e.target.value)}
-                    placeholder="e.g. 4+, 88%, 18/20"
-                    className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    autoFocus
-                  />
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2" aria-label="Result type">
+                  <button type="button" aria-pressed={editFormat === 'descriptive'} onClick={() => { setEditFormat('descriptive'); setEditScore(''); }} className="border-2 rounded-lg px-3 py-2 font-semibold">{editFormat === 'descriptive' ? '✓ ' : ''}Feedback only</button>
+                  <button type="button" aria-pressed={editFormat === 'classroom_level'} onClick={() => { if (editFormat !== 'classroom_level') setEditScore(''); setEditFormat('classroom_level'); }} className="border-2 rounded-lg px-3 py-2 font-semibold">{editFormat === 'classroom_level' ? '✓ ' : ''}Level</button>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Score Format
-                  </label>
-                  <select
-                    value={editFormat}
-                    onChange={e => setEditFormat(e.target.value as ScoreInputFormat)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="scale_code">Ontario Level (4+, 3, etc.)</option>
-                    <option value="percentage">Percentage (0-100%)</option>
-                    <option value="raw_points">Raw Points (e.g. 17/20)</option>
-                    <option value="descriptive">Descriptive Only</option>
-                  </select>
-                </div>
+                {editFormat === 'classroom_level' ? <LevelPicker value={editScore} onChange={setEditScore} label={`Assigned ${activeCell.categoryCode} level`} /> : editFormat === 'descriptive' ? <p className="text-xs text-slate-600">Feedback is saved without a grade.</p> : <div className="space-y-2">
+                  <p className="text-xs text-slate-600">This saved result uses its original {editFormat === 'scale_code' ? 'assessment scale' : editFormat === 'raw_points' ? 'points' : 'percentage'}. Choose Level to assign a classroom level explicitly.</p>
+                  <label className="block text-xs font-bold">Existing result<input aria-label="Existing result" value={editScore} onChange={event => setEditScore(event.target.value)} className="block w-full border rounded-lg p-2" /></label>
+                </div>}
               </div>
 
               {/* Orthogonal Status Flags (Late, Missing, Excused, Incomplete) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Completion & Status Flags (Orthogonal)
+                  Completion status
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -758,11 +759,11 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                   type="button"
                   onClick={() => {
                     setEditScore('');
-                    setEditFeedback('');
+                    setEditFormat('descriptive');
                   }}
                   className="text-xs text-red-600 hover:underline"
                 >
-                  Clear Score
+                  Clear level
                 </button>
                 <div className="flex space-x-2">
                   <button

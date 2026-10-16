@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
-import { calculateAssessmentSummary, MarkbookView } from './MarkbookView';
+import { calculateAssessmentSummary, getMarkbookResultLabel, MarkbookView } from './MarkbookView';
+import { LevelPicker } from './LevelPicker';
+import { CLASSROOM_LEVELS } from '../services/classroomLevels';
 import { AssessmentHubView } from './AssessmentHubView';
 import type { AssessmentCategory, CategoryResult, StudentAssessment } from '../types/schema';
 
@@ -63,4 +65,45 @@ describe('assessment display preserves persisted grading inputs', () => {
     for (const category of f.categories) expect(html).toContain(`markbook-cell-${f.enrollment.id}-${category.id}`);
     expect(f.categories).toEqual(before);
   });
+  it('shows assigned levels by default and distinguishes unassessed, feedback-only, and historical direct marks', async () => {
+    const f = await fixture();
+    const students = await db.students.toArray();
+    const result = f.results[0];
+    const results: CategoryResult[] = [
+      { ...result, id: 'assigned', assessmentCategoryId: 'fictional-category-K', inputFormat: 'classroom_level', rawScore: '4−(High)', normalizedPercentage: 85 },
+      { ...result, id: 'feedback', assessmentCategoryId: 'fictional-category-T', inputFormat: 'descriptive', rawScore: '', normalizedPercentage: null, feedback: 'Fictional feedback.' },
+      { ...result, id: 'historical', assessmentCategoryId: 'fictional-category-C', inputFormat: 'percentage', rawScore: '86.4%', normalizedPercentage: 86.4 },
+    ];
+    const render = (currentResults: CategoryResult[]) => renderToStaticMarkup(<MarkbookView classSectionId={f.section.id} reportingPeriodId={null} policy={f.policy}
+      enrollments={[f.enrollment]} students={students} assessments={[f.assessment]} categories={f.categories}
+      studentAssessments={[f.assignment]} categoryResults={currentResults} overrides={[]} onRefresh={() => {}} onOpenStudentProfile={() => {}} />);
+    const before = structuredClone(results);
+    const html = render(results);
+    const cellText = (code: string) => html.match(new RegExp(`data-testid="markbook-cell-${f.enrollment.id}-fictional-category-${code}"[\\s\\S]*?<\\/td>`))?.[0]?.replace(/<[^>]+>/g, '');
+    expect(cellText('K')).toContain('4−(High)');
+    expect(cellText('T')).toContain('Feedback only');
+    expect(cellText('C')).toContain('Direct mark');
+    expect(cellText('A')).toContain('Unassessed');
+    expect(html).toContain('Show percentage details');
+    expect(html).not.toContain('86.4%');
+    expect(html).toContain('Knowledge/Understanding');
+    expect(html).toContain('Thinking');
+    expect(html).toContain('Communication');
+    expect(html).toContain('Application');
+    expect(render([{ ...results[0], rawScore: '4+(med)', normalizedPercentage: 98 }, ...results.slice(1)])).toContain('4+(med)');
+    expect(results).toEqual(before);
+    expect(getMarkbookResultLabel(undefined)).toBe('Unassessed');
+    expect(getMarkbookResultLabel({ ...result, inputFormat: 'scale_code', rawScore: 'R', normalizedPercentage: 35 })).toBe('R');
+  });
+
+  it('renders all 17 level choices with an explicit selected state and no implicit default selection', () => {
+    const unselected = renderToStaticMarkup(<LevelPicker value="" onChange={() => {}} />);
+    expect(unselected.match(/aria-pressed="false"/g)).toHaveLength(17);
+    for (const level of CLASSROOM_LEVELS) {
+      const html = renderToStaticMarkup(<LevelPicker value={level.label} onChange={() => {}} />);
+      expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+      expect(html).toContain(`</span>${level.label}</button>`);
+    }
+  });
+
 });

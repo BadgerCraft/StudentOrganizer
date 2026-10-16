@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { LevelPicker } from '../../components/LevelPicker';
+import { CLASSROOM_LEVEL_LABELS } from '../../services/classroomLevels';
+import { CommentBankPicker } from './CommentBankPicker';
 import { markingImageDecodeBytes } from '../importImages';
 import { displayToOriginal, imageDisplaySize, originalToDisplay } from '../imageGeometry';
-import { MARKING_LIMITS, type MarkingImagePage, type MarkingPageFeedback, type MarkingPoint, type MarkingRubric, type MarkingVisualAnnotation } from '../types';
+import { MARKING_LIMITS, type MarkingActor, type MarkingImagePage, type MarkingPageFeedback, type MarkingPoint, type MarkingRubric, type MarkingVisualAnnotation } from '../types';
 
 export interface ImageMarkupProps {
   pages: MarkingImagePage[];
@@ -11,11 +14,13 @@ export interface ImageMarkupProps {
   disabled: boolean;
   /** Reorders retained pages only; the original fields and bytes are never changed. */
   onReorder?: (pageIds: string[]) => void;
+  actor?: MarkingActor;
+  onComposerDirtyChange?: (dirty: boolean) => void;
 }
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, disabled, onReorder }: ImageMarkupProps) {
+export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, disabled, onReorder, actor, onComposerDirtyChange }: ImageMarkupProps) {
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
   const pages = feedback.map(item => originalPages.find(page => page.id === item.pageId)).filter((page): page is MarkingImagePage => Boolean(page));
   for (const page of originalPages) if (!pages.some(item => item.id === page.id)) pages.push(page);
@@ -23,6 +28,14 @@ export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, 
   const [tool, setTool] = useState<MarkingVisualAnnotation['kind']>('pen');
   const [color, setColor] = useState<MarkingVisualAnnotation['color']>('red');
   const [selected, setSelected] = useState<string | null>(null);
+  const [bankDirty, setBankDirty] = useState(false);
+  const allowLeavingComment = () => {
+    if (bankDirty && !window.confirm('Discard the unsaved comment bank import? Your recorded comment will be kept.')) return false;
+    if (bankDirty) onComposerDirtyChange?.(false);
+    setBankDirty(false); return true;
+  };
+  const selectMark = (id: string | null) => { if (id !== selected && allowLeavingComment()) setSelected(id); };
+  const changeVisiblePage = (id: string) => { if (allowLeavingComment()) setPageId(id); };
   const [renderError, setRenderError] = useState('');
   const [previewKey, setPreviewKey] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,6 +122,7 @@ export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, 
     if (disabled || !previewReady || renderError || !page || !current || (event.pointerType === 'mouse' && event.button !== 0) || stroke.current || current.annotations.length >= MARKING_LIMITS.visualAnnotations) return;
     const point = pointFor(event); if (!point) return;
     event.preventDefault();
+    if (!allowLeavingComment()) return;
     const id = crypto.randomUUID();
     const annotation: MarkingVisualAnnotation = { id, kind: tool, points: [point], color: tool === 'highlight' ? 'yellow' : color, width: tool === 'highlight' ? 0.018 : 0.004, text: '', criterionId: null, level: '' };
     change(item => ({ ...item, annotations: [...item.annotations, annotation] }));
@@ -159,19 +173,20 @@ export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, 
   if (!page || !current) return <p className="text-sm text-gray-600">Import local page images to add visual feedback.</p>;
   return <section aria-label="Image markup" data-testid="image-markup" className="space-y-3 rounded border border-gray-300 bg-gray-50 p-3">
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" className={buttonClass} disabled={pageIndex === 0} onClick={() => setPageId(pages[pageIndex - 1].id)}>Previous page</button>
+      <button type="button" className={buttonClass} disabled={pageIndex === 0} onClick={() => changeVisiblePage(pages[pageIndex - 1].id)}>Previous page</button>
       <span aria-live="polite">Page {pageIndex + 1} of {pages.length}: {page.name}</span>
-      <button type="button" className={buttonClass} disabled={pageIndex === pages.length - 1} onClick={() => setPageId(pages[pageIndex + 1].id)}>Next page</button>
+      <button type="button" className={buttonClass} disabled={pageIndex === pages.length - 1} onClick={() => changeVisiblePage(pages[pageIndex + 1].id)}>Next page</button>
       {onReorder && <><button type="button" className={buttonClass} disabled={disabled || pageIndex === 0} onClick={() => reorder(-1)}>Move page earlier</button><button type="button" className={buttonClass} disabled={disabled || pageIndex === pages.length - 1} onClick={() => reorder(1)}>Move page later</button></>}
     </div>
     <p className="text-xs text-gray-600">Original image retained. Crop, rotation and feedback are saved separately. Cropped-out marks remain saved.</p>
     <div className="flex flex-wrap items-center gap-2" aria-label="Image tools">
-      {(['pen', 'highlight', 'comment'] as const).map(value => <button key={value} type="button" className={buttonClass} aria-pressed={tool === value} disabled={disabled} onClick={() => setTool(value)}>{value === 'pen' ? 'Pen' : value === 'highlight' ? 'Highlight' : 'Add comment'}</button>)}
+      {(['pen', 'highlight', 'comment'] as const).map(value => <button key={value} type="button" className={buttonClass} aria-pressed={tool === value} disabled={disabled} onClick={() => { if (value === 'comment' && selectedAnnotation) { if (!allowLeavingComment()) return; setSelected(null); } setTool(value); }}>{value === 'pen' ? 'Pen' : value === 'highlight' ? 'Highlight' : 'Write a comment'}</button>)}
       <label className="text-sm">Ink <select aria-label="Ink color" className="rounded border p-2" disabled={disabled || tool === 'highlight'} value={color} onChange={event => setColor(event.target.value as typeof color)}><option value="red">Red</option><option value="blue">Blue</option><option value="yellow">Yellow</option></select></label>
-      <button type="button" className={buttonClass} disabled={disabled || !current.annotations.length} onClick={() => { change(item => ({ ...item, annotations: item.annotations.slice(0, -1) })); setSelected(null); }}>Undo last mark</button>
+      <button type="button" className={buttonClass} disabled={disabled || !current.annotations.length} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, annotations: item.annotations.slice(0, -1) })); setSelected(null); }}>Undo last mark</button>
       <button type="button" className={buttonClass} disabled={disabled} onClick={() => change(item => ({ ...item, rotation: ((item.rotation + 90) % 360) as MarkingPageFeedback['rotation'] }))}>Rotate clockwise</button>
       <span className="text-sm">Rotation {current.rotation}°</span>
     </div>
+    {tool === 'comment' && !selectedAnnotation && <p role="status" className="text-sm font-medium">Click the page where you want to place your comment, then write it below.</p>}
     <fieldset disabled={disabled} className="flex flex-wrap items-center gap-2"><legend className="text-sm">Crop original page (%)</legend>
       {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-sm">{key === 'x' ? 'Left' : key === 'y' ? 'Top' : key === 'width' ? 'Width' : 'Height'} <input aria-label={`Crop ${key}`} className="w-20 rounded border p-2" type="number" min={key === 'width' || key === 'height' ? 1 : 0} max="100" step="1" value={Math.round(current.crop[key] * 10000) / 100} onChange={event => cropValue(key, event.target.value)} /></label>)}
       <button type="button" className={buttonClass} onClick={() => change(item => ({ ...item, crop: { x: 0, y: 0, width: 1, height: 1 } }))}>Reset crop</button>
@@ -185,20 +200,33 @@ export function ImageMarkup({ pages: originalPages, feedback, onChange, rubric, 
           const points = annotation.points.map(point => { const p = originalToDisplay(point, current); return { x: p.x * size.width, y: p.y * size.height }; });
           const first = points[0]; if (!first) return null;
           const thickness = annotation.width * Math.min(page.width, page.height);
-          if (annotation.kind === 'comment') return <g key={annotation.id} onPointerDown={event => { event.stopPropagation(); setSelected(annotation.id); }} style={{ cursor: 'pointer' }}><circle cx={first.x} cy={first.y} r={Math.max(8, Math.min(page.width, page.height) * 0.014)} fill={colors[annotation.color]} /><text x={first.x + Math.max(10, page.width * 0.012)} y={first.y} fill={colors[annotation.color]} stroke="white" strokeWidth={1} paintOrder="stroke" fontSize={Math.max(14, Math.min(page.width, page.height) * 0.024)}>{annotation.text || 'Comment'}</text></g>;
+          if (annotation.kind === 'comment') return <g key={annotation.id} onPointerDown={event => { event.stopPropagation(); selectMark(annotation.id); }} style={{ cursor: 'pointer' }}><circle cx={first.x} cy={first.y} r={Math.max(8, Math.min(page.width, page.height) * 0.014)} fill={colors[annotation.color]} /><text x={first.x + Math.max(10, page.width * 0.012)} y={first.y} fill={colors[annotation.color]} stroke="white" strokeWidth={1} paintOrder="stroke" fontSize={Math.max(14, Math.min(page.width, page.height) * 0.024)}>{selectedAnnotation && selectedAnnotation.id !== annotation.id ? 'Comment' : annotation.text || 'Comment'}</text></g>;
           const path = points.length === 1 ? `M ${first.x} ${first.y} l 0.01 0` : points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
           return <path key={annotation.id} d={path} stroke={colors[annotation.color]} strokeWidth={thickness} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={annotation.kind === 'highlight' ? 0.4 : 1} pointerEvents="none" />;
         })}
       </svg>
     </div>
     {current.annotations.length >= MARKING_LIMITS.visualAnnotations && <p role="status">This page has reached its 500-mark limit. Delete a mark to add another.</p>}
-    <div className="flex flex-wrap items-center gap-2"><label className="text-sm">Saved marks <select aria-label="Select saved mark" value={selected ?? ''} className="rounded border p-2" onChange={event => setSelected(event.target.value || null)}><option value="">Select a mark</option>{current.annotations.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.kind}{item.text ? `: ${item.text.slice(0, 40)}` : ''}</option>)}</select></label>
-      <button type="button" className={buttonClass} disabled={disabled || !selectedAnnotation} onClick={() => { change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) })); setSelected(null); }}>Delete selected mark</button>
-    </div>
-    {selectedAnnotation && <fieldset disabled={disabled} className="space-y-2 rounded border bg-white p-3"><legend className="text-sm">Selected mark feedback</legend>
-      <label className="block text-sm">Comment text <textarea aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} value={selectedAnnotation.text} onChange={event => editAnnotation({ text: event.target.value })} /></label>
+    {!selectedAnnotation && <div className="flex flex-wrap items-center gap-2"><label className="text-sm">Saved marks <select aria-label="Select saved mark" value={selected ?? ''} className="rounded border p-2" onChange={event => selectMark(event.target.value || null)}><option value="">Select a mark</option>{current.annotations.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.kind}{item.text ? `: ${item.text.slice(0, 40)}` : ''}</option>)}</select></label>
+    </div>}
+    {selectedAnnotation && <fieldset key={selectedAnnotation.id} disabled={disabled} className="space-y-2 rounded border bg-white p-3"><legend className="text-sm font-semibold">Write a comment for this mark</legend>
+      <label className="block text-sm">Comment text <textarea autoFocus aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} value={selectedAnnotation.text} onChange={event => editAnnotation({ text: event.target.value })} /></label>
       <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="text-sm">Level <select aria-label="Image level" className="rounded border p-2" value={selectedAnnotation.level} disabled={disabled || !selectedAnnotation.criterionId} onChange={event => editAnnotation({ level: event.target.value })}><option value="">No level</option>{rubric.levels.map(level => <option key={level} value={level}>{level}</option>)}</select></label></div>
+        </div>
+      {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
+        const combined = `${selectedAnnotation.text}${selectedAnnotation.text ? '\n' : ''}${text}`;
+        if (combined.length > 4000) throw new Error('This bank comment exceeds the 4,000-character limit. Shorten the current comment or choose a shorter bank comment.');
+        editAnnotation({ text: combined });
+      }} />}
+      <p className="text-sm">Selected level: {selectedAnnotation.level || 'Not selected'}</p>
+      <LevelPicker label="Evidence level (optional)" value={selectedAnnotation.level} disabled={disabled || !selectedAnnotation.criterionId} onChange={level => editAnnotation({ level })} />
+      {!selectedAnnotation.criterionId && <p className="text-xs text-gray-600">Choose a criterion to attach an evidence level.</p>}
+      {rubric.levels.some(level => !CLASSROOM_LEVEL_LABELS.includes(level)) && <label className="block text-sm">Saved rubric labels <select aria-label="Image level" className="rounded border p-2" disabled={disabled || !selectedAnnotation.criterionId} value={CLASSROOM_LEVEL_LABELS.includes(selectedAnnotation.level) ? '' : selectedAnnotation.level} onChange={event => { if (event.target.value) editAnnotation({ level: event.target.value }); }}><option value="">Choose a saved rubric label</option>{rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).map(level => <option key={level} value={level}>{level}</option>)}</select></label>}
+      {selectedAnnotation.level && <button type="button" className={buttonClass} disabled={disabled} onClick={() => editAnnotation({ level: '' })}>Clear evidence level</button>}
+      <div className="flex gap-2">
+        <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) })); setSelected(null); }}>Delete selected mark</button>
+      </div>
     </fieldset>}
+    {selectedAnnotation && <button type="button" className={`${buttonClass} font-semibold`} onClick={() => selectMark(null)}>Done — review image</button>}
   </section>;
 }

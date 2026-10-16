@@ -1,3 +1,5 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
+import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import { preview } from 'vite';
 import { chromium, type Page } from 'playwright';
 import assert from 'node:assert/strict';
@@ -10,6 +12,7 @@ async function records(page: Page, table: string): Promise<any[]> {
   }),table);
 }
 async function select(page:Page,start:number,end:number) {
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
   await page.getByTestId('marking-document').evaluate((root,{start,end})=>{
     const walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node:Node|null,offset=0,begin:[Node,number]|null=null,finish:[Node,number]|null=null;
     while(node=walk.nextNode()){const limit=offset+(node.textContent?.length||0);if(!begin&&start<limit)begin=[node,start-offset];if(end<=limit){finish=[node,end-offset];break;}offset=limit;}
@@ -26,23 +29,21 @@ const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROM
 try {
  const context=await browser.newContext({viewport:{width:1280,height:900},acceptDownloads:true});const page=await context.newPage();const errors:string[]=[],external:string[]=[];
  page.on('pageerror',e=>errors.push(e.message));await context.route('**/*',route=>{if(!route.request().url().startsWith('http://127.0.0.1:4193')){external.push(route.request().url());return route.abort();}return route.continue();});
- await page.goto('http://127.0.0.1:4193');await page.locator('[data-testid^="select-teacher-"]').first().click();await page.getByTestId('chiclet-open-overlay-btn').first().click();await page.getByRole('button',{name:'Assessments',exact:true}).click();
+ await page.goto('http://127.0.0.1:4193'); await installFictionalClassroom(page);await page.locator('[data-testid^="select-teacher-"]').first().click();await page.getByTestId('chiclet-open-overlay-btn').first().click();await page.getByRole('button',{name:'Assessments',exact:true}).click();
  await page.getByRole('button',{name:'New Assessment',exact:true}).click();await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional Markinator Pilot');
  await page.getByRole('button',{name:/Create Assessment|Save Assessment/}).click();
  const assessment=await (async()=>{for(let i=0;i<40;i++){const row=(await records(page,'assessments')).find(a=>a.title==='Fictional Markinator Pilot');if(row)return row;await page.waitForTimeout(100);}throw new Error('Assessment not created');})();
  const beforeOfficial=(await records(page,'studentAssessments')).filter(sa=>sa.assessmentId===assessment.id);
  await page.getByTestId(`open-marking-${assessment.id}`).click();await page.getByRole('button',{name:'Rubric editor',exact:true}).click();
- await page.getByLabel('Paste rubric text or table').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning');await page.getByRole('button',{name:'Preview pasted rubric'}).click();
- await page.getByLabel('Rubric title',{exact:true}).fill('Fictional full descriptor rubric');await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');await page.getByRole('checkbox',{name:/reviewed the descriptor matrix/}).check();await page.getByRole('button',{name:'Save confirmed rubric version'}).click();
+ await revealRubricPaste(page); await page.getByTestId('marking-rubric-paste').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning');await page.getByTestId('marking-rubric-preview').click();
+ await page.getByLabel('Rubric title',{exact:true}).fill('Fictional full descriptor rubric');await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');await page.getByTestId('marking-rubric-confirm').check();await page.getByRole('button',{name:'Save confirmed rubric version'}).click();
  const text='Echo phrase. Middle words. Echo phrase. End. <img src="https://fictional.invalid/essay">';
- await page.getByTestId('marking-files').setInputFiles([{name:'Fictional-one.txt',mimeType:'text/plain',buffer:Buffer.from(text)},{name:'Fictional-two.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from(docx)}]);
- const options=page.getByLabel('Confirm student for Fictional-one.txt');await options.waitFor();const vals=await options.locator('option').evaluateAll(nodes=>nodes.map(n=>(n as HTMLOptionElement).value).filter(Boolean));assert.ok(vals.length>=2);
- await options.selectOption(vals[0]);await page.getByLabel('Confirm student for Fictional-two.docx').selectOption(vals[1]);await page.getByTestId('marking-import-confirm').click();
+ const vals = (await importDocumentsForStudents(page, [{name:'Fictional-one.txt',mimeType:'text/plain',buffer:Buffer.from(text)},{name:'Fictional-two.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from(docx)}])).map(item=>item.value);
  await page.locator('[data-testid^="marking-session-open-"]').first().waitFor();let attempts=await records(page,'markingAttempts');assert.equal(attempts.length,2);assert.equal(attempts[0].documents[0].original!==null,true);let first=attempts.find(a=>a.classEnrollmentId===vals[0]);let second=attempts.find(a=>a.classEnrollmentId===vals[1]);
  await page.getByTestId(`marking-session-open-${first.id}`).click();await page.getByTestId('marking-document').waitFor();await select(page,27,38);await page.getByTestId('marking-feedback').fill('Feedback on second occurrence');await page.getByLabel('Evidence level (optional)').selectOption('Level 3');await page.getByTestId('marking-comment-save').click();
  await select(page,20,39);await page.getByTestId('marking-feedback').fill('Overlapping feedback');await page.getByTestId('marking-comment-save').click();await select(page,0,4);await page.getByTestId('marking-feedback').fill('Pending feedback survives navigation');await page.getByRole('button',{name:'Save now',exact:true}).click();
  await page.getByTestId(`marking-session-open-${second.id}`).click();await page.getByTestId('marking-feedback').waitFor({state:'hidden'});assert.equal(await page.getByTestId('marking-feedback').count(),0);await page.getByTestId(`marking-session-open-${first.id}`).click();await page.getByTestId('marking-feedback').waitFor();assert.equal(await page.getByTestId('marking-feedback').inputValue(),'Pending feedback survives navigation');await page.getByTestId('marking-comment-save').click();
- await page.getByRole('checkbox',{name:'Assess T',exact:true}).check();await page.getByRole('combobox',{name:'Official T judgment',exact:true}).selectOption('3+');await page.getByLabel('Category T feedback').fill('Use relevant evidence.');await page.getByLabel('Overall student-facing feedback').fill('Fictional summary with <script>literal text</script>.');await page.getByRole('button',{name:'Save now',exact:true}).click();
+ await chooseOfficialLevel(page, 'T', '3+');await page.getByLabel('Category T feedback').fill('Use relevant evidence.');await page.getByLabel('Overall student-facing feedback').fill('Fictional summary with <script>literal text</script>.');await page.getByRole('button',{name:'Save now',exact:true}).click();
  let sas=(await records(page,'studentAssessments')).filter(sa=>sa.assessmentId===assessment.id);assert.deepEqual(sas,beforeOfficial,'draft must not change official records');
  await page.reload();await page.getByTestId(`open-marking-${assessment.id}`).click();await page.getByTestId(`marking-session-open-${first.id}`).click();assert.match(await page.getByTestId('marking-document').innerText(),/Echo phrase/);assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(),'Fictional summary with <script>literal text</script>.');
  let sessions=await records(page,'markingSessions');let firstSession=sessions.find(s=>s.attemptId===first.id);assert.equal(firstSession.draft.annotations.length,3);assert.equal(firstSession.draft.annotations[0].start,27);assert.equal(firstSession.draft.annotations[0].quote,'Echo phrase');assert.ok(await page.getByTestId('marking-document').locator('mark').count()>=3,'overlaps render segmented marks');

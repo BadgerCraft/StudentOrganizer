@@ -20,9 +20,14 @@ import type {
 } from '../types/schema';
 
 import { getSchoolLocalDate } from '../utils/dateUtils';
+import { CLASSROOM_LEVELS } from '../services/classroomLevels';
 
 const seedingPromises = new WeakMap<OntarioTeacherDB, Promise<void>>();
 
+/**
+ * Explicit fictional classroom fixture for tests/benchmarks. Production startup
+ * uses initializeDatabase and never installs a named teacher or student records.
+ */
 export function seedDatabase(db: OntarioTeacherDB): Promise<void> {
   const existing = seedingPromises.get(db);
   if (existing) return existing;
@@ -542,3 +547,30 @@ export function seedDatabase(db: OntarioTeacherDB): Promise<void> {
   return promise;
 }
 
+
+/** Initialize only the local school calendar needed to create a first class.
+ * Existing installations are left intact, including names and historical marks.
+ */
+export async function initializeDatabase(db: OntarioTeacherDB): Promise<void> {
+  await db.transaction('rw', [db.organizations, db.academicYears, db.terms, db.reportingPeriods, db.markScaleFamilies, db.markScaleVersions, db.markScaleEntries], async () => {
+    if (await db.organizations.count()) return;
+    const now = new Date().toISOString();
+    const date = new Date();
+    const year = date.getUTCFullYear() - (date.getUTCMonth() < 8 ? 1 : 0);
+    const meta = { createdAt: now, updatedAt: now, deletedAt: null, version: 1 };
+    await db.organizations.add({ ...meta, id: 'local-school', parentOrganizationId: null, parentScopeKey: 'ROOT', organizationType: 'school', name: 'My School', code: 'LOCAL' });
+    await db.academicYears.add({ ...meta, id: 'local-academic-year', organizationId: 'local-school', name: `${year}–${year + 1}`, startDate: `${year}-09-01`, endDate: `${year + 1}-08-31`, isCurrent: true });
+    await db.terms.add({ ...meta, id: 'local-term', academicYearId: 'local-academic-year', name: 'Current school year', code: 'YEAR', startDate: `${year}-09-01`, endDate: `${year + 1}-08-31` });
+    await db.reportingPeriods.add({ ...meta, id: 'local-reporting-period', termId: 'local-term', name: 'Current school year', sequenceNumber: 1, startDate: `${year}-09-01`, endDate: `${year + 1}-08-31`, isClosed: false });
+    // A real scale reference also keeps newly created class policies and backups
+    // valid. These exact equivalents never replace a saved historical scale.
+    await db.markScaleFamilies.add({ ...meta, id: 'local-classroom-levels', organizationId: 'local-school', code: 'CLASSROOM_LEVELS', name: 'Classroom achievement levels', isDefault: true });
+    await db.markScaleVersions.add({ ...meta, id: 'local-classroom-levels-v1', markScaleFamilyId: 'local-classroom-levels', revision: 1, effectiveFrom: now.slice(0, 10), retiredAt: null });
+    await db.markScaleEntries.bulkAdd(CLASSROOM_LEVELS.map((level, index) => ({
+      id: `local-classroom-level-${index}`, markScaleVersionId: 'local-classroom-levels-v1', code: level.label, label: level.label,
+      minimumPercentage: level.percentage, benchmarkPercentage: level.percentage, maximumPercentage: level.percentage,
+      description: 'Exact calculation equivalent for a selected level', isPassing: level.label !== 'R', isNumeric: true, sortOrder: index + 1
+    })));
+
+  });
+}

@@ -109,13 +109,23 @@ describe('marking category-change recovery', () => {
     expect(saved.categorySnapshot?.find(category => category.id === 'recovery-T')).toEqual(categories.find(category => category.id === 'recovery-T'));
   });
 
-  it('preserves finalized feedback and a reopened revision through category recovery and full backup restore', async () => {
-    // T has feedback but no official result: replacing its definition must not make
+  it('preserves legacy finalized feedback without a result through category recovery and full backup restore', async () => {
+    // Legacy T feedback had no official result; current feedback-only saves retain one.
+    // Reconstruct the legacy commit explicitly so hard deletion still tests that historical contract.
+    // Replacing the old definition must not make
     // the historical commit unrestorable. Real orphaned official marks stay invalid.
     const finalDraft = { ...content, pending: null, judgments: content.judgments.map(j =>
       j.assessmentCategoryId === 'recovery-T' ? { ...j, assessed: false } : j) };
     const saved = await service.saveDraft(session.id, finalDraft, session.version, actor);
-    const commit = await service.finalize(saved.id, saved.version, actor);
+    let commit = await service.finalize(saved.id, saved.version, actor);
+    {
+      const feedbackResult = (await db.categoryResults.where('assessmentCategoryId').equals('recovery-T').toArray())
+        .find(result => result.studentAssessmentId === commit.studentAssessmentId)!;
+      expect(feedbackResult).toMatchObject({ inputFormat: 'descriptive', rawScore: '', normalizedPercentage: null });
+      await db.categoryResults.delete(feedbackResult.id);
+      commit = { ...commit, resultIds: commit.resultIds.filter(id => id !== feedbackResult.id) };
+      await db.markingCommits.put(commit);
+    }
     const legacyFinalized = (await db.markingSessions.get(saved.id))!;
     delete legacyFinalized.categorySnapshot;
     delete legacyFinalized.retainedCategoryJudgments;
@@ -135,6 +145,32 @@ describe('marking category-change recovery', () => {
     await portability.restoreFromJSON(backup);
     expect(await db.markingCommits.get(commit.id)).toEqual(commit);
     expect(await db.markingSessions.get(reconciled.id)).toEqual(reconciled);
+    expect(await official()).toEqual(before);
+  });
+
+  it('preserves current feedback-only results when their category is soft-deleted and recovery is incompatible', async () => {
+    const finalDraft = { ...content, pending: null, judgments: content.judgments.map(j =>
+      j.assessmentCategoryId === 'recovery-T' ? { ...j, assessed: false } : j) };
+    const saved = await service.saveDraft(session.id, finalDraft, session.version, actor);
+    const commit = await service.finalize(saved.id, saved.version, actor);
+    const feedback = (await db.categoryResults.where('assessmentCategoryId').equals('recovery-T').toArray())
+      .find(result => result.studentAssessmentId === commit.studentAssessmentId)!;
+    expect(feedback).toMatchObject({ inputFormat: 'descriptive', rawScore: '', normalizedPercentage: null,
+      feedback: 'Retain T feedback exactly.' });
+    expect(commit.resultIds).toContain(feedback.id);
+    // Soft deletion retains the actual reference. A replacement cannot use the same
+    // unique assessment/category key while that historical definition still exists.
+    await changeCategories(['recovery-T']);
+    const before = await official();
+    const revision = await service.openSession(session.attemptId, actor);
+    expect(revision.draft).toEqual(finalDraft);
+    const pending = await service.saveDraft(revision.id, content, revision.version, actor);
+    expect((await service.reviewCategoryChanges(pending.id, actor)).compatible).toBe(false);
+    const portability = new PortabilityService(db);
+    await portability.restoreFromJSON(await portability.createFullBackupJSON());
+    expect(await db.markingSessions.get(pending.id)).toEqual(pending);
+    expect(await db.markingCommits.get(commit.id)).toEqual(commit);
+    expect(await db.categoryResults.get(feedback.id)).toEqual(feedback);
     expect(await official()).toEqual(before);
   });
 

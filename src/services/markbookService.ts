@@ -158,14 +158,14 @@ export class MarkbookDomainService {
           }
         }
 
-        if (!scaleVersionId) {
+        if (!scaleVersionId && params.inputFormat === 'scale_code') {
           throw new ValidationError('No mark scale version or default grading policy configured for this category.');
         }
 
-        const scaleEntries = await this.db.markScaleEntries
+        const scaleEntries = scaleVersionId ? await this.db.markScaleEntries
           .where('markScaleVersionId')
           .equals(scaleVersionId)
-          .toArray();
+          .toArray() : [];
 
         if (scaleEntries.length === 0 && params.inputFormat === 'scale_code') {
           throw new ValidationError(`Configured mark scale version "${scaleVersionId}" has no valid scale entries.`);
@@ -574,8 +574,9 @@ export class MarkbookDomainService {
           })
           .first();
 
+        const hasCategoryWrite = params.rawScore !== undefined && !!params.assessmentCategoryId;
         const hasScore =
-          params.rawScore !== undefined && params.rawScore.trim() !== '' && !!params.assessmentCategoryId;
+          params.inputFormat !== 'descriptive' && params.rawScore !== undefined && params.rawScore.trim() !== '' && !!params.assessmentCategoryId;
         const completionStatus = params.completionStatus || (sa ? sa.completionStatus : 'complete');
         const isLate = params.isLate !== undefined ? params.isLate : (sa ? sa.isLate : false);
 
@@ -648,7 +649,7 @@ export class MarkbookDomainService {
         let crPrevJson: string | null = null;
         let crDiff: Record<string, { old: any; new: any }> | null = null;
 
-        if (hasScore && params.assessmentCategoryId) {
+        if (hasCategoryWrite && params.assessmentCategoryId) {
           const catDef = await this.db.assessmentCategories.get(params.assessmentCategoryId);
           if (!catDef || catDef.deletedAt !== null) {
             throw new ValidationError(`Assessment category ${params.assessmentCategoryId} not found or deleted.`);

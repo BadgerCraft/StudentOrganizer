@@ -55,7 +55,7 @@ export class MarkingService {
     if (!period || period.deletedAt !== null || period.termId !== auth.classSection.termId) throw new ValidationError('The assessment reporting period is unavailable.');
     if (write && (assessment.isLocked || period.isClosed)) throw new ValidationError('The assessment is locked or its reporting period is closed.');
     const categories = live(await this.db.assessmentCategories.where('assessmentId').equals(assessmentId).toArray());
-    if (new Set(categories.map(c => c.categoryCode)).size !== categories.length) throw new ValidationError('The assessment requires distinct valid KTAC categories.');
+    if (new Set(categories.map(c => c.categoryCode)).size !== categories.length) throw new ValidationError('The assessment requires distinct valid KTCA categories.');
     return { assessment, categories, auth };
   }
   private async enrollment(assessment: Assessment, enrollmentId: string, requireActive = true) {
@@ -231,7 +231,7 @@ export class MarkingService {
       const categorySnapshot = clone(previous ? sessionCategories(previous) : categories);
       const draft: MarkingDraft = old ? clone(old) : {
         annotations: [], pending: null, overallFeedback: '',
-        judgments: categorySnapshot.map(category => ({ assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' })),
+        judgments: categorySnapshot.map(category => ({ assessmentCategoryId: category.id, assessed: false, rawScore: '', inputFormat: 'classroom_level', feedback: '' })),
         rubricFeedback: rubric.criteria.map(criterion => ({ criterionId: criterion.id, level: '', feedback: '' })),
         ...(attempt.mode === 'oral' ? { oral: { items: [], notes: '' } } : {}),
         ...(attempt.imagePages?.length ? { imageFeedback: attempt.imagePages.map(page => ({ pageId: page.id, rotation: 0 as const, crop: { x: 0, y: 0, width: 1, height: 1 }, annotations: [] })) } : {}),
@@ -276,7 +276,7 @@ export class MarkingService {
       if (!decisions || typeof decisions !== 'object' || Array.isArray(decisions) || Object.keys(decisions).length !== previous.length || previous.some(c => !Object.prototype.hasOwnProperty.call(decisions, c.id))) throw new ValidationError('Explicitly review a destination or retain the original feedback for every saved category.');
       assertAttemptDraft(session.draft, attempt, rubric);
       assertMarkingDraft(session.draft, rubric, attempt.documents, previous.map(c => c.id));
-      const judgments: MarkingDraft['judgments'] = categories.map(c => ({ assessmentCategoryId: c.id, assessed: false, rawScore: '', inputFormat: 'scale_code', feedback: '' }));
+      const judgments: MarkingDraft['judgments'] = categories.map(c => ({ assessmentCategoryId: c.id, assessed: false, rawScore: '', inputFormat: 'classroom_level', feedback: '' }));
       const retained = clone(session.retainedCategoryJudgments ?? []);
       const used = new Set<string>();
       for (const category of previous) {
@@ -284,7 +284,7 @@ export class MarkingService {
         const destinationId = decisions[category.id];
         const destination = categories.find(c => c.id === destinationId);
         if (destinationId !== null) {
-          if (!destination || !compatibleCategoryTarget(category, destination) || used.has(destination.id)) throw new ValidationError('Incompatible category mapping. Keep the original feedback in recovery history; score maximum, scale and KTAC category must match to retain a judgment.');
+          if (!destination || !compatibleCategoryTarget(category, destination) || used.has(destination.id)) throw new ValidationError('Incompatible category mapping. Keep the original feedback in recovery history; score maximum, scale and KTCA category must match to retain a judgment.');
           used.add(destination.id);
           judgments[judgments.findIndex(j => j.assessmentCategoryId === destination.id)] = { ...clone(judgment), assessmentCategoryId: destination.id };
         }
@@ -345,14 +345,20 @@ export class MarkingService {
       const oldResults: CategoryResult[] = sa ? await this.db.categoryResults.where('studentAssessmentId').equals(sa.id).toArray() : [];
       for (const judgment of session.draft.judgments) {
         if (judgment.assessed && !judgment.rawScore.trim()) throw new ValidationError('Enter an official judgment for every category marked assessed.');
-        if (!judgment.assessed && oldResults.some(r => r.assessmentCategoryId === judgment.assessmentCategoryId && r.deletedAt === null)) throw new ValidationError('An unassessed category already has an official result. Use and confirm its current score, or edit the official result in Organizer before finalizing.');
+        if (!judgment.assessed && oldResults.some(r => r.assessmentCategoryId === judgment.assessmentCategoryId && r.deletedAt === null && (r.normalizedPercentage !== null || r.rawScore.trim() !== ''))) throw new ValidationError('An unassessed category already has an official result. Use and confirm its current score, or edit the official result in Organizer before finalizing.');
       }
       const markbook = new MarkbookDomainService(this.db);
       const resultIds: string[] = [];
-      for (const judgment of session.draft.judgments.filter(j => j.assessed)) {
+      // A deliberately cleared feedback-only judgment must also update the current
+      // Markbook. Prior committed feedback remains in its immutable revision.
+      for (const judgment of session.draft.judgments.filter(j => j.assessed || j.feedback.trim() || oldResults.some(result =>
+        result.assessmentCategoryId === j.assessmentCategoryId && result.deletedAt === null &&
+        result.normalizedPercentage === null && !result.rawScore.trim() && result.feedback?.trim()))) {
         const current = sa && await this.db.categoryResults.where({ studentAssessmentId: sa.id, assessmentCategoryId: judgment.assessmentCategoryId }).first();
-        const saved = await markbook.saveMarkbookCell({ assessmentId: assessment.id, classSectionId: assessment.classSectionId, classEnrollmentId: attempt.classEnrollmentId, assessmentCategoryId: judgment.assessmentCategoryId, rawScore: judgment.rawScore, inputFormat: judgment.inputFormat, feedback: judgment.feedback, expectedStudentAssessmentVersion: sa?.version, expectedCategoryResultVersion: current?.version, userId: actor.userId, deviceId: actor.deviceId });
-        sa = saved.studentAssessment; if (saved.categoryResult) resultIds.push(saved.categoryResult.id);
+        const saved = await markbook.saveMarkbookCell({ assessmentId: assessment.id, classSectionId: assessment.classSectionId, classEnrollmentId: attempt.classEnrollmentId, assessmentCategoryId: judgment.assessmentCategoryId, rawScore: judgment.assessed ? judgment.rawScore : '', inputFormat: judgment.assessed ? judgment.inputFormat : 'descriptive', feedback: judgment.feedback, expectedStudentAssessmentVersion: sa?.version, expectedCategoryResultVersion: current?.version, userId: actor.userId, deviceId: actor.deviceId });
+        sa = saved.studentAssessment;
+        // Empty-clearing writes are not assessed results or feedback evidence in this receipt.
+        if (saved.categoryResult && (judgment.assessed || judgment.feedback.trim())) resultIds.push(saved.categoryResult.id);
       }
       if (!sa) {
         sa = (await markbook.saveMarkbookCell({ assessmentId: assessment.id, classSectionId: assessment.classSectionId, classEnrollmentId: attempt.classEnrollmentId, completionStatus: 'not_assessed', userId: actor.userId, deviceId: actor.deviceId })).studentAssessment;

@@ -1,6 +1,9 @@
 import { useId, useState } from 'react';
+import { CommentBankPicker } from './CommentBankPicker';
+import { LevelPicker } from '../../components/LevelPicker';
+import { CLASSROOM_LEVEL_LABELS } from '../../services/classroomLevels';
 import { MARKING_LIMITS } from '../types';
-import type { MarkingMode, MarkingOralEvidence, MarkingRubric, MarkingRubricFeedback } from '../types';
+import type { MarkingActor, MarkingAnnotation, MarkingMode, MarkingOralEvidence, MarkingPageFeedback, MarkingRubric, MarkingRubricFeedback } from '../types';
 
 const field = 'border border-slate-300 rounded-lg p-2 bg-white text-slate-900 w-full';
 const button = 'rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50';
@@ -27,13 +30,24 @@ export function MarkingModePicker({ onSelect, disabled = false }: {
   </section>;
 }
 
-export function RubricEvidenceEditor({ rubric, value, onChange, disabled }: {
+export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange }: {
   rubric: MarkingRubric;
   value: MarkingRubricFeedback[] | undefined;
   onChange: (next: MarkingRubricFeedback[]) => void;
   disabled: boolean;
+  annotations?: MarkingAnnotation[];
+  imageFeedback?: MarkingPageFeedback[];
+  actor?: MarkingActor;
+  onComposerDirtyChange?: (dirty: boolean) => void;
 }) {
   const titleId = useId();
+  const [editingCriterion, setEditingCriterion] = useState<string | null>(null);
+  const [bankDirty, setBankDirty] = useState(false);
+  const finishComment = () => {
+    if (bankDirty && !window.confirm('Discard the unsaved comment bank import? Your recorded comment will be kept.')) return;
+    if (bankDirty) onComposerDirtyChange?.(false);
+    setBankDirty(false); setEditingCriterion(null);
+  };
   const entries = value ?? rubric.criteria.map(criterion => ({ criterionId: criterion.id, level: '', feedback: '' }));
   const update = (criterionId: string, patch: Partial<MarkingRubricFeedback>) => {
     const current = entries.find(entry => entry.criterionId === criterionId);
@@ -41,28 +55,55 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled }: {
     onChange(current ? entries.map(entry => entry.criterionId === criterionId ? next : entry) : [...entries, next]);
   };
   return <section aria-labelledby={titleId} data-testid="marking-rubric-evidence" className="rounded-xl border bg-white p-4 space-y-3">
-    <h3 id={titleId} className="font-semibold">Rubric evidence</h3>
-    <p className="text-sm text-slate-600">Pinned rubric: {rubric.title}. Achievement labels and feedback record your evidence; they do not calculate grades. Enter official category judgments separately.</p>
-    <fieldset disabled={disabled} className="space-y-3">{rubric.criteria.map(criterion => {
+    <h3 id={titleId} className="font-semibold">{editingCriterion ? 'Write a comment' : 'Criteria and feedback'}</h3>
+    <p className="text-sm text-slate-600">{rubric.title}. Criterion levels record evidence. Choose category levels separately when you review the assessment.</p>
+    <div className="space-y-3">{rubric.criteria.filter(criterion => !editingCriterion || criterion.id === editingCriterion).map(criterion => {
       const current = entries.find(entry => entry.criterionId === criterion.id);
       const otherCharacters = entries.reduce((sum, entry) => sum + (entry.criterionId === criterion.id ? 0 : entry.feedback.length), 0);
       const feedbackLimit = Math.max(0, Math.min(noteLimit, totalNoteLimit - otherCharacters));
-      return <div key={criterion.id} className="border rounded-lg p-3 space-y-2" data-testid={`marking-criterion-${criterion.id}`}>
-        <p className="font-medium">{criterion.name} · {criterion.categoryCode}</p>
-        <label className="block text-sm">{criterion.name} achievement label (optional)
-          <select className={field} data-testid={`marking-criterion-level-${criterion.id}`} value={current?.level ?? ''} onChange={event => update(criterion.id, { level: event.target.value })}>
-            <option value="">No achievement label selected</option>{rubric.levels.map(level => <option key={level} value={level}>{level}</option>)}
-          </select>
-        </label>
-        <details className="text-sm text-slate-600"><summary>Rubric descriptors for {criterion.name}</summary>
-          <dl className="space-y-2 mt-2">{rubric.levels.map(level => <div key={level}><dt className="font-medium">{level}</dt><dd className="whitespace-pre-wrap">{criterion.descriptors[level] || 'No descriptor provided.'}</dd></div>)}</dl>
-        </details>
-        <label className="block text-sm">{criterion.name} feedback
-          <textarea className={`${field} min-h-24`} data-testid={`marking-criterion-feedback-${criterion.id}`} value={current?.feedback ?? ''} maxLength={feedbackLimit} onChange={event => update(criterion.id, { feedback: event.target.value.slice(0, feedbackLimit) })} />
-        </label>
+      const textComments = annotations.filter(annotation => annotation.criterionId === criterion.id);
+      const imageComments = imageFeedback.flatMap((page, pageIndex) => page.annotations.filter(annotation => annotation.criterionId === criterion.id).map(annotation => ({ ...annotation, pageIndex })));
+      return <div key={criterion.id} className="border rounded-lg p-3 space-y-3" data-testid={`marking-criterion-${criterion.id}`}>
+        <h4 className="font-medium">{criterion.name} · {criterion.categoryCode}</h4>
+        {editingCriterion ? <>
+          <label className="block text-sm">{criterion.name} feedback
+            <textarea autoFocus className={`${field} min-h-32`} data-testid={`marking-criterion-feedback-${criterion.id}`} value={current?.feedback ?? ''} maxLength={feedbackLimit} disabled={disabled} onChange={event => update(criterion.id, { feedback: event.target.value.slice(0, feedbackLimit) })} />
+          </label>
+          {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
+            const existing = current?.feedback ?? '';
+            const combined = `${existing}${existing ? '\n' : ''}${text}`;
+            if (combined.length > feedbackLimit) throw new Error('This bank comment exceeds the remaining feedback space. Shorten the current comment or choose a shorter bank comment.');
+            update(criterion.id, { feedback: combined });
+          }} />}
+          <p className="text-xs text-slate-500">Up to {feedbackLimit.toLocaleString()} characters for this comment. Changes are included with your marking draft.</p>
+          <button type="button" className={`${button} bg-blue-700 text-white`} onClick={finishComment}>Done — review criteria</button>
+        </> : <>
+          <details className="text-sm text-slate-600"><summary>Descriptors for {criterion.name}</summary>
+            <dl className="space-y-2 mt-2">{rubric.levels.map(level => <div key={level}><dt className="font-medium">{level}</dt><dd className="whitespace-pre-wrap">{criterion.descriptors[level] || 'No descriptor provided.'}</dd></div>)}</dl>
+          </details>
+          <p className="text-sm font-medium">Selected level: {current?.level || 'Not selected'}</p>
+          <LevelPicker value={current?.level ?? ''} onChange={level => update(criterion.id, { level })} disabled={disabled} label={`${criterion.name} evidence level (optional)`} />
+          {rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).length > 0 && <label className="block text-sm">Saved rubric labels
+            <select className={field} disabled={disabled} data-testid={`marking-criterion-level-${criterion.id}`} value={current?.level && !CLASSROOM_LEVEL_LABELS.includes(current.level) ? current.level : ''} onChange={event => { if (event.target.value) update(criterion.id, { level: event.target.value }); }}>
+              <option value="">Choose a saved rubric label</option>{rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).map(level => <option key={level} value={level}>{level}</option>)}
+            </select>
+          </label>}
+          {current?.level && <button type="button" disabled={disabled} className={button} onClick={() => update(criterion.id, { level: '' })}>Clear evidence level</button>}
+          <div className="space-y-2" aria-label={`${criterion.name} recorded feedback`}>
+            {current?.feedback && <p className="whitespace-pre-wrap text-sm">{current.feedback}</p>}
+            {textComments.map(comment => <blockquote key={comment.id} className="border-l-2 pl-3 text-sm space-y-1">
+              <p className="whitespace-pre-wrap italic">“{comment.quote}”</p><p className="whitespace-pre-wrap">{comment.text}</p>{comment.level && <p>Evidence level: {comment.level}</p>}
+            </blockquote>)}
+            {imageComments.map(comment => <div key={`${comment.pageIndex}-${comment.id}`} className="border-l-2 pl-3 text-sm">
+              <p>Image page {comment.pageIndex + 1} · {comment.kind === 'comment' ? 'Comment' : comment.kind === 'highlight' ? 'Highlight' : 'Pen mark'}</p>
+              {comment.text && <p className="whitespace-pre-wrap">{comment.text}</p>}{comment.level && <p>Evidence level: {comment.level}</p>}
+            </div>)}
+            {!current?.feedback && !textComments.length && !imageComments.length && <p className="text-sm text-slate-500">No feedback recorded yet.</p>}
+          </div>
+          <button type="button" className={`${button} bg-blue-700 text-white`} disabled={disabled} onClick={() => setEditingCriterion(criterion.id)}>{current?.feedback ? 'Edit comment' : 'Write a comment'}</button>
+        </>}
       </div>;
-    })}</fieldset>
-    <p className="text-xs text-slate-500">Feedback allows up to 20,000 characters per criterion and 50,000 characters in total.</p>
+    })}</div>
   </section>;
 }
 

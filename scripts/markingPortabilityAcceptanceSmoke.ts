@@ -1,3 +1,5 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
+import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
@@ -45,6 +47,7 @@ async function official(page: Page, assessmentId: string) {
   };
 }
 async function selectPassage(page: Page, start: number, end: number) {
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
   await page.getByTestId('marking-document').evaluate((root, { start, end }) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node: Node | null, offset = 0, begin: [Node, number] | null = null, finish: [Node, number] | null = null;
@@ -61,7 +64,7 @@ async function selectPassage(page: Page, start: number, end: number) {
   }, { start, end });
 }
 async function setup(context: BrowserContext) {
-  const page = await context.newPage(); await page.goto(origin);
+  const page = await context.newPage(); await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.getByRole('button', { name: 'Assessments', exact: true }).click();
@@ -77,16 +80,14 @@ async function setup(context: BrowserContext) {
   assert.ok(assessment);
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
-  await page.getByLabel('Paste rubric text or table').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited\tSome\tClear\tThorough');
-  await page.getByRole('button', { name: 'Preview pasted rubric' }).click();
+  await revealRubricPaste(page); await page.getByTestId('marking-rubric-paste').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited\tSome\tClear\tThorough');
+  await page.getByTestId('marking-rubric-preview').click();
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional portable rubric');
-  await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
-  await page.getByRole('checkbox', { name: /reviewed the descriptor matrix/ }).check();
+  await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
+  await page.getByTestId('marking-rubric-confirm').check();
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
-  await page.getByTestId('marking-files').setInputFiles({ name: 'Fictional-portable.txt', mimeType: 'text/plain', buffer: Buffer.from(originalText) });
-  const match = page.getByLabel('Confirm student for Fictional-portable.txt');
-  const enrollmentId = await match.locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value).find(Boolean)!);
-  await match.selectOption(enrollmentId); await page.getByTestId('marking-import-confirm').click();
+  const [selectedStudent] = await importDocumentsForStudents(page, [{ name: 'Fictional-portable.txt', mimeType: 'text/plain', buffer: Buffer.from(originalText) }]);
+  const enrollmentId = selectedStudent.value;
   await page.locator('[data-testid^="marking-session-open-"]').first().waitFor();
   const attempt = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id);
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
@@ -126,8 +127,7 @@ try {
   const { page, otherPage, assessment, attempt, enrollmentId, actorId } = await setup(context);
   await selectPassage(page, 0, 17); await page.getByTestId('marking-feedback').fill('Fictional annotation <b>literal</b> & care.');
   await page.getByTestId('marking-comment-save').click();
-  await page.getByRole('checkbox', { name: 'Assess T', exact: true }).check();
-  await page.getByRole('combobox', { name: 'Official T judgment', exact: true }).selectOption('3+');
+  await chooseOfficialLevel(page, 'T', '3+');
   await page.getByLabel('Category T feedback').fill('Fictional category feedback <em>literal</em>.');
   await page.getByLabel('Overall student-facing feedback').fill(summary);
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
@@ -218,7 +218,7 @@ try {
   assert.equal(Buffer.from(backup.tables.markingAttempts[0].documents[0].original.base64, 'base64').toString('utf8'), originalText);
 
   const restoredContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true }); await guard(restoredContext);
-  const restoredPage = await restoredContext.newPage(); await restoredPage.goto(origin);
+  const restoredPage = await restoredContext.newPage(); await restoredPage.goto(origin); await installFictionalClassroom(restoredPage);
   await restoredPage.locator('[data-testid^="select-teacher-"]').first().click();
   assert.equal((await records(restoredPage, 'markingAttempts')).length, 0, 'restore profile must start without marking data');
   await restoredPage.getByTestId('nav-portability-btn').click();
