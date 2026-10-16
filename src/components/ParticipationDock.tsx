@@ -20,6 +20,7 @@ import type {
 import { getSchoolLocalDate } from '../utils/dateUtils';
 
 interface ParticipationDockProps {
+  selectionMode?: 'single' | 'group';
   selectedEnrollments: { enrollment: ClassEnrollment; student: Student }[];
   eventTypes: ParticipationEventType[];
   selectedSchoolDate: string;
@@ -42,6 +43,7 @@ interface ParticipationDockProps {
 }
 
 export const ParticipationDock: React.FC<ParticipationDockProps> = ({
+  selectionMode = 'single',
   selectedEnrollments,
   eventTypes,
   selectedSchoolDate,
@@ -116,7 +118,8 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   };
 
   return (
-    <div className="participation-dock fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex flex-col items-center pb-4 px-4">
+    <div className={`participation-dock fixed bottom-0 left-0 right-0 z-50 ${selectedEnrollments.length ? 'pointer-events-auto' : 'pointer-events-none'} flex flex-col items-center pb-4 px-4`}
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); pendingLevelEventType ? handleCancelLevel() : onClearSelection(); } }}>
       {/* Non-Blocking Undo Toast Banner */}
       {lastBatchUndo && (
         <div
@@ -182,7 +185,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     : `${selectedEnrollments.length} Students Selected`}
                 </span>
                 <span className="text-xs text-slate-500 ml-2">
-                  (Choose an observation or quick-tally button below)
+                  {selectionMode === 'group' ? '(Group observation)' : '(Single-student observation)'}
                 </span>
               </div>
             </div>
