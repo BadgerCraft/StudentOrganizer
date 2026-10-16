@@ -4,6 +4,7 @@ import { createServer } from 'vite';
 import { chromium, type Page } from 'playwright';
 import { strToU8, zipSync } from 'fflate';
 import { installFictionalClassroom } from './helpers/classroomFixture';
+import { verifyCompactMarkbookEditor } from './helpers/markbookViewportAcceptance';
 
 // Actual application UI and IndexedDB, with fictional local files. Vite module
 // access below only injects bounded failures; successful saves use production services.
@@ -71,6 +72,11 @@ try {
   const label = (id: string) => { const enrollment = enrollments.find(row => row.id === id); const student = students.find(row => row.id === enrollment.studentId); return `${student.firstName} ${student.lastName} (${student.localStudentNumber})`; };
   const selected = enrollments.slice(0, 4).map(row => row.id);
   assert.equal(selected.length, 4);
+  const compactCategory = (await rows(page, 'assessmentCategories')).find(row => row.assessmentId === assessment.id && row.categoryCode === 'K');
+  assert.ok(compactCategory);
+  await verifyCompactMarkbookEditor(page, selected[2], compactCategory.id);
+  pass('At 1280×720 the result editor scrolls naturally to Save and Cancel, saves the selected level and feedback, and Cancel preserves the saved result.');
+  await assessments();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
   await page.getByText('Paste rubric text or table', { exact: true }).click();
@@ -288,7 +294,7 @@ try {
     await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
     const savedCommits = await rows(page, 'markingCommits');
     assert.equal(savedCommits.length, before.markingCommits.length + 1);
-    const receipt = savedCommits.find(row => !before.markingCommits.some(previous => previous.id === row.id));
+    const receipt = savedCommits.find(row => !before.markingCommits.some((previous: { id: string }) => previous.id === row.id));
     assert.equal(receipt?.attemptId, picture.id);
     assert.equal(receipt?.draft.overallFeedback, feedback);
     const pictureAssessment = (await rows(page, 'studentAssessments')).find(row => row.assessmentId === assessment.id && row.classEnrollmentId === picture.classEnrollmentId);

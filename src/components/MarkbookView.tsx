@@ -621,7 +621,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
       {/* Focused Cell Editor Modal / Popover */}
       {activeCell && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[calc(100dvh-2rem)] overflow-y-auto p-6 shadow-2xl border border-slate-200">
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-blue-600 uppercase tracking-wider block">

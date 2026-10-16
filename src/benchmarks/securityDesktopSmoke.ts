@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -22,6 +23,7 @@ async function main() {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'visible' });
+    await installFictionalClassroom(page);
     await page.locator('[data-testid^="select-teacher-"]').first().click();
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().waitFor();
     assert.ok(await page.locator('meta[http-equiv="Content-Security-Policy"]').count());
