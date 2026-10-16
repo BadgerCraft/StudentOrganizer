@@ -193,11 +193,12 @@ try {
   await page.getByTestId(`marking-session-open-${grouped.id}`).click();
   await page.getByTestId('marking-document').waitFor();
   const documentSelect = page.getByRole('combobox', { name: /^Document/ });
+  const expectedPassageFeedback = ['Fictional attachment feedback 1', 'Fictional attachment feedback 2'];
   for (const [index, document] of grouped.documents.entries()) {
     await documentSelect.selectOption(document.id);
     assert.equal(await page.getByTestId('marking-document').innerText(), document.text);
     await selectPassage(page, 0, 13);
-    await page.getByTestId('marking-feedback').fill(`Fictional attachment feedback ${index + 1}`);
+    await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
     if (index === 0) {
       const textBank = page.locator('section[aria-label="Comment bank"]').first();
       await textBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
@@ -259,7 +260,14 @@ try {
       assert.equal(await page.getByRole('status').filter({ hasText: 'Reading comment bank' }).count(), 0);
       const savedBanks = await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('ota.comment-bank.v1.')).map(key => JSON.parse(localStorage.getItem(key)!)));
       assert.equal(savedBanks.some(comments => comments.includes('Discard this delayed bank import.')), false, 'discarded import does not write the bank');
-      console.log('PASS: edited comment-bank source invalidates stale review; concurrent composers preserve newer bank additions; delayed import requires discard and cannot recreate a phantom guard; primary button colors contrast.');
+      const bankAddition = 'Added by rubric composer.';
+      if (!await textBank.getByRole('button', { name: bankAddition, exact: true }).isVisible()) {
+        await textBank.getByRole('button', { name: /^Choose bank comment/ }).click();
+      }
+      await textBank.getByRole('button', { name: bankAddition, exact: true }).click();
+      expectedPassageFeedback[index] += `\n${bankAddition}`;
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(), expectedPassageFeedback[index], 'choosing reusable feedback preserves the teacher’s existing passage comment');
+      console.log('PASS: edited comment-bank source invalidates stale review; concurrent composers preserve newer bank additions; delayed import requires discard and cannot recreate a phantom guard; selecting bank feedback appends to existing passage text; primary button colors contrast.');
     }
 
     await page.getByRole('combobox', { name: /^Evidence level \(optional\)/ }).selectOption(levels[index + 1]);
@@ -272,6 +280,7 @@ try {
   assert.equal(originalSession.draft.annotations.length, 2);
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.documentId), grouped.documents.map((row: any) => row.id));
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.level), [levels[1], levels[2]]);
+  assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.text), expectedPassageFeedback, 'saved passage annotations retain both teacher-written and chosen bank feedback');
 
   await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
   await addDocumentFiles(page, txt('Fictional revised essay.txt', 'Revised fictional argument, with new reasoning.'));

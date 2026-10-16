@@ -44,16 +44,20 @@ async function eventually<T>(page: Page, read: () => Promise<T | undefined>, mes
 }
 /** The document node is reused across students; mounted alone does not mean navigation finished. */
 async function openDraft(page: Page, attemptId: string, expectedText: string) {
-  await page.getByTestId(`marking-session-open-${attemptId}`).click();
+  const open = page.getByTestId(`marking-session-open-${attemptId}`);
+  await open.click();
   if (await page.getByTestId('evidence-import-wizard').count() > 0) {
-    // Current navigation is read-only for finalized work; a revision is deliberate.
+    // Earlier guided packages open finalized work read-only; explicitly reopen
+    // only when the queue action has not already created the draft revision.
     await eventually(page, async () => {
       const document = page.getByTestId('marking-document');
       const session = page.locator('section[aria-label="Marking session"]');
       if (!(await document.count()) || !(await session.count())) return undefined;
-      return (await document.innerText()).includes(expectedText) ? true : undefined;
+      // The queue action can create the revision itself. Wait for it to finish
+      // before inspecting the session's optional read-only reopen control.
+      return (await document.innerText()).includes(expectedText) && await open.isEnabled() ? true : undefined;
     }, `Submission did not settle for ${attemptId}`);
-    const reopen = page.getByRole('button', { name: 'Reopen as draft revision', exact: true });
+    const reopen = page.getByRole('region', { name: 'Marking session', exact: true }).getByRole('button', { name: 'Reopen as draft revision', exact: true });
     if (await reopen.isVisible()) await reopen.click();
   }
   await eventually(page, async () => {

@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import { chromium, type Browser, type Page } from 'playwright';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
@@ -92,6 +93,8 @@ async function close(app: Awaited<ReturnType<typeof launch>>) {
 async function openHub(page: Page) {
   page.setDefaultTimeout(20000);
   await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'visible' });
+  await Promise.race([page.getByPlaceholder('Enter Teacher here').waitFor(), page.locator('[data-testid^="select-teacher-"]').first().waitFor()]);
+  if (await page.getByPlaceholder('Enter Teacher here').isVisible()) await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'hidden' });
   const id = await page.getByTestId('qa-build-id').innerText();

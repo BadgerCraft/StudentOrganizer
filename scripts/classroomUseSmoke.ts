@@ -238,6 +238,71 @@ try {
   assert.deepEqual((await rows(page, 'categoryResults')).filter(row => historicalResults.some(old => old.id === row.id)), historicalResults);
   assert.deepEqual(errors, []); assert.deepEqual(external, []);
   pass('Picture import preserves exact local bytes and opens image marking; historical results are unchanged; no external requests or browser errors.');
+
+  // Returning to Markbook destroys the workspace's in-memory preparation. Both
+  // kinds must be explicitly discarded before any official result is committed.
+  for (const preparation of ['rubric', 'import'] as const) {
+    await page.getByText(/Draft — official marks unchanged/).waitFor();
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
+    const feedback = `Fictional picture feedback with guarded ${preparation} preparation.`;
+    await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(feedback);
+    await page.getByRole('button', { name: 'Save now', exact: true }).click();
+    await page.getByTestId('marking-save-status').filter({ hasText: /^Saved locally$/ }).waitFor();
+    const title = `Fictional unsaved ${preparation} preparation`;
+    const work = 'Fictional student text that must survive a cancelled return.';
+    if (preparation === 'rubric') {
+      await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
+      await page.getByLabel('Rubric title', { exact: true }).fill(title);
+    } else {
+      await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+      await wizard.getByLabel('Paste text', { exact: true }).check();
+      await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
+      await wizard.getByLabel('Work title', { exact: true }).fill(title);
+      await wizard.getByRole('textbox', { name: /^Student work/ }).fill(work);
+    }
+    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+    const before = Object.fromEntries(await Promise.all(['studentAssessments', 'categoryResults', 'markingCommits', 'markingSessions', 'markingRubrics', 'markingAttempts']
+      .map(async table => [table, await rows(page, table)])));
+    const cancelPrompt = page.waitForEvent('dialog');
+    const cancelledReturn = page.getByTestId('marking-save-markbook').click();
+    const cancellation = await cancelPrompt;
+    assert.match(cancellation.message(), /discard unsaved rubric or import preparation/i);
+    await cancellation.dismiss(); await cancelledReturn;
+    assert.equal(await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), feedback);
+    for (const [table, records] of Object.entries(before)) assert.deepEqual(await rows(page, table), records, `${preparation}: cancellation must not finalize or change saved records`);
+    if (preparation === 'rubric') {
+      await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
+      assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), title);
+    } else {
+      await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+      assert.equal(await wizard.getByLabel('Work title', { exact: true }).inputValue(), title);
+      assert.equal(await wizard.getByRole('textbox', { name: /^Student work/ }).inputValue(), work);
+    }
+    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+    const acceptPrompt = page.waitForEvent('dialog');
+    const acceptedReturn = page.getByTestId('marking-save-markbook').click();
+    const acceptance = await acceptPrompt;
+    assert.match(acceptance.message(), /discard unsaved rubric or import preparation/i);
+    await acceptance.accept(); await acceptedReturn;
+    await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
+    const savedCommits = await rows(page, 'markingCommits');
+    assert.equal(savedCommits.length, before.markingCommits.length + 1);
+    const receipt = savedCommits.find(row => !before.markingCommits.some(previous => previous.id === row.id));
+    assert.equal(receipt?.attemptId, picture.id);
+    assert.equal(receipt?.draft.overallFeedback, feedback);
+    const pictureAssessment = (await rows(page, 'studentAssessments')).find(row => row.assessmentId === assessment.id && row.classEnrollmentId === picture.classEnrollmentId);
+    assert.equal(pictureAssessment?.overallFeedback, feedback);
+    assert.deepEqual(await rows(page, 'markingAttempts'), before.markingAttempts, 'Discarding import preparation must not create a submission');
+    assert.deepEqual(await rows(page, 'markingRubrics'), before.markingRubrics, 'Discarding rubric preparation must not create a rubric version');
+    if (preparation === 'rubric') {
+      await assessments(); await page.getByTestId(`open-marking-${assessment.id}`).click();
+      await page.getByTestId(`marking-session-open-${picture.id}`).click();
+      await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
+    }
+  }
+  assert.deepEqual(errors, []); assert.deepEqual(external, []);
+  pass('Save and return protects unsaved rubric and import preparation: Cancel preserves exact preparation/draft/official records; explicit discard alone finalizes and returns to Markbook.');
   await page.screenshot({ path: '/tmp/classroom-use-marking.png', fullPage: true });
   await writeFile('/tmp/classroom-use-results.json', JSON.stringify({ status: 'pass', completed, errors, external, nativeDesktopVerified: false }, null, 2));
 } catch (error) {

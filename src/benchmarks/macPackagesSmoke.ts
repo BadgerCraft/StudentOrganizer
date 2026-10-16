@@ -72,23 +72,24 @@ async function openMarkCell(page: Page, assessmentTitle: string, studentLabel: s
   await header.waitFor();
   assert.equal(await header.count(), 1);
   const columnIndex = await header.evaluate(el => Array.from(el.parentElement!.children).indexOf(el));
-  assert.ok(columnIndex >= 6, 'Must select an assessment category, never a summary column');
+  assert.match(await header.getAttribute('data-testid') ?? '', /^markbook-header-.+-K$/, 'Must select the K assessment category, never a summary column');
+  assert.ok(columnIndex > 0, 'Must not select the student roster column');
   const row = page.locator('tbody tr').filter({ has: page.getByRole('button', { name: studentLabel, exact: true }) });
   assert.equal(await row.count(), 1);
   const cell = row.locator('td').nth(columnIndex);
   await cell.click();
-  const form = page.locator('form').filter({ has: page.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }) });
+  const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'Save Result', exact: true }) });
   await form.waitFor();
-  assert.ok(await form.getByText('Category:', { exact: false }).isVisible());
+  assert.ok(await form.getByText('Category: K', { exact: true }).isVisible());
   return { form, cell };
 }
-async function assertCategoryResult(page: Page, studentAssessmentId: string, categoryId: string, feedback: string, rawScore: string) {
+async function assertCategoryResult(page: Page, studentAssessmentId: string, categoryId: string, feedback: string, rawScore: '3+' | '2') {
   const rows = await waitForRecords(page, 'categoryResults', rows => rows.some(row =>
     row.studentAssessmentId === studentAssessmentId && row.assessmentCategoryId === categoryId && row.rawScore === rawScore));
   const result = rows.find(row => row.studentAssessmentId === studentAssessmentId && row.assessmentCategoryId === categoryId && row.deletedAt === null);
   assert.ok(result);
-  assert.equal(result.inputFormat, 'percentage');
-  assert.equal(result.normalizedPercentage, Number(rawScore));
+  assert.equal(result.inputFormat, 'classroom_level');
+  assert.equal(result.normalizedPercentage, rawScore === '3+' ? 78 : 65);
   assert.equal(result.feedback, feedback);
   return result;
 }
@@ -153,23 +154,22 @@ async function checkApp(appPath: string, format: string) {
     const studentAssessment = (await records(page, 'studentAssessments')).find(row => row.assessmentId === assessment.id && row.classEnrollmentId === enrollment.id);
     assert.ok(studentAssessment);
     const editor = await openMarkCell(page, title, studentLabel);
-    await editor.form.locator('select').selectOption('percentage');
-    await editor.form.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }).fill('87');
+    await editor.form.getByRole('group', { name: 'Assigned K level', exact: true }).getByRole('button', { name: '3+', exact: true }).click();
     await editor.form.getByPlaceholder('Optional constructive feedback for this category...').fill(feedback);
     await editor.form.getByRole('button', { name: 'Complete', exact: true }).click();
     await editor.form.getByRole('button', { name: 'Save Result', exact: true }).click();
     await editor.form.waitFor({ state: 'hidden' });
-    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '87');
+    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '3+');
     // The transaction can commit before Dexie's live query refreshes the cell.
     // Require the visible result too, waiting for rendering rather than treating
     // the first read after the database assertion as a settled UI state.
     for (let attempt = 0; attempt < 100; attempt++) {
-      if ((await editor.cell.innerText()).trim() === '87') break;
+      if ((await editor.cell.innerText()).trim() === '3+') break;
       await page.waitForTimeout(100);
     }
-    assert.equal((await editor.cell.innerText()).trim(), '87');
+    assert.equal((await editor.cell.innerText()).trim(), '3+');
     const reopened = await openMarkCell(page, title, studentLabel);
-    assert.equal(await reopened.form.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }).inputValue(), '87');
+    assert.equal(await reopened.form.getByRole('group', { name: 'Assigned K level', exact: true }).getByRole('button', { name: '3+', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await reopened.form.getByPlaceholder('Optional constructive feedback for this category...').inputValue(), feedback);
     await reopened.form.getByRole('button', { name: 'Cancel', exact: true }).click();
 
@@ -207,7 +207,7 @@ async function checkApp(appPath: string, format: string) {
     assert.ok(backup.tables.assessments.some((row: any) => row.id === assessment.id));
     assert.ok(backup.tables.participationEvents.some((row: any) => row.id === event.id));
     assert.equal(backup.tables.students.find((row: any) => row.id === student.id)?.photoUrl, student.photoUrl);
-    assert.ok(backup.tables.categoryResults.some((row: any) => row.studentAssessmentId === studentAssessment.id && row.rawScore === '87'));
+    assert.ok(backup.tables.categoryResults.some((row: any) => row.studentAssessmentId === studentAssessment.id && row.rawScore === '3+'));
     const storeNames = await page.evaluate(() => new Promise<string[]>((resolve, reject) => {
       const request = indexedDB.open('OntarioTeacherAssessmentDB');
       request.onerror = () => reject(request.error);
@@ -224,18 +224,18 @@ async function checkApp(appPath: string, format: string) {
     const laterTitle = `${title} after backup`;
     await createAssessment(page, laterTitle);
     const laterEditor = await openMarkCell(page, title, studentLabel);
-    await laterEditor.form.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }).fill('42');
+    await laterEditor.form.getByRole('group', { name: 'Assigned K level', exact: true }).getByRole('button', { name: '2', exact: true }).click();
     await laterEditor.form.getByRole('button', { name: 'Save Result', exact: true }).click();
     await laterEditor.form.waitFor({ state: 'hidden' });
-    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '42');
+    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '2');
     await page.locator('[data-testid="nav-portability-btn"]').click();
     await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: 'fictional-backup.json', mimeType: 'application/json', buffer: body });
     await page.locator('[data-testid="restore-confirm-dialog"]').waitFor();
     assert.ok((await records(page, 'assessments')).some(row => row.title === laterTitle), 'Restore preview must not replace data');
-    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '42');
+    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '2');
     await page.locator('[data-testid="confirm-restore-btn"]').click();
     await page.getByText(/Database successfully restored/).waitFor();
-    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '87');
+    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '3+');
     assert.ok(!(await records(page, 'assessments')).some(row => row.title === laterTitle));
     assert.equal((await records(page, 'students')).find(row => row.id === student.id)?.photoUrl, student.photoUrl);
     assert.ok((await records(page, 'participationEvents')).some(row => row.id === event.id && row.note === observation));
@@ -271,9 +271,9 @@ async function checkApp(appPath: string, format: string) {
     await openHub(page);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     assert.equal(await page.getByRole('heading', { name: laterTitle, exact: true }).count(), 0);
-    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '87');
+    await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '3+');
     const persisted = await openMarkCell(page, title, studentLabel);
-    assert.equal(await persisted.form.getByPlaceholder('e.g. 4+, 88%, 18/20', { exact: true }).inputValue(), '87');
+    assert.equal(await persisted.form.getByRole('group', { name: 'Assigned K level', exact: true }).getByRole('button', { name: '3+', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await persisted.form.getByPlaceholder('Optional constructive feedback for this category...').inputValue(), feedback);
     await persisted.form.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal((await records(page, 'students')).find(row => row.id === student.id)?.photoUrl, student.photoUrl);
@@ -284,7 +284,7 @@ async function checkApp(appPath: string, format: string) {
     assert.deepEqual(errors, []);
     return { format, status: 'PASS', architecture: arch, userDataPath,
       marking, assessmentCreatedAndRetained: true, noteParticipationRetained: true,
-      categoryPercentageAndFeedbackRetained: true, localPhotoRetained: true,
+      categoryLevelAndFeedbackRetained: true, localPhotoRetained: true,
       fullBackupAllStores: true, invalidRestoreRejected: true, confirmedRecoveryAndRestart: true,
       backupEvidence: path.basename(backupPath), nativeSaveDialog: 'CI selects evidence destination; unverified' };
   } catch (error) {
@@ -347,7 +347,7 @@ async function main() {
       limits: ['Ephemeral CI has no downloaded-file quarantine; colleague Gatekeeper/device policy not tested.', 'UI automation selects a local photo and backup file programmatically; Finder picker and native save-dialog interaction and physical school-managed Macs are not tested.', 'Fictional full recovery writes are restricted to ephemeral GitHub Actions Mac runners; this is not a classroom-data migration test.']
     };
     fs.writeFileSync(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2));
-    console.log('PASS: exact Mac disk-image and archive apps preserved assessment, participation, percentage/feedback and photo through full backup/recovery and restart.');
+    console.log('PASS: exact Mac disk-image and archive apps preserved assessment, participation, classroom level/feedback and photo through full backup/recovery and restart.');
   } finally {
     if (mounted) execFileSync('hdiutil', ['detach', mount]);
     fs.rmSync(temp, { recursive: true, force: true });

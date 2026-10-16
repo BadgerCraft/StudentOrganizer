@@ -162,7 +162,7 @@ try {
   const rubric = (await records(page, 'markingRubrics')).find(row => row.assessmentId === assessment.id); assert.ok(rubric);
   const criterionId = rubric.criteria[0].id;
   const enrollmentIds = (await records(page, 'classEnrollments')).filter(row => row.classSectionId === assessment.classSectionId && row.deletedAt === null && row.enrollmentStatus === 'active').map(row => row.id);
-  assert.ok(enrollmentIds.length >= 2);
+  assert.ok(enrollmentIds.length >= 3);
 
   // Seed a nonempty official baseline through the established markbook service,
   // so preservation assertions cannot pass merely because the gradebook is empty.
@@ -281,7 +281,7 @@ try {
   assert.deepEqual(await official(page, assessment.id), baseline, 'preview does not finalize');
   await page.getByTestId('marking-finalize-confirm').click();
   await page.getByText('Finalized revision — current official results shown below', { exact: false }).waitFor();
-  const committed = await official(page, assessment.id);
+  let committed = await official(page, assessment.id);
   assert.equal(committed.commits.length, 1); assert.equal(committed.results.length, 2);
   assert.ok(committed.results.some(row => row.rawScore === '2+')); assert.ok(committed.results.some(row => row.rawScore === '3+'));
   const finalizedSession = await session(page, photo.id);
@@ -295,12 +295,14 @@ try {
 
   const nonwritten: { attempt: any; saved: any }[] = [];
   for (const mode of ['oral', 'rubric'] as const) {
+    // Distinct students keep finalization independent of another mode's baseline.
+    const enrollmentId = enrollmentIds[mode === 'oral' ? 1 : 2];
     await page.getByTestId(`marking-mode-${mode}`).click();
-    await page.getByTestId('marking-mode-student').selectOption(enrollmentIds[1]);
+    await page.getByTestId('marking-mode-student').selectOption(enrollmentId);
     await page.getByTestId('marking-mode-create').click();
     await page.getByTestId('marking-rubric-evidence').waitFor();
     const attempt = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id && row.mode === mode); assert.ok(attempt);
-    assert.equal(attempt.classEnrollmentId, enrollmentIds[1]); assert.deepEqual(attempt.documents, []);
+    assert.equal(attempt.classEnrollmentId, enrollmentId); assert.deepEqual(attempt.documents, []);
     assert.equal(await page.getByTestId('image-markup').count(), 0); assert.equal(await page.getByTestId('marking-document').count(), 0);
     if (mode === 'oral') {
       await page.getByTestId('marking-oral-add-item').click();
@@ -387,6 +389,67 @@ try {
   assert.deepEqual(await official(page, assessment.id), committed);
   passed('domain boundary regressions reject remote/data/file image URIs, unconfirmed student and wrong-teacher open/write; finalized retry returns same commit; attempts, drafts, commits, audit and official grades unchanged.');
 
+  const categories = (await records(page, 'assessmentCategories')).filter(row => row.assessmentId === assessment.id && row.deletedAt === null);
+  const thinkingId = categories.find(row => row.categoryCode === 'T').id;
+  const communicationId = categories.find(row => row.categoryCode === 'C').id;
+  for (const item of nonwritten) {
+    const { attempt } = item, mode = attempt.mode;
+    const level = mode === 'oral' ? '3+' : '4+(med)', percentage = mode === 'oral' ? 78 : 98;
+    const categoryFeedback = `Fictional ${mode} official category feedback`;
+    const feedbackOnly = `Fictional ${mode} communication feedback only`;
+    const beforeSave = committed;
+    await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+    await chooseOfficialLevel(page, 'T', level);
+    await page.getByLabel('Category T feedback', { exact: true }).fill(categoryFeedback);
+    await page.getByLabel('Category C feedback', { exact: true }).fill(feedbackOnly);
+    await saved(page);
+    const reviewed = await session(page, attempt.id);
+    assert.deepEqual(await official(page, assessment.id), beforeSave, `${mode} chosen levels and feedback remain draft-only before official save`);
+    await page.getByTestId('marking-save-markbook').click();
+    await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
+    await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${thinkingId}`).filter({ hasText: level }).waitFor();
+    await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${communicationId}`).filter({ hasText: 'Feedback only' }).waitFor();
+    const afterSave = await official(page, assessment.id);
+    const studentAssessments = afterSave.assessments.filter(row => row.classEnrollmentId === attempt.classEnrollmentId);
+    assert.equal(studentAssessments.length, 1, `${mode} saves exactly one assessment for the confirmed student`);
+    const studentAssessment = studentAssessments[0];
+    assert.equal(studentAssessment.assessmentId, assessment.id);
+    assert.equal(studentAssessment.overallFeedback, reviewed.draft.overallFeedback);
+    const results = afterSave.results.filter(row => row.studentAssessmentId === studentAssessment.id);
+    assert.equal(results.length, 2, `${mode} creates only reviewed T and feedback-only C results`);
+    const thinking = results.find(row => row.assessmentCategoryId === thinkingId);
+    const communication = results.find(row => row.assessmentCategoryId === communicationId);
+    assert.ok(thinking); assert.ok(communication);
+    assert.equal(thinking.rawScore, level); assert.equal(thinking.inputFormat, 'classroom_level');
+    assert.equal(thinking.normalizedPercentage, percentage); assert.equal(thinking.feedback, categoryFeedback);
+    assert.equal(communication.rawScore, ''); assert.equal(communication.inputFormat, 'descriptive');
+    assert.equal(communication.normalizedPercentage, null); assert.equal(communication.pointsEarned, null);
+    assert.equal(communication.feedback, feedbackOnly);
+    const commits = afterSave.commits.filter(row => row.attemptId === attempt.id);
+    assert.equal(commits.length, 1, `${mode} Save and return creates one immutable receipt`);
+    const receipt = commits[0];
+    assert.equal(receipt.sessionId, reviewed.id); assert.equal(receipt.studentAssessmentId, studentAssessment.id);
+    assert.equal(receipt.rubricId, rubric.id); assert.equal(receipt.previousCommitId, null);
+    assert.deepEqual([...receipt.resultIds].sort(), results.map(row => row.id).sort(), `${mode} receipt references exactly this student's reviewed results`);
+    assert.deepEqual(receipt.draft, reviewed.draft, `${mode} receipt retains exact rubric evidence and private observations`);
+    item.saved = await session(page, attempt.id);
+    assert.equal(item.saved.id, reviewed.id); assert.equal(item.saved.status, 'finalized'); assert.equal(item.saved.commitId, receipt.id);
+    assert.deepEqual(item.saved.draft, reviewed.draft);
+    assert.deepEqual(afterSave.assessments.filter(row => row.id !== studentAssessment.id), beforeSave.assessments.filter(row => row.id !== studentAssessment.id), `${mode} does not change another student's assessment`);
+    assert.deepEqual(afterSave.results.filter(row => row.studentAssessmentId !== studentAssessment.id), beforeSave.results, `${mode} does not change another student's grades`);
+    assert.deepEqual(afterSave.commits.filter(row => row.id !== receipt.id), beforeSave.commits, `${mode} preserves prior immutable receipts`);
+    committed = afterSave;
+    await page.reload();
+    await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click();
+    await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${thinkingId}`).filter({ hasText: level }).waitFor();
+    await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${communicationId}`).filter({ hasText: 'Feedback only' }).waitFor();
+    assert.deepEqual(await official(page, assessment.id), committed, `${mode} exact official records survive restart`);
+    assert.deepEqual(await session(page, attempt.id), item.saved, `${mode} finalized evidence survives restart`);
+    await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+    await page.getByTestId(`open-marking-${assessment.id}`).click();
+    passed(`${mode} Save and return to Markbook saves only the confirmed student's ${level} (${percentage}%) and feedback-only category with exact receipt/result IDs and feedback; prior students/history unchanged and restart preserves records.`);
+  }
+
   const tables = ['markingAttempts', 'markingSessions', 'markingRubrics', 'markingCommits'];
   const before = Object.fromEntries(await Promise.all(tables.map(async table => [table, (await records(page, table)).filter(row => row.assessmentId === assessment.id)])));
   await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
@@ -428,7 +491,7 @@ try {
   }
   await restored.screenshot({ path: `${artifacts}-restored.png`, fullPage: true });
   assert.deepEqual(await official(restored, assessment.id), committed);
-  passed('actual full backup download and clean-profile preview/confirmed restore recover exact photo bytes/transforms/edited marks, finalized history and revision, oral checklist/private notes, rubric-only draft and official records; reopened UI verifies evidence.');
+  passed('actual full backup download and clean-profile preview/confirmed restore recover exact photo bytes/transforms/edited marks, finalized history and revision, oral checklist/private notes, finalized oral/rubric evidence and all three modes\' official records; reopened UI verifies evidence.');
   assert.deepEqual(errors, [], 'browser errors'); assert.deepEqual(external, [], 'external requests');
   passed('zero external requests and browser exceptions; physical Windows/Mac interactions remain unverified; iPad and camera work remain shelved.');
   await result('pass');
