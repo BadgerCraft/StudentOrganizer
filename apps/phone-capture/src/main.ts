@@ -1,7 +1,9 @@
 import { CaptureDB, catalog, emptyBatch, save, readPhoto, appendPages, movePage, exportSavedBatch, type Batch } from './store';
 import './style.css';
+import { transferStatus, zipBase64, acceptedReceipt } from './native';
 const root = document.querySelector<HTMLDivElement>('#app')!;
-root.innerHTML = `<h1>Phone capture</h1><p>Fictional-data pilot · local batch</p><p class="notice">Use fictional photos only. Pages stay in this browser until you deliberately export. Browser storage can be cleared or evicted; keep your originals. Labels never assign a student.</p>
+root.innerHTML = `<h1>Phone capture</h1><p>Fictional-data pilot · local batch</p><p class="notice">Use fictional photos only. Pages stay local until you deliberately export or enable private Drive transfer in Android settings. Browser storage can be cleared or evicted; keep your originals. Labels never assign a student.</p>
+<section aria-label="Private Drive transfer"><button id="drive-settings">Private Drive settings</button><button id="drive-queue">Queue current batch</button><p id="transfer-status" role="status"></p><small>Automatic transfer is off until you enable it. When enabled, saved batches with every page labelled are queued directly to your private Drive. No AI processing or relay. Local originals are retained. Use Drive for desktop and manually import photos into StudentOrganizer.</small></section>
 <p id="status" role="status" aria-live="polite">Opening local batch…</p><fieldset id="controls" disabled>
 <label>Class<select id="class"><option value="">Choose class</option></select></label>
 <label>Assignment<select id="assignment"><option value="">Choose assignment</option></select></label>
@@ -44,7 +46,7 @@ function render(drafts?: Map<string | undefined, string>) {
     el('pages').append(article);
   });
 }
-async function persist(next: Batch) { batch = await save(db, next); status(`Saved locally · ${batch.pages.length} page(s). All pages unmatched.`); }
+async function persist(next: Batch) { batch = await save(db, next); status(`Saved locally · ${batch.pages.length} page(s). All pages unmatched.`); await queuePrivateDrive(false); }
 async function run(action: () => Promise<void>) {
   if (busy) return; busy = true; el<HTMLFieldSetElement>('controls').disabled = true;
   const labels = new Map(Array.from(el('pages').querySelectorAll<HTMLInputElement>('input')).map(input => [input.dataset.pageId, input.value]));
@@ -82,6 +84,10 @@ window.addEventListener('beforeunload', event => {
 });
 el('export').onclick = () => void run(async () => {
   const bytes = await exportSavedBatch(db, batch);
+  if (window.CaptureNative) {
+    acceptedReceipt(window.CaptureNative.saveLocalZip(zipBase64(bytes), `fictional-capture-r${batch.revision}.zip`));
+    status('Android save dialog requested. Verify your saved file; local pages are retained.'); return;
+  }
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: 'application/zip' }));
   const link = document.createElement('a'); link.href = url; link.download = `fictional-capture-r${batch.revision}.zip`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -91,5 +97,37 @@ el('reset').onclick = () => {
   if (confirm('Start a new batch? This removes the current local pages. First check that your exported ZIP is saved and readable.'))
     void run(() => persist({ ...emptyBatch(), revision: batch.revision }));
 };
+let lastQueued = ''; let queueing = false;
+async function queuePrivateDrive(manual: boolean) {
+  const bridge = window.CaptureNative;
+  const current = transferStatus(bridge);
+  if (!bridge || !current.available || !current.enabled || !batch.pages.length || batch.pages.some(p => !p.label.trim())) {
+    if (manual) el('transfer-status').textContent = 'Enable private transfer and save a labelled batch first. No upload queued.';
+    return;
+  }
+  const key = `${batch.captureId}:${batch.revision}`;
+  if (queueing || (!manual && key === lastQueued)) return;
+  queueing = true;
+  try {
+    const snapshot = batch;
+    const bytes = await exportSavedBatch(db, snapshot);
+    const receipt = acceptedReceipt(bridge.enqueueCapture(zipBase64(bytes), snapshot.captureId, snapshot.revision));
+    lastQueued = key;
+    el('transfer-status').textContent = receipt;
+  } catch (error) {
+    el('transfer-status').textContent = `Not queued: ${error instanceof Error ? error.message : 'Native transfer unavailable'}. Local batch retained; retry from Queue current batch.`;
+  } finally { queueing = false; }
+}
+function refreshTransfer() {
+  const current = transferStatus(window.CaptureNative);
+  el<HTMLButtonElement>('drive-settings').disabled = !window.CaptureNative;
+  el<HTMLButtonElement>('drive-queue').disabled = !current.available || !current.enabled;
+  if (!queueing) el('transfer-status').textContent = current.summary;
+  if (!busy && current.enabled) void queuePrivateDrive(false);
+}
+el('drive-settings').onclick = () => { window.CaptureNative?.requestDriveSetup(); };
+el('drive-queue').onclick = () => void run(async () => { await queuePrivateDrive(true); });
+refreshTransfer();
+setInterval(refreshTransfer, 10_000);
 try { batch = await db.batches.get('local-batch') ?? emptyBatch(); render(); el<HTMLFieldSetElement>('controls').disabled = false; status(`Opened local batch · ${batch.pages.length} page(s). All pages unmatched.`); }
 catch { status('Local storage could not open. No changes made. Check browser storage permissions and reload.'); }

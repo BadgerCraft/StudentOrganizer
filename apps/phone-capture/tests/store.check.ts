@@ -25,6 +25,17 @@ afterEach(async () => {
 });
 
 describe('local batch persistence', () => {
+  it('exports identical bytes for the same saved revision across wall-clock changes', async () => {
+    const sample = batch([page('fictional-stable')]);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-16T10:00:00Z'));
+      const first = await exportBatch(sample);
+      vi.setSystemTime(new Date('2026-10-17T18:00:00Z'));
+      expect(await exportBatch(sample)).toEqual(first);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('exports the committed snapshot and rejects a stale clean tab or missing/reset batch', async () => {
     const db = database();
     const old = await save(db, batch([page('fictional-a')]));

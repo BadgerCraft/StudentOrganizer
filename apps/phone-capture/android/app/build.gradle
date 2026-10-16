@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'org.studentorganizer.capture'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'org.studentorganizer.capture'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1-fictional-pilot'
+        buildConfigField 'boolean', 'CAPTURE_DRIVE_SETUP_APPROVED', providers.gradleProperty('captureDriveSetupApproved').getOrElse('false') == 'true' ? 'true' : 'false'
+    }
+    testOptions { unitTests.includeAndroidResources = true }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/captureAssets')
+}
+tasks.register('copyCaptureAssets', Sync) { from '../../dist'; into layout.buildDirectory.dir('generated/captureAssets'); doFirst { if (!file('../../dist/index.html').exists()) throw new GradleException('Build the phone-capture web package first.') } }
+tasks.named('preBuild').configure { dependsOn 'copyCaptureAssets' }
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    implementation project(':transfer-core')
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.work:work-runtime:2.10.1'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'com.google.android.gms:play-services-auth:22.0.0'
+}

@@ -1,5 +1,7 @@
 # F-008-CAPTURE — isolated phone companion
 
+**Current continuation:** Tyler subsequently approved isolated Android/direct private Drive implementation. [Android/private Drive work order](ANDROID-PRIVATE-DRIVE-2026-10-16.md) supersedes this record’s historical no-Drive/no-Android implementation gates; account grants, installation, real data and publication remain separately reserved. The results below preserve the foundation/review evidence.
+
 ## Authority, source and isolation
 
 October16 delegated objective: start the separate phone capture workflow, local implementation, focused tests and review preparation. Tyler explicitly confirmed “the remote” means the phone companion. Earlier design-only/shelved capture entries are superseded by this specific approval. Preserve desktop grading/runtime/student data and all shelved iPad work. No remote repository creation, merge/release/distribution, cloud/provider adoption, real data or phone access is authorized here. This batch prepares local review artifacts; no push or PR creation attempted.

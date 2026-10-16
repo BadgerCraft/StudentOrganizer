@@ -64,7 +64,8 @@ export async function exportBatch(batch: Batch): Promise<Uint8Array> {
     batchId: batch.captureId, revision: batch.revision, classHint: catalog.find(c => c.id === batch.classId)!.name,
     assignmentHint: batch.assignment, requiresExplicitDesktopMatching: true, pages }, null, 2));
   files['README.txt'] = strToU8('Fictional capture pilot. Extract locally. Import ordered photos into desktop Markinator and explicitly choose each student. The desktop does not yet read this manifest. Labels and class/assignment hints never establish identity. Original photos can contain metadata. Export does not delete the local batch.\n');
-  return zipSync(files, { level: 0 });
+  // Stable container bytes let a saved revision deduplicate across retries/restarts.
+  return zipSync(files, { level: 0, mtime: new Date(1980, 0, 1) });
 }
 
 /** Export a committed point-in-time snapshot, rejecting an obsolete tab even

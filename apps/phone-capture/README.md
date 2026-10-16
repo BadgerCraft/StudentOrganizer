@@ -1,6 +1,6 @@
 # Phone capture companion — fictional-data pilot
 
-Separate package, entry point, build and IndexedDB database. No imports from the desktop app, no desktop runtime/data/schema changes, no network sender or backend. This browser prototype is a reversible foundation for the Android phone workflow; it is not an installed/native app or an offline-installable PWA.
+Separate package, entry point, build and IndexedDB database. No imports from the desktop app or desktop runtime/data/schema changes. The browser stays local-only. The separate Android shell now implements explicitly approved direct private Drive transfer; no backend or AI relay. The browser remains a local prototype; `android/` packages it with native camera/import/export and gated private Drive authorization/queueing. Native/device/live-account acceptance is separate.
 
 ## Local development
 
@@ -36,4 +36,10 @@ This draft interchange contract has no trusted importer. Future ingestion must v
 
 ## Verification limits / next gates
 
-Unit tests cover rollback/retry, concurrent writers, persistence and export integrity; the browser test covers actual IndexedDB, decoding, mobile layout, downloaded ZIP contents and recovery. Headless Linux Chromium with a mobile viewport is not Android/native camera verification. Native camera, permissions, installability, offline cold launch, Android lifecycle/quota/capacity and actual phone-to-desktop transfer are **UNVERIFIED**. Desktop manifest ingestion, real catalog handoff and native packaging remain future decisions. No iPad reactivation, cloud sync, remote OCR/AI, automatic upload, paid services, public deployment or real student data.
+Unit tests cover rollback/retry, concurrent writers, persistence and export integrity; the browser test covers actual IndexedDB, decoding, mobile layout, downloaded ZIP contents and recovery. Headless Linux Chromium with a mobile viewport is not Android/native camera verification. Native camera, permissions, installability, offline cold launch, Android lifecycle/quota/capacity and actual phone-to-desktop transfer are **UNVERIFIED**. Desktop manifest ingestion and real catalog handoff remain future decisions. Android implementation and opt-in direct private Drive upload are now approved as described below; native installation and live account setup remain separate. No iPad reactivation, remote OCR/AI, broad cloud sync, paid services, public deployment or real student data.
+
+## Approved Android / private Drive extension
+
+See [current architecture, evidence and exact setup gate](../../docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md) (repository path: `docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md`). Build native source with the separate Gradle project in `android/`; Drive remains disabled unless approved setup is explicitly enabled in a build. No account or OAuth grant was configured during implementation. After configured consent and explicit opt-in, saved fully-labelled revisions queue automatically, default Wi-Fi/unmetered only. Native settings pause/retry/reconnect/revoke. No AI processing, relay, public links or automatic original deletion. This describes app behavior, not a promise about Google's internal storage automation.
+
+New checks: `npm run test:native-browser` uses a fictional bridge (no actual Drive); native/core test commands and live acceptance limits are recorded in the work order. Local export still works without Drive. Desktop handling remains manual extraction/photo import and explicit matching.
