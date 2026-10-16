@@ -62,6 +62,40 @@ try {
   await single.click(); await expectCount(0);
   await choose(0); await page.getByTestId('toggle-note-btn').click();
   await page.getByTestId('observation-note-input').fill('Fictional draft for first student only');
+  // Changing target must acknowledge meaningful entered work, not merely erase stale state.
+  let prompted = false;
+  const cancelDraftChange = async (action: () => Promise<unknown>) => {
+    prompted = false;
+    page.once('dialog', async dialog => {
+      prompted = true; assert.match(dialog.message(), /discard unsaved participation/i); await dialog.dismiss();
+    });
+    await action();
+    assert.equal(prompted, true, 'Draft-changing action must request acknowledgment');
+    assert.equal(await page.getByTestId('observation-note-input').inputValue(), 'Fictional draft for first student only');
+    assert.equal(await cards.nth(0).getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(await rows(page, 'participationEvents'), baseline);
+  };
+  await cancelDraftChange(() => choose(1));
+  await cancelDraftChange(() => choose(0)); // Deselecting the current target also loses the draft.
+  await cancelDraftChange(() => group.click());
+  const draftClass = await page.getByTestId('header-class-select').inputValue();
+  const draftDate = await page.getByTestId('school-date-picker').inputValue();
+  const alternateClass = await page.getByTestId('header-class-select').locator('option').evaluateAll((options, initial) => options.map(option => (option as HTMLOptionElement).value).find(value => value && value !== initial), draftClass);
+  assert.ok(alternateClass);
+  await cancelDraftChange(() => page.getByTestId('header-class-select').selectOption(alternateClass));
+  assert.equal(await page.getByTestId('header-class-select').inputValue(), draftClass);
+  await cancelDraftChange(() => page.getByTestId('prev-day-btn').click());
+  assert.equal(await page.getByTestId('school-date-picker').inputValue(), draftDate);
+  await cancelDraftChange(() => page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click());
+  await cancelDraftChange(() => page.getByTestId('header-teacher-btn').click());
+  assert.equal(await page.getByTestId('teacher-selector-modal').count(), 0);
+  await cancelDraftChange(() => page.getByRole('button', { name: 'Close dock', exact: true }).click());
+  await cancelDraftChange(() => page.getByRole('button', { name: 'Report a problem', exact: true }).click());
+  assert.equal(await page.getByTestId('bug-report-modal').count(), 0);
+  await cancelDraftChange(() => cards.first().getByTestId('open-student-profile-btn').click());
+  await cancelDraftChange(() => cards.first().getByTestId('student-settings-gear-btn').click());
+  assert.equal(await single.getAttribute('aria-pressed'), 'true');
+  page.once('dialog', dialog => dialog.accept());
   await choose(1); assert.equal(await page.getByTestId('observation-note-input').count(), 0);
   const eventTypes = await rows(page, 'participationEventTypes');
   const levelType = eventTypes.find(type => type.recordingMode === 'level_1_4' && !type.isArchived);
@@ -69,13 +103,67 @@ try {
   const levelButton = () => page.getByRole('button', { name: `Record ${levelType.name}`, exact: true });
   await levelButton().click(); await page.getByTestId('cancel-level-btn').click();
   assert.deepEqual(await rows(page, 'participationEvents'), baseline);
-  await levelButton().click(); await choose(0);
+  await levelButton().click();
+  let levelPrompted = false;
+  page.once('dialog', async dialog => { levelPrompted = true; await dialog.dismiss(); });
+  await group.click();
+  assert.equal(levelPrompted, true, 'Pending level choice alone requires acknowledgment');
+  assert.equal(await page.getByTestId('level-selector-tray').count(), 1);
+  assert.equal(await single.getAttribute('aria-pressed'), 'true');
+  page.once('dialog', dialog => dialog.accept());
+  await choose(0);
   assert.equal(await page.getByTestId('level-selector-tray').count(), 0);
   await levelButton().click(); await page.keyboard.press('Escape');
   assert.equal(await page.getByTestId('level-selector-tray').count(), 0);
   await page.getByRole('button', { name: 'Close dock', exact: true }).click();
   await expectCount(0); assert.equal(await single.getAttribute('aria-pressed'), 'true');
-  completed.push('Single replaces target; explicit Group retains/adds/removes; Single clears group; target changes reset note/level; Cancel/Escape/Close write nothing.');
+  completed.push('Single replaces target; explicit Group retains/adds/removes; Single clears group; target changes reset note/level only after explicit discard; Cancel/Escape/Close without edits write nothing.');
+
+  // Both mode directions protect notes; acknowledged changes clear the old draft.
+  await choose(0); await page.getByTestId('toggle-note-btn').click();
+  await page.getByTestId('observation-note-input').fill('Fictional draft for first student only');
+  page.once('dialog', dialog => dialog.accept()); await group.click();
+  assert.equal(await page.getByTestId('observation-note-input').count(), 0);
+  await page.getByTestId('toggle-note-btn').click();
+  await page.getByTestId('observation-note-input').fill('Fictional draft for first student only');
+  await cancelDraftChange(() => single.click());
+  assert.equal(await group.getAttribute('aria-pressed'), 'true');
+  page.once('dialog', dialog => dialog.accept()); await single.click(); await expectCount(0);
+  // Explicitly acknowledged date, class, view and teacher departures clear old drafts.
+  for (const departure of ['day', 'class', 'view', 'teacher'] as const) {
+    await choose(0); await page.getByTestId('toggle-note-btn').click();
+    await page.getByTestId('observation-note-input').fill('Fictional draft for first student only');
+    page.once('dialog', dialog => dialog.accept());
+    if (departure === 'day') {
+      await page.getByTestId('prev-day-btn').click(); await page.getByTestId('today-btn').click();
+    } else if (departure === 'class') {
+      await page.getByTestId('header-class-select').selectOption(alternateClass);
+      await page.getByTestId('header-class-select').selectOption(draftClass);
+    } else if (departure === 'view') {
+      await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click();
+      await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+    } else {
+      await page.getByTestId('header-teacher-btn').click();
+      await page.getByTestId('teacher-selector-modal').waitFor(); await page.keyboard.press('Escape');
+      await page.getByTestId('teacher-selector-modal').waitFor({ state: 'hidden' });
+    }
+    await expectCount(0); assert.equal(await single.getAttribute('aria-pressed'), 'true');
+    await choose(0); assert.equal(await page.getByTestId('observation-note-input').count(), 0);
+    await page.getByRole('button', { name: 'Close dock', exact: true }).click();
+  }
+  assert.deepEqual(await rows(page, 'participationEvents'), baseline);
+  await choose(0);
+  const categoryOnly = page.locator('.participation-dock').getByTitle('Force no category');
+  await categoryOnly.click(); const chosenCategoryStyle = await categoryOnly.getAttribute('class');
+  let categoryPrompted = false;
+  page.once('dialog', async dialog => { categoryPrompted = true; await dialog.dismiss(); });
+  await choose(1);
+  assert.equal(categoryPrompted, true, 'A category-only edit requires acknowledgment');
+  assert.equal(await categoryOnly.getAttribute('class'), chosenCategoryStyle);
+  assert.equal(await cards.nth(0).getAttribute('aria-pressed'), 'true');
+  await page.locator('.participation-dock').getByTitle("Use button's default category").click();
+  await page.getByRole('button', { name: 'Close dock', exact: true }).click();
+  completed.push('Unsaved note: Cancel preserves exact text/target on student, deselect, mode, class, day, view, teacher, Close and overlay actions; accepted mode/context changes discard deliberately with zero writes. Pending level and category-only edits are also guarded.');
 
   await choose(0); await group.click(); await choose(1);
   await page.getByTestId('prev-day-btn').click(); await expectCount(0);

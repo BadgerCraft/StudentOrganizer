@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   RotateCcw,
@@ -21,6 +21,7 @@ import { getSchoolLocalDate } from '../utils/dateUtils';
 
 interface ParticipationDockProps {
   selectionMode?: 'single' | 'group';
+  onDraftChange?: (dirty: boolean) => void;
   selectedEnrollments: { enrollment: ClassEnrollment; student: Student }[];
   eventTypes: ParticipationEventType[];
   selectedSchoolDate: string;
@@ -44,6 +45,7 @@ interface ParticipationDockProps {
 
 export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   selectionMode = 'single',
+  onDraftChange,
   selectedEnrollments,
   eventTypes,
   selectedSchoolDate,
@@ -59,6 +61,11 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   const [note, setNote] = useState('');
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [pendingLevelEventType, setPendingLevelEventType] = useState<ParticipationEventType | null>(null);
+
+  useEffect(() => {
+    onDraftChange?.(!!note.trim() || categoryOverride !== 'DEFAULT' || !!pendingLevelEventType);
+    return () => onDraftChange?.(false);
+  }, [note, categoryOverride, pendingLevelEventType, onDraftChange]);
 
   const today = getSchoolLocalDate();
   const isHistorical = selectedSchoolDate !== today;
