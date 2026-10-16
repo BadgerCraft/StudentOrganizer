@@ -1,6 +1,6 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-Updated: October 15, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
+Updated: October 16, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
 
 ## P0 – Teacher-use readiness
 
@@ -18,7 +18,7 @@ Goal: get the integrated desktop application into Tyler's hands for routine fict
 | 4 | TUV-WORKFLOW | Complete normal teacher workflow is the acceptance target; CI is supporting evidence, not Tyler's walkthrough. | Class/student setup; participation/classroom tools; assessment creation; all three Markinator modes; photo import/markup; rubric/feedback; marked PDF; Archive; historical retrieval; backup/restore; restart/persistence. Record friction and exact build/device. No developer intervention or implementation knowledge should be needed. |
 | 5 | TUV-FOLLOWUPS | TUV-UX-001/002 below are important follow-ups, non-blocking for fictional validation. | Record wording, interruptions and OS/device friction as bounded cards; prioritize observed teacher-workflow impact. Do not begin a redesign or feature stream. |
 | 6 | TUV-REAL-DATA | Not authorized. Fictional use only. | Document actual-Windows fictional workflow and backup/restore/restart success, resolve data/privacy/authorization/recovery blockers, obtain school/board/IT privacy acceptance for actual device/account/storage/export/backup/retention handling, then obtain separate explicit Tyler approval before any real-student data. Teacher selection is attribution, not shared-device authentication. |
-| 7 | TUV-SHELVED | iPad, phone capture, publisher/signing, new services and nonessential expansion remain shelved. | Revisit only for an observed direct teacher-use blocker, with explicit approval for reserved changes. No spending, service adoption, release or real-student use follows from review or fictional acceptance. |
+| 7 | TUV-SHELVED | iPad, publisher/signing, new services and unrelated expansion remain shelved. F-008-CAPTURE has separate October16 authorization below. | Revisit only for an observed direct teacher-use blocker, with explicit approval for reserved changes. No spending, service adoption, release or real-student use follows from review or fictional acceptance. |
 
 ### Bounded review and teacher-use cards
 
@@ -73,6 +73,7 @@ Tyler explicitly authorized implementation, relevant tests/build/interaction che
 | QA-20261005-09 | Collapse assessment details to overall grade | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
 | QA-20261005-10 | K/T/C/A ordering in assessments | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
 | F-004 | Assessment Hub and category-management UX | Requested | Review the existing QA06/08/09/10 evidence before additional scope; avoid duplicate controls |
+| F-008-CAPTURE | Separate phone capture companion | October16 explicit Tyler approval: start separate workflow; isolated local implementation, focused tests and review preparation. Fictional browser slice implemented on `codex/phone-capture-20261016` from PR32 `5cf5711`; no roster transfer or desktop changes. | Review [capture work order](work-orders/PHONE-CAPTURE-2026-10-16.md) and package. Publication, merge/release/distribution and actual device/transfer acceptance remain separate; PR32 draft step untouched. |
 | F-007 | Private bug-only Control Panel intake | Local draft retained; new receiver/services deferred during teacher-use validation | Revisit only if observed teacher use is directly blocked and provider/access is explicitly approved. |
 | F-008 | Integrated essay marking, rubrics, imports, feedback and KTAC finalization | Merged PR20; core development acceptance verified | Platform/pilot acceptance separately |
 | F-008-MODES | Essay + rubric, oral checklist + rubric, rubric only | Implemented and development verified on `codex/markinator-modes-photo-20261013` at `0347d94`; pushed/read back, review pending | 392 tests/build and actual three-mode save/reopen/backup/grade-preservation browser checks pass. [Evidence](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md). Draft PR30 published; exact-head CI and source review are next; no merge/release. |
@@ -98,7 +99,6 @@ Tyler explicitly authorized implementation, relevant tests/build/interaction che
 | F-009 | Selected exemplary student work + feedback repository | Only after private bug-only transfer works and explicit opt-in design |
 | F-008-EXT | File-based rubric import, PDF input/OCR, legacy JSON, scratch marking | Annotated PDF output moved to approved F-008-PDF October 14. OCR remains shelved; remaining input/extensions require separate scope approval. |
 | F-006 | Installed iPad application | Explicitly shelved October 14; [resume map](SHELVED_FEATURES.md). Preserve ios/config/scripts; resume only on Tyler’s request. |
-| F-008-CAPTURE | Phone companion: choose class/assignment, take named pages, transfer and match locally | Design inquiry October 14; no implementation or roster transfer approved. Revisit after desktop integration/PDF/Archive. Prefer local batch plus manifest and explicit matching; duplicate names unresolved manually. |
 | FUTURE-CLOUD | Live sync/cloud backup, AI/voice, redo, retained-file purge | Separate user decision and privacy design |
 | FUTURE-CONTROL | Control Panel release/update management | After bug intake; separate scope |
 | FUTURE-STORE | Microsoft Store/signing/publisher distribution | Shelved until explicitly requested; no spending or service adoption |
@@ -139,3 +139,7 @@ Local browser/runtime evidence is UNVERIFIED: Playwright download returned trunc
 ### Publication readback
 
 Command-line Git push lacked credentials; the working GitHub connector published an exact-tree-matching merge commit `f6be09e8f580c1d334857349dce1f9ad66e54c0c` (tree `1a7f7ba90a580530d0e4b42b2096c4a659178522`). Both modes/photo and latest UI parent histories are preserved. Draft PR31 is conflict-free on readback; PR30 points to the combined successor and original branches remain intact. Source-head Windows run38570982553 was in progress and Mac/shared browser run38570982686 queued when observed. This queue-only follow-up has its own CI; no remote pass is claimed. Next: inspect final-head checks, repair any failures within scope, then Windows/Mac physical acceptance. No merge or release performed.
+
+## October 16 — separate capture authorization
+
+Tyler confirmed that “the remote” means the separate phone scanning/capture companion and approved starting it. This supersedes the earlier capture design-only/shelved disposition, without changing iPad shelving or desktop behavior. The delegated scope covers local implementation, focused tests and review preparation. No new repository, push, merge, release, distribution, service or real-data use was performed. PR32 remained open/draft at `5cf5711` on live readback; its pending ready-for-review/merge step was not retried. Current capture checkpoint and exact evidence: [work order](work-orders/PHONE-CAPTURE-2026-10-16.md).

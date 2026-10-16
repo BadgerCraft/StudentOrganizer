@@ -320,3 +320,7 @@ Teacher context is checked inside the write transaction, including the local dev
 - Project example: New R means50 and 1− means51. An old direct78% remains a direct mark; it is not silently relabelled3+. Feedback-only remains ungraded.
 - Evidence: Exact17 save/finalize/restart/restore tests pass; no demonstrated recall claimed.
 - Deferred learning check: Why should an old78% record remain a direct mark even though the new3+ choice calculates as78? Unanswered; ask when useful without blocking authorized work.
+
+## October 16 — capture batch and explicit identity
+
+A manifest is the ZIP’s contents list: page order, hints and checksums accompany the unchanged photos. It is not a roster or an instruction to assign a student. A checksum checks byte consistency, not identity. The companion deliberately exports every page as unmatched. Its separate database isolates capture drafts from desktop grades; a revision check rejects stale-tab overwrites. Explanation prepared in the capture package/work order; no Tyler recall answer received. Optional question for his return: why can two pages share the same label while neither has a confirmed student? Leave unanswered; learning does not block authorized local implementation/review preparation. Native installation/transfer remain unverified.

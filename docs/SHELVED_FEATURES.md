@@ -20,4 +20,4 @@ This is a navigation companion to [FEATURE_QUEUE.md](FEATURE_QUEUE.md), which ow
 | [F-006 execution](work-orders/F-006-2026-10-05.md), [batch review](work-orders/F-006-BATCH-REVIEW-2026-10-06.md) | Historical source, verification and platform blockers. |
 | [Modes/photo work order](work-orders/MARKINATOR-MODES-PHOTO-P0-2026-10-13.md), [checkpoint](markinator/CHECKPOINT.md) | Later camera permission/static checks and marking workflows; physical device behaviour remains unproven. |
 
-A future phone capture companion is a separate design question, not a back door to resume iPad delivery. Keep all student data local unless the teacher deliberately transfers it through an approved mechanism; names may suggest but never silently commit roster matches.
+The phone capture companion received separate isolated implementation authorization October16 (F-008-CAPTURE); this does not resume iPad delivery. Keep all student data local unless the teacher deliberately transfers it through an approved mechanism; names may suggest but never silently commit roster matches.
