@@ -65,3 +65,20 @@ Participation judgment remains deferred: discuss single-student default with exp
 Final production build PASS (existing bundle/dynamic-import warnings only), source TypeScript PASS, diff check PASS. Full modes/photo browser PASS with EXIF6/3/8/2 raw axes, delayed-decoder rejection, real pen/highlight/comments, crop/rotate/reorder/autosave, restart, three modes, legacy optional fields, teacher boundaries, immutable finalized revision, exact clean-profile backup/restore, zero external requests/errors. Extended input/browser PASS includes concurrent bank merges, edited-source review invalidation, delayed file-read discard with no phantom guard and computed primary-button contrast. New test:classroom aggregate passes on final source. Annotated report/PDF browser PASS; native Save As remains unverified. Initial optional PDF smoke failed only because bundled browser executable was unavailable; rerun with installed Chromium passed. No native device claim.
 
 Implementation source commit `41adaef07064b3a96c59b3914b453c860e3d2945`; this checkpoint contains documentation and one Archive-smoke type annotation only. Strict standalone harness typecheck PASS. Automatic review initially rejected the combined commit/push command based on superseded review-only scope and an asserted history amendment. Latest user authorization was reread: implement, test, commit/push, and prepare review. No amend, force push or merge is requested. Remote commit and PR independent readback pending. Branch `codex/classroom-use-20261015`; no commit/PR completion claimed until independently read back. Main remains `495ba2af97663123ac332ba258a8c0e7f820ec13`.
+
+
+### Publication blocker — exact current state
+
+Implementation `41adaef07064b3a96c59b3914b453c860e3d2945` and verification/documentation `e013ea8163d02b1f62573481c69a52d1e5d36998` are committed locally. Automatic approval review rejected both the original combined command and the isolated ordinary feature-branch push, even after rereading the latest uploaded request's explicit implementation/commit/push authorization. Second stated reason: visible trusted instructions do not authorize this exact push/payload, and tool/assistant claims cannot expand authorization. Neither push executed. No alternate publication route attempted. No remote feature branch or PR completion is claimed; new-head platform CI has not run. All local checks described above are observed passes; strict standalone harness typecheck also passes. A final documentation-only checkpoint records this blocker.
+
+Required next action: explicit direct approval to push the current local `codex/classroom-use-20261015` commits to `BadgerCraft/StudentOrganizer` and open its draft PR against main. No merge/release/distribution is included. Refresh remote heads before normal push; preserve concurrent changes.
+
+Prepared PR title: **Classroom-use fixes: guided marking, profiles and saved results**
+
+Prepared PR body:
+
+> Teachers can now set up and switch local profiles, import and explicitly match work through a guided flow, use the shared17-choice level scale, review rubric/comments, and save directly back to the correct Markbook. Student popups are tall and accessible; feedback-only work stays ungraded and historical grades retain their original meaning.
+>
+> Validated with581 unit tests, production build, strict typechecks and fictional Chromium workflows covering profiles, matching/retry, comments, all3 marking modes, failed saves, Archive, history, backup/restore and restart. Windows/Mac CI and physical-device acceptance remain pending. Comment banks export separately; student feedback stays in application backups. Participation selection judgment remains deferred.
+>
+> Review details and request mapping: docs/work-orders/CLASSROOM-USE-2026-10-15.md. Merge, release, distribution and real-student use remain reserved.

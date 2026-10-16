@@ -33,7 +33,7 @@ External GitHub issue creation was rejected by automatic approval review; these 
 
 ## October 15 classroom-use fixes — authorized active batch
 
-Tyler explicitly authorized implementation, relevant tests/build/interaction checks, commits, normal feature-branch push and review preparation. Current branch: `codex/classroom-use-20261015`, based on refreshed main `495ba2a`; PR31 merge verified through Git and GitHub. Merge/release/distribution, real student data, cloud services, Control Panel/mobile expansion remain reserved. [Execution work order](work-orders/CLASSROOM-USE-2026-10-15.md).
+Tyler explicitly authorized implementation, relevant tests/build/interaction checks, commits, normal feature-branch push and review preparation. **Publication blocked:** automatic approval review rejected ordinary feature-branch push twice; neither executed. Local implementation/checkpoint commits are reviewable; exact direct push/PR approval is required by that gate. No remote PR or new-head CI claimed. Current branch: `codex/classroom-use-20261015`, based on refreshed main `495ba2a`; PR31 merge verified through Git and GitHub. Merge/release/distribution, real student data, cloud services, Control Panel/mobile expansion remain reserved. [Execution work order](work-orders/CLASSROOM-USE-2026-10-15.md).
 
 | ID | Reported issue / scope | Disposition / acceptance |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Tyler explicitly authorized implementation, relevant tests/build/interaction che
 | TUV-C07 | Shared 17-choice exact level scale | Implemented; verification recorded in work order; R distinct from absent/feedback-only; preserve historical scale/percentage meaning. |
 | TUV-C08 | Criterion/category marking review | Implemented; verification recorded in work order; ready categories, Feedback only/Level choices, descriptors/comments/evidence together. |
 | TUV-C09 | Clear controls and final saving | Implemented; verification recorded in work order; save-and-next/return only after successful official save, visible status, repeat-click protection. |
-| TUV-C10 | Fictional end-to-end acceptance | 581 unit tests and integrated browser checks pass; photo/bank repair checks, final production build and strict harness typecheck pass; source `41adaef` committed, review publication in progress. Physical desktop checks remain separate. |
+| TUV-C10 | Fictional end-to-end acceptance | 581 unit tests and integrated browser checks pass; photo/bank repair checks, final production build and strict harness typecheck pass; source `41adaef` and checkpoint `e013ea8` committed locally; automatic review rejected exact push/publication, awaiting direct user approval. Physical desktop checks remain separate. |
 | TUV-PARTICIPATION | Single versus group participation selection | **Deferred to Tyler's deliberation.** Preserve current intentional group selection. Discuss single-student default with explicit group mode; prevent accidental overlay background activation without changing group marking behavior. |
 
 ## Active feature register
