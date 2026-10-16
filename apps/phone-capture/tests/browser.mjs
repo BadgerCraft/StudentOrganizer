@@ -30,6 +30,20 @@ try {
     await page.locator('article input').nth(i).fill(`Fictional ${i ? 'Blake' : 'Avery'}`);
     await page.click('#save-labels'); await status('Labels saved locally');
   }
+  // A quota/write failure must retain editable text and permit a deliberate retry.
+  await page.locator('article input').first().fill('Fictional retry label');
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      IDBObjectStore.prototype.put = original;
+      throw new DOMException('Fictional quota failure', 'QuotaExceededError');
+    };
+  });
+  await page.click('#save-labels'); await status('Not completed');
+  assert.equal(await page.locator('article input').first().inputValue(), 'Fictional retry label');
+  await page.click('#save-labels'); await status('Labels saved locally');
+  await page.reload(); await status('Opened local batch');
+  assert.equal(await page.locator('article input').first().inputValue(), 'Fictional retry label');
   await page.getByRole('button', { name: 'Move down page 1', exact: true }).click(); await settled();
   await page.reload(); await status('Opened local batch');
   assert.equal(await page.locator('article input').first().inputValue(), 'Fictional Blake');
@@ -53,8 +67,15 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   const stale = await context.newPage(); await stale.goto(base); await stale.waitForFunction(() => !document.querySelector('#controls').disabled);
   await page.locator('article input').first().fill('Fictional revised'); await page.click('#save-labels'); await settled();
+  // Even a clean tab must not export a snapshot superseded by another writer.
+  const staleDownloads = []; stale.on('download', download => staleDownloads.push(download));
+  await stale.click('#export');
+  await stale.waitForFunction(() => !document.querySelector('#controls').disabled && document.querySelector('#status').textContent.includes('another tab'));
+  assert.equal(staleDownloads.length, 0);
+  assert.equal(await stale.locator('article input').first().inputValue(), 'Fictional Blake export edit');
   await stale.locator('article input').first().fill('Fictional stale'); await stale.click('#save-labels');
   await stale.waitForFunction(() => document.querySelector('#status').textContent.includes('another tab'));
+  assert.equal(await stale.locator('article input').first().inputValue(), 'Fictional stale');
   await page.reload(); await status('Opened local batch'); assert.equal(await page.locator('article input').first().inputValue(), 'Fictional revised');
   page.once('dialog', d => d.dismiss()); await page.click('#reset'); assert.equal(await page.locator('article').count(), 2);
   page.once('dialog', d => d.accept()); await page.click('#reset'); await status('0 page(s)');

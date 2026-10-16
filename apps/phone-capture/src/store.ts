@@ -66,3 +66,15 @@ export async function exportBatch(batch: Batch): Promise<Uint8Array> {
   files['README.txt'] = strToU8('Fictional capture pilot. Extract locally. Import ordered photos into desktop Markinator and explicitly choose each student. The desktop does not yet read this manifest. Labels and class/assignment hints never establish identity. Original photos can contain metadata. Export does not delete the local batch.\n');
   return zipSync(files, { level: 0 });
 }
+
+/** Export a committed point-in-time snapshot, rejecting an obsolete tab even
+ * when no label edit triggered a write. Hashing/ZIP work stays outside IDB. */
+export async function exportSavedBatch(db: CaptureDB, expected: Batch): Promise<Uint8Array> {
+  const snapshot = await db.transaction('r', db.batches, async () => {
+    const current = await db.batches.get(expected.id);
+    if (!current || current.revision !== expected.revision || current.captureId !== expected.captureId)
+      throw new Error('This batch changed in another tab. Copy unsaved labels, then reload before exporting.');
+    return current;
+  });
+  return exportBatch(snapshot);
+}

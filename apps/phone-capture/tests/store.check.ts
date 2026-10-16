@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
 import {
-  CaptureDB, MAX_BYTES, MAX_PAGES, appendPages, catalog, emptyBatch, exportBatch,
+  CaptureDB, MAX_BYTES, MAX_PAGES, appendPages, catalog, emptyBatch, exportBatch, exportSavedBatch,
   movePage, readPhoto, save, validContext, type Batch, type Page,
 } from '../src/store';
 
@@ -25,6 +25,21 @@ afterEach(async () => {
 });
 
 describe('local batch persistence', () => {
+  it('exports the committed snapshot and rejects a stale clean tab or missing/reset batch', async () => {
+    const db = database();
+    const old = await save(db, batch([page('fictional-a')]));
+    const latest = await save(db, { ...old, pages: [{ ...old.pages[0], label: 'Fictional corrected' }] });
+    await expect(exportSavedBatch(db, old)).rejects.toThrow('another tab');
+    const files = unzipSync(await exportSavedBatch(db, latest));
+    expect(JSON.parse(strFromU8(files['manifest.json'])).pages[0].labelHint).toBe('Fictional corrected');
+    expect(await db.batches.get(latest.id)).toEqual(latest);
+    await expect(exportSavedBatch(db, { ...latest, captureId: 'wrong-capture' })).rejects.toThrow('another tab');
+    await save(db, { ...emptyBatch(), revision: latest.revision });
+    await expect(exportSavedBatch(db, latest)).rejects.toThrow('another tab');
+    await db.batches.delete(latest.id);
+    await expect(exportSavedBatch(db, latest)).rejects.toThrow('another tab');
+  });
+
   it('restores original photo bytes, labels, context and revision after closing the database', async () => {
     const db = database();
     const original = batch([page('fictional-a')]);

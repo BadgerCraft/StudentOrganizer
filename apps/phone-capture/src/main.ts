@@ -1,4 +1,4 @@
-import { CaptureDB, catalog, emptyBatch, save, readPhoto, appendPages, movePage, exportBatch, type Batch } from './store';
+import { CaptureDB, catalog, emptyBatch, save, readPhoto, appendPages, movePage, exportSavedBatch, type Batch } from './store';
 import './style.css';
 const root = document.querySelector<HTMLDivElement>('#app')!;
 root.innerHTML = `<h1>Phone capture</h1><p>Fictional-data pilot · local batch</p><p class="notice">Use fictional photos only. Pages stay in this browser until you deliberately export. Browser storage can be cleared or evicted; keep your originals. Labels never assign a student.</p>
@@ -15,7 +15,7 @@ const classSelect = el<HTMLSelectElement>('class'), assignment = el<HTMLSelectEl
 catalog.forEach(c => classSelect.add(new Option(c.name, c.id)));
 const db = new CaptureDB(); let batch: Batch = emptyBatch(); let urls: string[] = []; let busy = false;
 const status = (message: string) => { el('status').textContent = message; };
-function render() {
+function render(drafts?: Map<string | undefined, string>) {
   urls.forEach(URL.revokeObjectURL); urls = [];
   classSelect.value = batch.classId;
   assignment.replaceChildren(new Option('Choose assignment', ''));
@@ -32,7 +32,7 @@ function render() {
     const url = URL.createObjectURL(new Blob([new Uint8Array(page.bytes).buffer], { type: page.mime })); urls.push(url);
     img.src = url; img.alt = `Preview of page ${index + 1}`;
     const label = document.createElement('label'); label.textContent = 'Page label (unmatched hint)';
-    const input = document.createElement('input'); input.value = page.label; input.maxLength = 120;
+    const input = document.createElement('input'); input.value = drafts?.get(page.id) ?? page.label; input.maxLength = 120;
     input.dataset.pageId = page.id;
     input.oninput = () => status('Label edited. Choose Save labels or Export local ZIP to save it.');
     label.append(input); article.append(heading, img, label);
@@ -47,13 +47,14 @@ function render() {
 async function persist(next: Batch) { batch = await save(db, next); status(`Saved locally · ${batch.pages.length} page(s). All pages unmatched.`); }
 async function run(action: () => Promise<void>) {
   if (busy) return; busy = true; el<HTMLFieldSetElement>('controls').disabled = true;
+  const labels = new Map(Array.from(el('pages').querySelectorAll<HTMLInputElement>('input')).map(input => [input.dataset.pageId, input.value]));
+  let failed = false;
   try {
-    const labels = new Map(Array.from(el('pages').querySelectorAll<HTMLInputElement>('input')).map(input => [input.dataset.pageId, input.value]));
     if (batch.pages.some(p => labels.has(p.id) && labels.get(p.id) !== p.label))
       await persist({ ...batch, pages: batch.pages.map(p => ({ ...p, label: labels.get(p.id) ?? p.label })) });
     await action();
-  } catch (error) { status(`Not completed: ${error instanceof Error ? error.message : String(error)} Your previously saved batch is retained.`); }
-  finally { busy = false; render(); el<HTMLFieldSetElement>('controls').disabled = false; }
+  } catch (error) { failed = true; status(`Not completed: ${error instanceof Error ? error.message : String(error)} Your previously saved batch is retained. Unsaved labels remain on screen; retry or copy them before reloading.`); }
+  finally { busy = false; render(failed ? labels : undefined); el<HTMLFieldSetElement>('controls').disabled = false; }
 }
 classSelect.onchange = () => void run(() => persist({ ...batch, classId: classSelect.value, assignment: '' }));
 assignment.onchange = () => void run(() => persist({ ...batch, assignment: assignment.value }));
@@ -80,7 +81,7 @@ window.addEventListener('beforeunload', event => {
   if (busy || Array.from(el('pages').querySelectorAll<HTMLInputElement>('input')).some(input => batch.pages.find(p => p.id === input.dataset.pageId)?.label !== input.value)) { event.preventDefault(); event.returnValue = ''; }
 });
 el('export').onclick = () => void run(async () => {
-  const bytes = await exportBatch(batch);
+  const bytes = await exportSavedBatch(db, batch);
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: 'application/zip' }));
   const link = document.createElement('a'); link.href = url; link.download = `fictional-capture-r${batch.revision}.zip`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
