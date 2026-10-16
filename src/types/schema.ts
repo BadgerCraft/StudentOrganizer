@@ -441,7 +441,8 @@ export interface StudentAssessment {
   version: number;
 }
 
-export type ScoreInputFormat = 'scale_code' | 'raw_points' | 'percentage' | 'descriptive';
+// classroom_level is the immutable built-in v1 scale; scale_code retains historical configured scales.
+export type ScoreInputFormat = 'classroom_level' | 'scale_code' | 'raw_points' | 'percentage' | 'descriptive';
 
 export interface CategoryResult {
   id: UUID;

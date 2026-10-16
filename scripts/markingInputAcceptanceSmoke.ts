@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Locator, type Page } from 'playwright';
+import { installFictionalClassroom } from './helpers/classroomFixture';
 
 // Fictional UI acceptance. Vite module access is used only to inject bounded
 // read/write failures; successful imports still use the real authorized service.
@@ -43,6 +44,47 @@ async function waitForCount(page: Page, table: string, count: number) {
   assert.equal((await records(page, table)).length, count, `${table} count`);
   return records(page, table);
 }
+async function assertPrimaryContrast(control: Locator, label: string) {
+  const colors = await control.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, text: style.color };
+  });
+  assert.equal(colors.text, 'rgb(255, 255, 255)', `${label} uses readable white text`);
+  assert.notEqual(colors.background, colors.text, `${label} must not render white text on white`);
+  assert.notEqual(colors.background, 'rgba(0, 0, 0, 0)', `${label} needs a visible primary background`);
+}
+const wizard = (page: Page) => page.getByTestId('evidence-import-wizard');
+async function addDocumentFiles(page: Page, files: ReturnType<typeof txt> | ReturnType<typeof txt>[]) {
+  const panel = wizard(page);
+  await panel.getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
+  await panel.getByRole('button', { name: 'Continue', exact: true }).click();
+  await panel.getByLabel('Choose text/document files', { exact: true }).setInputFiles(files);
+  await assertPrimaryContrast(panel.getByRole('button', { name: 'Add work and select students', exact: true }), 'Wizard Add work');
+  await panel.getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await panel.getByRole('heading', { name: 'Who does this work belong to?', exact: true }).waitFor();
+}
+async function selectOneStudent(page: Page, label: string) {
+  const panel = wizard(page);
+  await panel.getByRole('radio', { name: 'One student', exact: true }).check();
+  await panel.getByRole('radio', { name: label, exact: true }).check();
+  await panel.getByRole('button', { name: 'Confirm student and review work', exact: true }).click();
+  await panel.getByRole('heading', { name: 'Review student work', exact: true }).waitFor();
+}
+async function matchSeveralStudents(page: Page, pairs: { filename: string; label: string }[]) {
+  const panel = wizard(page);
+  await panel.getByRole('radio', { name: 'Several students', exact: true }).check();
+  for (const label of [...new Set(pairs.map(pair => pair.label))]) await panel.getByRole('checkbox', { name: label, exact: true }).check();
+  await panel.getByRole('button', { name: 'Continue to matching', exact: true }).click();
+  for (const pair of pairs) {
+    await panel.getByRole('radio', { name: pair.filename, exact: true }).check();
+    await panel.getByRole('radio', { name: pair.label, exact: false }).check();
+    await panel.getByRole('button', { name: 'Confirm match', exact: true }).click();
+  }
+  await panel.getByRole('button', { name: 'Review matches', exact: true }).click();
+}
+async function confirmImport(page: Page, retry = false) {
+  await wizard(page).getByRole('button', { name: retry ? 'Retry and start marking' : 'Confirm and start marking', exact: true }).click();
+}
 const server = await createServer({ server: { host: '127.0.0.1', port: 4195, strictPort: true, watch: null, hmr: false } });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium', headless: true });
@@ -56,6 +98,7 @@ try {
   });
   const page = await context.newPage();
   await page.goto(origin);
+  await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.getByRole('button', { name: 'Assessments', exact: true }).click();
@@ -79,7 +122,7 @@ try {
   // edit without moving, overwriting or dropping any descriptor.
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional manual descriptor matrix');
   await page.getByLabel('Criterion 1 name', { exact: true }).fill('Evidence');
-  await page.getByLabel('Criterion 1 KTAC mapping').selectOption('T');
+  await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
   await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
   assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), 'Fictional manual descriptor matrix');
@@ -90,15 +133,18 @@ try {
 
   await page.getByRole('button', { name: 'Add criterion', exact: true }).click();
   await page.getByLabel('Criterion 2 name', { exact: true }).fill('Organization');
-  await page.getByLabel('Criterion 2 KTAC mapping').selectOption('C');
-  const oldLevels = ['Level 1', 'Level 2', 'Level 3', 'Level 4'];
+  await page.getByLabel('Criterion 2 KTCA mapping').selectOption('C');
+  await page.getByText('Achievement labels (17)', { exact: true }).click();
+  for (let index = 17; index > 4; index--) await page.getByRole('button', { name: `Remove achievement label ${index}`, exact: true }).click();
+  const oldLevels = ['R', '1−', '1', '1+'];
+  for (const index of [1, 2]) await page.getByText(`Descriptors and reference weight for criterion ${index}`, { exact: true }).click();
   const descriptor = (criterion: string, index: number) => `${criterion}: fictional descriptor ${index + 1}; retain this exact text.`;
   for (const criterion of ['Evidence', 'Organization']) {
     for (const [index, label] of oldLevels.entries()) await page.getByLabel(`${criterion} ${label} descriptor`, { exact: true }).fill(descriptor(criterion, index));
   }
-  await page.getByLabel('Achievement label 1', { exact: true }).fill('Level 2');
+  await page.getByLabel('Achievement label 1', { exact: true }).fill(oldLevels[1]);
   await page.getByRole('alert').filter({ hasText: 'Each achievement label must be unique' }).waitFor();
-  assert.equal(await page.getByLabel('Achievement label 1', { exact: true }).inputValue(), 'Level 1');
+  assert.equal(await page.getByLabel('Achievement label 1', { exact: true }).inputValue(), oldLevels[0]);
   for (const criterion of ['Evidence', 'Organization']) {
     for (const [index, label] of oldLevels.entries()) assert.equal(await page.getByLabel(`${criterion} ${label} descriptor`, { exact: true }).inputValue(), descriptor(criterion, index));
   }
@@ -106,15 +152,17 @@ try {
   const levels = ['Beginning', 'Developing', 'Proficient', 'Extending'];
   for (const [index, label] of levels.entries()) await page.getByLabel(`Achievement label ${index + 1}`, { exact: true }).fill(label);
   // A malformed pasted table must not destroy the manual matrix already entered.
-  await page.getByLabel('Paste rubric text or table').fill('Criterion\tDuplicate\tDuplicate\nReasoning\tFirst\tSecond');
-  await page.getByRole('button', { name: 'Preview pasted rubric', exact: true }).click();
+  await page.getByText('Paste rubric text or table', { exact: true }).click();
+  await page.getByTestId('marking-rubric-paste').fill('Criterion\tDuplicate\tDuplicate\nReasoning\tFirst\tSecond');
+  await page.getByRole('button', { name: 'Review pasted rubric', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /distinct achievement labels/i }).waitFor();
   for (const criterion of ['Evidence', 'Organization']) {
     for (const [index, label] of levels.entries()) assert.equal(await page.getByLabel(`${criterion} ${label} descriptor`, { exact: true }).inputValue(), descriptor(criterion, index));
   }
-  await page.getByRole('checkbox', { name: /reviewed the descriptor matrix/ }).check();
+  await page.getByRole('checkbox', { name: /reviewed the criteria and descriptors/ }).check();
+  await assertPrimaryContrast(page.getByRole('button', { name: 'Save confirmed rubric version', exact: true }), 'Rubric Save');
   await page.getByRole('button', { name: 'Save confirmed rubric version', exact: true }).click();
-  await page.getByTestId('marking-files').waitFor();
+  await wizard(page).getByRole('heading', { name: 'Where is the student work?', exact: true }).waitFor();
   const [rubric] = await waitForCount(page, 'markingRubrics', 1);
   assert.deepEqual(rubric.levels, levels);
   assert.deepEqual(rubric.criteria.map((row: any) => ({ name: row.name, categoryCode: row.categoryCode, descriptors: row.descriptors })), [
@@ -125,15 +173,17 @@ try {
 
   const firstFile = txt('Fictional essay.txt', 'Essay passage. Fictional reasoning follows.');
   const secondFile = txt('Fictional notes.txt', 'Notes passage. Fictional planning follows.');
-  await page.getByTestId('marking-files').setInputFiles([firstFile, secondFile]);
-  await page.getByRole('checkbox', { name: /Keep all these files as separate attachments/ }).check();
-  const match = page.getByLabel('Confirm student for Fictional essay.txt');
-  await match.waitFor();
-  const enrollmentIds = await match.locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value).filter(Boolean));
+  await addDocumentFiles(page, [firstFile, secondFile]);
+  const enrollmentIds = (await records(page, 'classEnrollments')).filter(row => row.classSectionId === assessment.classSectionId && row.deletedAt === null && row.enrollmentStatus === 'active').map(row => row.id);
   assert.ok(enrollmentIds.length >= 2);
-  await match.selectOption(enrollmentIds[0]);
-  assert.equal(await page.getByLabel('Confirm student for Fictional notes.txt').count(), 0);
-  await page.getByTestId('marking-import-confirm').click();
+  const students = await records(page, 'students'), enrollments = await records(page, 'classEnrollments');
+  const studentLabels = Object.fromEntries(enrollmentIds.map(id => {
+    const enrollment = enrollments.find(row => row.id === id), student = students.find(row => row.id === enrollment.studentId);
+    return [id, `${student.firstName} ${student.lastName} (${student.localStudentNumber})`];
+  }));
+  await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
+  assert.equal(await wizard(page).getByRole('heading', { name: 'Match work to students', exact: true }).count(), 0, 'one confirmed student bypasses unnecessary matching');
+  await confirmImport(page);
   const [grouped] = await waitForCount(page, 'markingAttempts', 1);
   assert.equal(grouped.classEnrollmentId, enrollmentIds[0]); assert.equal(grouped.previousAttemptId, null);
   assert.deepEqual(grouped.documents.map((row: any) => row.name), [firstFile.name, secondFile.name]);
@@ -143,11 +193,83 @@ try {
   await page.getByTestId(`marking-session-open-${grouped.id}`).click();
   await page.getByTestId('marking-document').waitFor();
   const documentSelect = page.getByRole('combobox', { name: /^Document/ });
+  const expectedPassageFeedback = ['Fictional attachment feedback 1', 'Fictional attachment feedback 2'];
   for (const [index, document] of grouped.documents.entries()) {
     await documentSelect.selectOption(document.id);
     assert.equal(await page.getByTestId('marking-document').innerText(), document.text);
     await selectPassage(page, 0, 13);
-    await page.getByTestId('marking-feedback').fill(`Fictional attachment feedback ${index + 1}`);
+    await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
+    if (index === 0) {
+      const textBank = page.locator('section[aria-label="Comment bank"]').first();
+      await textBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
+      await textBank.getByLabel('Or paste one comment per line', { exact: true }).fill('Original bank draft.');
+      await textBank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
+      await textBank.getByLabel('Bank comment 1', { exact: true }).waitFor();
+      await textBank.getByLabel('Or paste one comment per line', { exact: true }).fill('Revised bank draft.');
+      assert.equal(await textBank.getByLabel('Bank comment 1', { exact: true }).count(), 0, 'edited source invalidates stale review');
+      assert.equal(await textBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).count(), 0, 'new paste cannot be discarded by saving old review');
+      await textBank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
+      assert.equal(await textBank.getByLabel('Bank comment 1', { exact: true }).inputValue(), 'Revised bank draft.');
+      await textBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).click();
+      const criterion = page.getByTestId(`marking-criterion-${rubric.criteria[0].id}`);
+      await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
+      const rubricBank = criterion.locator('section[aria-label="Comment bank"]');
+      // The rubric picker is already mounted with the original bank snapshot.
+      await textBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
+      await textBank.getByLabel('Or paste one comment per line', { exact: true }).fill('Added by passage composer.');
+      await textBank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
+      await textBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).click();
+      await rubricBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
+      await rubricBank.getByLabel('Or paste one comment per line', { exact: true }).fill('Added by rubric composer.');
+      await rubricBank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
+      await rubricBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).click();
+      for (const text of ['Revised bank draft.', 'Added by passage composer.', 'Added by rubric composer.']) await rubricBank.getByRole('button', { name: text, exact: true }).waitFor();
+      await assertPrimaryContrast(criterion.getByRole('button', { name: 'Done — review criteria', exact: true }), 'Criterion Done');
+      await criterion.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
+      await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // close the stale open chooser
+      await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // reopening reloads the saved bank
+      await textBank.getByRole('button', { name: 'Added by rubric composer.', exact: true }).waitFor();
+      await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
+      const delayedBank = criterion.locator('section[aria-label="Comment bank"]');
+      await delayedBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
+      await page.evaluate(() => {
+        const original = File.prototype.arrayBuffer;
+        (window as any).restoreBankRead = () => { File.prototype.arrayBuffer = original; };
+        File.prototype.arrayBuffer = function () {
+          if (this.name !== 'Fictional delayed bank.txt') return original.call(this);
+          const file = this;
+          return new Promise<ArrayBuffer>((resolve, reject) => {
+            (window as any).releaseBankRead = () => original.call(file).then(bytes => { resolve(bytes); }, reject);
+          });
+        };
+      });
+      await delayedBank.getByLabel('Choose comment-bank file', { exact: true }).setInputFiles(txt('Fictional delayed bank.txt', 'Discard this delayed bank import.'));
+      await delayedBank.getByRole('status').filter({ hasText: 'Reading comment bank' }).waitFor();
+      let discardPrompt = '';
+      page.once('dialog', async dialog => { discardPrompt = dialog.message(); await dialog.accept(); });
+      await criterion.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
+      assert.match(discardPrompt, /Discard the unsaved comment bank import/, 'closing an in-flight import requires deliberate discard');
+      await page.evaluate(async () => { await (window as any).releaseBankRead(); (window as any).restoreBankRead(); delete (window as any).releaseBankRead; delete (window as any).restoreBankRead; });
+      await page.waitForTimeout(500); // allow the released local read/hash promises to settle after unmount
+      const unexpectedDialogs: string[] = [];
+      const unexpectedDialog = async (dialog: import('playwright').Dialog) => { unexpectedDialogs.push(dialog.message()); await dialog.dismiss(); };
+      page.on('dialog', unexpectedDialog);
+      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      page.off('dialog', unexpectedDialog);
+      assert.deepEqual(unexpectedDialogs, [], 'discarded asynchronous import must not restore a phantom unsaved-bank guard');
+      assert.equal(await page.getByRole('status').filter({ hasText: 'Reading comment bank' }).count(), 0);
+      const savedBanks = await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('ota.comment-bank.v1.')).map(key => JSON.parse(localStorage.getItem(key)!)));
+      assert.equal(savedBanks.some(comments => comments.includes('Discard this delayed bank import.')), false, 'discarded import does not write the bank');
+      const bankAddition = 'Added by rubric composer.';
+      if (!await textBank.getByRole('button', { name: bankAddition, exact: true }).isVisible()) {
+        await textBank.getByRole('button', { name: /^Choose bank comment/ }).click();
+      }
+      await textBank.getByRole('button', { name: bankAddition, exact: true }).click();
+      expectedPassageFeedback[index] += `\n${bankAddition}`;
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(), expectedPassageFeedback[index], 'choosing reusable feedback preserves the teacher’s existing passage comment');
+      console.log('PASS: edited comment-bank source invalidates stale review; concurrent composers preserve newer bank additions; delayed import requires discard and cannot recreate a phantom guard; selecting bank feedback appends to existing passage text; primary button colors contrast.');
+    }
+
     await page.getByRole('combobox', { name: /^Evidence level \(optional\)/ }).selectOption(levels[index + 1]);
     await page.getByTestId('marking-comment-save').click();
   }
@@ -158,15 +280,16 @@ try {
   assert.equal(originalSession.draft.annotations.length, 2);
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.documentId), grouped.documents.map((row: any) => row.id));
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.level), [levels[1], levels[2]]);
+  assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.text), expectedPassageFeedback, 'saved passage annotations retain both teacher-written and chosen bank feedback');
 
   await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
-  await page.getByTestId('marking-files').setInputFiles(txt('Fictional revised essay.txt', 'Revised fictional argument, with new reasoning.'));
-  await page.getByLabel('Confirm student for Fictional revised essay.txt').selectOption(enrollmentIds[0]);
-  const relationship = page.getByRole('combobox', { name: /^Attempt relationship/ });
+  await addDocumentFiles(page, txt('Fictional revised essay.txt', 'Revised fictional argument, with new reasoning.'));
+  await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
+  const relationship = wizard(page).getByRole('combobox', { name: /^Submission relationship/ });
   const relationshipOptions = await relationship.locator('option').evaluateAll(nodes => nodes.map(node => ({ value: (node as HTMLOptionElement).value, text: node.textContent })));
   assert.ok(relationshipOptions.some(option => option.value === grouped.id && option.text?.startsWith('Resubmission after ')));
   await relationship.selectOption(grouped.id);
-  await page.getByTestId('marking-import-confirm').click();
+  await confirmImport(page);
   const attemptsAfterResubmission = await waitForCount(page, 'markingAttempts', 2);
   const resubmission = attemptsAfterResubmission.find(row => row.id !== grouped.id)!;
   assert.equal(resubmission.previousAttemptId, grouped.id); assert.equal(resubmission.classEnrollmentId, grouped.classEnrollmentId);
@@ -190,7 +313,6 @@ try {
   // File-read failure is a browser-file boundary injection. It creates no records
   // and retains the real parser for the good, malformed and unsupported files.
   await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
-  await page.getByRole('checkbox', { name: /Keep all these files as separate attachments/ }).uncheck();
   await page.evaluate(() => {
     const original = File.prototype.arrayBuffer;
     (window as any).restoreMarkingFileRead = () => { File.prototype.arrayBuffer = original; };
@@ -199,23 +321,24 @@ try {
       return original.call(this);
     };
   });
-  await page.getByTestId('marking-files').setInputFiles([
+  await addDocumentFiles(page, [
     txt('Fictional valid remainder.txt', 'Valid fictional remainder for mixed parsing.'),
     { name: 'Fictional malformed.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from('not a ZIP archive') },
     { name: 'Fictional unsupported.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-fictional') },
     { name: 'Fictional bad-encoding.txt', mimeType: 'text/plain', buffer: Buffer.from([0xc3, 0x28]) },
     txt('Fictional unreadable.txt', 'Browser file read deliberately fails.')
   ]);
-  await page.getByRole('alert').filter({ hasText: 'Fictional file read failure' }).waitFor();
-  const importErrors = await page.getByRole('alert').filter({ hasText: 'Fictional file read failure' }).innerText();
+  await wizard(page).getByText('These files were not added', { exact: true }).waitFor();
+  const importErrors = await wizard(page).innerText();
   for (const filename of ['Fictional malformed.docx', 'Fictional unsupported.pdf', 'Fictional bad-encoding.txt', 'Fictional unreadable.txt']) assert.ok(importErrors.includes(filename));
   assert.match(importErrors, /valid UTF-8/); assert.match(importErrors, /PDF, HTML and remote links are not supported/);
-  assert.equal(await page.getByRole('combobox', { name: /^Confirm student for / }).count(), 1);
+  assert.match(await wizard(page).innerText(), /1 work item\(s\) added/);
   assert.equal((await records(page, 'markingAttempts')).length, 2, 'file preview cannot persist partial data');
   await page.evaluate(() => { (window as any).restoreMarkingFileRead(); delete (window as any).restoreMarkingFileRead; });
   await page.screenshot({ path: '/tmp/markinator-input-malformed.png', fullPage: true });
-  await page.getByLabel('Confirm student for Fictional valid remainder.txt').selectOption(enrollmentIds[1]);
-  await page.getByTestId('marking-import-confirm').click();
+  await wizard(page).getByRole('checkbox', { name: 'Continue with only the work successfully added; leave these files out.', exact: true }).check();
+  await selectOneStudent(page, studentLabels[enrollmentIds[1]]);
+  await confirmImport(page);
   await waitForCount(page, 'markingAttempts', 3);
   console.log('PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; valid remainder alone imports after roster confirmation.');
 
@@ -223,12 +346,14 @@ try {
   // attempt write. It must roll back while the first import remains committed;
   // retry must create the failed attempt and audit exactly once.
   await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
-  await page.getByTestId('marking-files').setInputFiles([
+  await addDocumentFiles(page, [
     txt('Fictional retry-first.txt', 'First successful fictional batch item.'),
     txt('Fictional retry-second.txt', 'Second fictional batch item fails once.')
   ]);
-  await page.getByLabel('Confirm student for Fictional retry-first.txt').selectOption(enrollmentIds[0]);
-  await page.getByLabel('Confirm student for Fictional retry-second.txt').selectOption(enrollmentIds[1]);
+  await matchSeveralStudents(page, [
+    { filename: 'Fictional retry-first.txt', label: studentLabels[enrollmentIds[0]] },
+    { filename: 'Fictional retry-second.txt', label: studentLabels[enrollmentIds[1]] },
+  ]);
   await page.evaluate(async () => {
     const databasePath = '/src/db/database.ts';
     const { db } = await import(databasePath);
@@ -241,7 +366,7 @@ try {
       return original.call(this, entry, ...args);
     };
   });
-  await page.getByTestId('marking-import-confirm').click();
+  await confirmImport(page);
   await page.getByRole('alert').filter({ hasText: 'Fictional second import storage failure' }).waitFor();
   const partial = await waitForCount(page, 'markingAttempts', 4);
   assert.equal(partial.filter(row => row.documents.some((doc: any) => doc.name === 'Fictional retry-first.txt')).length, 1);
@@ -250,11 +375,12 @@ try {
   const partialAudits = await records(page, 'auditEntries');
   assert.equal(importAudits(partialAudits, 'Fictional retry-first.txt').length, 1);
   assert.equal(importAudits(partialAudits, 'Fictional retry-second.txt').length, 0);
-  assert.equal(await page.getByLabel('Confirm student for Fictional retry-first.txt').count(), 0, 'successful item leaves pending preview');
-  assert.equal(await page.getByLabel('Confirm student for Fictional retry-second.txt').inputValue(), enrollmentIds[1], 'failed item retains its roster decision');
+  const reviewCards = wizard(page).locator('article');
+  assert.match(await reviewCards.filter({ hasText: 'Fictional retry-first.txt' }).innerText(), /Saved locally/, 'successful item is visibly saved and excluded from retry writes');
+  assert.ok((await reviewCards.filter({ hasText: 'Fictional retry-second.txt' }).innerText()).includes(studentLabels[enrollmentIds[1]]), 'failed item retains its roster decision');
   await page.screenshot({ path: '/tmp/markinator-input-partial-retry.png', fullPage: true });
   await page.evaluate(() => { (window as any).restoreMarkingImport(); delete (window as any).restoreMarkingImport; });
-  await page.getByTestId('marking-import-confirm').click();
+  await confirmImport(page, true);
   const retried = await waitForCount(page, 'markingAttempts', 5);
   const retriedAudits = await records(page, 'auditEntries');
   for (const filename of ['Fictional retry-first.txt', 'Fictional retry-second.txt']) {
@@ -263,9 +389,9 @@ try {
   }
   assert.deepEqual(retried.find(row => row.id === grouped.id), grouped);
   await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
-  await page.getByTestId('marking-files').setInputFiles(txt('Fictional retry-first.txt', 'First successful fictional batch item.'));
-  await page.getByLabel('Confirm student for Fictional retry-first.txt').selectOption(enrollmentIds[0]);
-  await page.getByTestId('marking-import-confirm').click();
+  await addDocumentFiles(page, txt('Fictional retry-first.txt', 'First successful fictional batch item.'));
+  await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
+  await confirmImport(page);
   await page.getByRole('alert').filter({ hasText: 'This exact submission is already imported' }).waitFor();
   assert.equal((await records(page, 'markingAttempts')).length, 5);
   assert.deepEqual({ assessments: await records(page, 'studentAssessments'), results: await records(page, 'categoryResults'), commits: await records(page, 'markingCommits') }, officialBefore, 'all input acceptance workflows leave official records unchanged');

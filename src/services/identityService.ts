@@ -160,6 +160,7 @@ export async function selectActingTeacher(
   db: OntarioTeacherDB,
   userId: UUID
 ): Promise<AppIdentity> {
+  const selectionEpoch = getIdentityEpoch();
   const user = await db.users.get(userId);
   if (!user || user.deletedAt !== null) {
     throw new AuthorizationError(`Teacher user "${userId}" not found or has been deactivated.`);
@@ -175,8 +176,12 @@ export async function selectActingTeacher(
     throw new AuthorizationError(`User "${userId}" does not have an active teacher or staff membership.`);
   }
 
-  setActiveTeacherId(userId);
   const device = await resolveAppDevice(db, user.id);
+  if (selectionEpoch !== getIdentityEpoch()) {
+    throw new AuthorizationError('The teacher selection changed. Choose the teacher again.');
+  }
+  // A failed device write must not silently establish an acting teacher.
+  setActiveTeacherId(userId);
 
   return {
     userId: user.id,

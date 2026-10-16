@@ -1,9 +1,10 @@
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createServer } from 'vite';
 import { chromium, type Browser } from 'playwright';
 
-// Fictional UI-only report flow; no database service hooks or external submissions.
+// Explicit fictional classroom fixture, followed by UI-only report flow; no external submissions.
 const server = await createServer({ server: { port: 3229, strictPort: true } });
 await server.listen();
 let browser: Browser | undefined;
@@ -12,6 +13,7 @@ try {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   await page.goto('http://localhost:3229');
+  await installFictionalClassroom(page);
   const chooseTeacher = page.locator('[data-testid^="select-teacher-"]').first();
   await chooseTeacher.waitFor({ state: 'visible' });
   await chooseTeacher.click();

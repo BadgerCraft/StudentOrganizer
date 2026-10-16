@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UserCheck, ShieldAlert, AlertCircle, RefreshCw, X } from 'lucide-react';
 import { db } from '../db/database';
 import { getAvailableTeachers } from '../services/identityService';
+import { createTeacherProfile, updateTeacherProfile } from '../services/teacherProfileService';
 import type { UUID, User } from '../types/schema';
 
 interface TeacherSelectorModalProps {
   isOpen: boolean;
   canDismiss: boolean;
   currentTeacherId?: UUID | null;
-  onSelectTeacher: (userId: UUID) => Promise<void>;
+  onSelectTeacher: (userId: UUID, keepOpen?: boolean) => Promise<void>;
   onCancel?: () => void;
   onClose?: () => void;
 }
@@ -30,6 +31,10 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recentTeacherId, setRecentTeacherId] = useState<UUID | null>(null);
+  const [editor, setEditor] = useState<'create' | User | null>(null);
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const submitGuard = useRef(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -39,16 +44,12 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
     setErrorMessage(null);
     try {
       let list = await getAvailableTeachers(db);
-      // If empty on first run, wait briefly for seedDatabase to complete
-      if (list.length === 0) {
-        await new Promise(r => setTimeout(r, 600));
-        list = await getAvailableTeachers(db);
-      }
       // This remembers only a suggestion. It never establishes an actor or
       // bypasses explicit session confirmation and membership validation.
       let recent: string | null = null;
       try { recent = window.localStorage.getItem('ota.last-confirmed-teacher.v1'); } catch { /* Selection still works without storage. */ }
       setRecentTeacherId(list.some(teacher => teacher.id === recent) ? recent : null);
+      if (list.length === 0) { setEditor('create'); setProfileName(''); setProfileEmail(''); }
       setTeachers([...list].sort((a, b) => Number(b.id === recent) - Number(a.id === recent) || a.name.localeCompare(b.name)));
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to load teachers.');
@@ -69,8 +70,10 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
   // Reset state and fetch teachers whenever modal opens
   useEffect(() => {
     if (isOpen) {
+      submitGuard.current = false;
       setIsSubmitting(false);
       setErrorMessage(null);
+      setEditor(null);
       fetchTeachers();
       previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
     }
@@ -85,10 +88,12 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
       if (!dialogRef.current) return;
       const focusable = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
         )
       ).filter(isElementVisible);
 
+      const nameInput = dialogRef.current.querySelector<HTMLInputElement>('input[name="teacherName"]');
+      if (nameInput && isElementVisible(nameInput)) { nameInput.focus(); return; }
       // Prefer first teacher button, or fallback to first focusable
       const firstTeacherBtn = dialogRef.current.querySelector<HTMLElement>(
         'button[data-testid^="select-teacher-"]:not([disabled])'
@@ -155,24 +160,59 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
         previouslyFocusedRef.current.focus();
       }
     };
-  }, [isOpen, canDismiss, isSubmitting, handleCancelAction, isLoading]);
+  }, [isOpen, canDismiss, isSubmitting, handleCancelAction, isLoading, editor]);
 
   if (!isOpen) return null;
 
   const handleSelect = async (userId: UUID) => {
-    if (isSubmitting) return;
+    if (submitGuard.current) return;
+    submitGuard.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
       await onSelectTeacher(userId);
       try { window.localStorage.setItem('ota.last-confirmed-teacher.v1', userId); } catch { /* Optional convenience only. */ }
+      submitGuard.current = false;
       setIsSubmitting(false);
       // NOTE: Do not call handleCancelAction() or onClose() here.
       // Selection is complete and distinct from cancellation.
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to select teacher.');
+      submitGuard.current = false;
       setIsSubmitting(false);
     }
+  };
+
+  const startCreate = () => {
+    setEditor('create'); setProfileName(''); setProfileEmail(''); setErrorMessage(null);
+  };
+  const startEdit = async (teacher: User) => {
+    if (submitGuard.current) return;
+    submitGuard.current = true; setIsSubmitting(true); setErrorMessage(null);
+    try {
+      // This explicit action establishes the actor before a profile write.
+      await onSelectTeacher(teacher.id, true);
+      setEditor(teacher); setProfileName(teacher.name);
+      setProfileEmail(teacher.email.endsWith('@local.invalid') ? '' : teacher.email);
+    } catch (err: any) { setErrorMessage(err.message || 'Could not choose this teacher for editing.'); }
+    finally { submitGuard.current = false; setIsSubmitting(false); }
+  };
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editor || submitGuard.current) return;
+    submitGuard.current = true; setIsSubmitting(true); setErrorMessage(null);
+    try {
+      const fields = { name: profileName, email: profileEmail };
+      const teacher = editor === 'create'
+        ? await createTeacherProfile(db, fields)
+        : await updateTeacherProfile(db, editor.id, fields);
+      // Show the saved profile even if selecting its device/session then fails.
+      setEditor(null);
+      await fetchTeachers();
+      await onSelectTeacher(teacher.id);
+      try { window.localStorage.setItem('ota.last-confirmed-teacher.v1', teacher.id); } catch { /* Optional suggestion. */ }
+    } catch (err: any) { setErrorMessage(err.message || 'Could not save the teacher profile. Please retry.'); }
+    finally { submitGuard.current = false; setIsSubmitting(false); }
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -193,7 +233,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 outline-none animate-in fade-in zoom-in-95 duration-150 flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl max-w-lg max-h-[90dvh] w-full overflow-hidden border border-slate-200 outline-none animate-in fade-in zoom-in-95 duration-150 flex flex-col"
       >
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
@@ -203,7 +243,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
             </div>
             <div>
               <h2 id="teacher-selector-title" className="text-lg font-bold text-slate-900 leading-tight">
-                {canDismiss ? 'Switch teacher' : 'Confirm teacher for this session'}
+                {editor === 'create' && teachers.length === 0 ? 'Enter Teacher here' : editor && editor !== 'create' ? 'Edit teacher profile' : canDismiss ? 'Teacher profiles' : 'Confirm teacher for this session'}
               </h2>
               <span className="text-xs text-slate-500">
                 Local session attribution for marks, attendance, and audit records
@@ -247,19 +287,20 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
               <RefreshCw className="w-6 h-6 animate-spin text-blue-600 mx-auto" />
               <p className="text-xs text-slate-500">Loading active teachers...</p>
             </div>
-          ) : teachers.length === 0 ? (
-            <div className="py-8 text-center space-y-3">
-              <p className="text-sm font-semibold text-slate-700">No active teachers found</p>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                The database may still be initializing or no teacher accounts with active school memberships exist.
-              </p>
-              <button
-                onClick={fetchTeachers}
-                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition"
-              >
-                Retry Teacher Discovery
-              </button>
-            </div>
+          ) : editor ? (
+            <form onSubmit={saveProfile} className="space-y-4" aria-label={editor === 'create' ? 'Create teacher profile' : 'Edit teacher profile'}>
+              <label className="block text-sm font-semibold text-slate-700">Teacher name
+                <input name="teacherName" value={profileName} onChange={event => setProfileName(event.target.value)} placeholder="Enter Teacher here" required maxLength={100} disabled={isSubmitting} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">Email (optional)
+                <input name="teacherEmail" type="email" value={profileEmail} onChange={event => setProfileEmail(event.target.value)} maxLength={254} disabled={isSubmitting} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
+              </label>
+              <p className="text-xs text-slate-500">Saved on this device. Email does not create an online account. New teachers start with their own classes; existing class ownership stays unchanged.</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" disabled={isSubmitting || !profileName.trim()} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold text-sm disabled:opacity-50">{isSubmitting ? 'Saving…' : 'Save and use teacher'}</button>
+                {teachers.length > 0 && <button type="button" disabled={isSubmitting} onClick={() => { setEditor(null); setErrorMessage(null); }} className="px-4 py-2 rounded-lg border border-slate-300 text-sm">Back to teachers</button>}
+              </div>
+            </form>
           ) : (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
@@ -270,8 +311,8 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
                   const isCurrent = teacher.id === currentTeacherId;
                   const isRecent = !canDismiss && teacher.id === recentTeacherId;
                   return (
+                    <div key={teacher.id} className="flex gap-2 items-center">
                     <button
-                      key={teacher.id}
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleSelect(teacher.id)}
@@ -297,7 +338,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
                             {teacher.name}
                           </p>
                           <p className="text-xs text-slate-500 truncate">
-                            {isRecent ? 'Last confirmed on this device' : teacher.email}
+                            {isRecent ? 'Last confirmed on this device' : teacher.email.endsWith('@local.invalid') ? 'Local teacher profile' : teacher.email}
                           </p>
                         </div>
                       </div>
@@ -313,9 +354,12 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
                         )}
                       </div>
                     </button>
+                    <button type="button" disabled={isSubmitting} onClick={() => startEdit(teacher)} aria-label={`Choose and edit ${teacher.name}`} className="shrink-0 px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50">Edit profile</button>
+                    </div>
                   );
                 })}
               </div>
+              <button type="button" onClick={startCreate} disabled={isSubmitting} className="w-full px-4 py-2 rounded-lg border border-blue-300 text-blue-700 font-semibold text-sm disabled:opacity-50">Add another teacher</button>
             </div>
           )}
         </div>

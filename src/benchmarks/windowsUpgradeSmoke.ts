@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
 import { canonicalLegacyReport } from './legacyReportComparison';
 import { spawn, execFile, execFileSync, type ChildProcess } from 'node:child_process';
@@ -57,6 +58,8 @@ async function openHub(page: Page) {
   const chooser = page.getByTestId('teacher-selector-modal');
   await chooser.waitFor({ state: 'visible' });
   if (await chooser.isVisible()) {
+    await Promise.race([page.getByPlaceholder('Enter Teacher here').waitFor(), page.locator('[data-testid^="select-teacher-"]').first().waitFor()]);
+    if (await page.getByPlaceholder('Enter Teacher here').isVisible()) await installFictionalClassroom(page);
     await page.locator('[data-testid^="select-teacher-"]').first().click();
     await chooser.waitFor({ state: 'hidden' });
   }
@@ -349,7 +352,7 @@ async function runLegacyBootstrap() {
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
-    assert.equal(canonicalLegacyReport(fs.readFileSync(reportB, 'utf8')), canonicalLegacyReport(fs.readFileSync(marking.reportPath, 'utf8')), 'Legacy report must preserve all content, allowing only category display reordering');
+    assert.equal(canonicalLegacyReport(fs.readFileSync(reportB, 'utf8')), canonicalLegacyReport(fs.readFileSync(marking.reportPath, 'utf8').replace('Criterion / KTAC', 'Criterion / KTCA')), 'Legacy report must preserve all content, allowing only category display reordering');
     // A no-op restore could pass an equality check against identical data.
     // Persist a real later edit in B, then require the actual old backup to
     // replace it while preserving the original official records.

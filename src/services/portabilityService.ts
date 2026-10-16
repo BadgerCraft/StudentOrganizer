@@ -1,3 +1,4 @@
+import { getClassroomLevel } from './classroomLevels';
 import { normalizeLegacyMarkingTables, validateMarkingBackup, validateMarkingBackupFiles } from '../marking/portabilityValidation';
 import { isLocalPhoto } from '../utils/localPhoto';
 import type { OntarioTeacherDB } from '../db/database';
@@ -1041,6 +1042,14 @@ export class PortabilityService {
           case 'categoryResults':
             requireString('studentAssessmentId');
             requireString('assessmentCategoryId');
+            // Validate only the new explicit scale. Never recalculate historical marks.
+            if (rec.inputFormat === 'classroom_level') {
+              const rawScore = typeof rec.rawScore === 'string' ? rec.rawScore.trim() : null;
+              const level = rawScore ? getClassroomLevel(rawScore) : undefined;
+              if (rawScore === null || (rawScore && !level) || rec.normalizedPercentage !== (level?.percentage ?? null)) {
+                throw new Error(`Invalid backup file: Table "categoryResults" contains an invalid classroom level at index ${i}.`);
+              }
+            }
             break;
 
           case 'attendanceRecords':

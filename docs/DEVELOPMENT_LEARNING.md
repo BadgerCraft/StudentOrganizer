@@ -312,3 +312,11 @@ No new deeper-reading packet is assigned. The existing optional upgrade/recovery
 The current UI cleanup approval was carried through implementation, regression checks and branch preparation without another routine approval request. A display order sorts a copy of category definitions; it does not change their IDs or grading weights. Collapsed assessment summaries use the existing calculation engine while the saved course policy stays unchanged. Local photo Apply edits the preview draft, while Save commits it; Cancel and obsolete asynchronous reads leave the previous photo intact.
 
 Teacher context is checked inside the write transaction, including the local device and the captured selection epoch. Switching away and back does not revive an old form, and a change during the last queued write aborts the entire transaction. The baseline teacher launch prompt already worked; a remembered profile is only an explicit confirmation shortcut. These are observed development checks, not native-device acceptance or authentication for a shared machine. Shared component-lessons skill access was unavailable; no external lesson IDs or updates are claimed. Prior optional learning prompts remain unanswered and nonblocking.
+
+
+### DEV-CLASSROOM-20261015 — Selected levels and historical calculation meaning
+- Date/source: October15 classroom-use request specifies17 exact selected-level equivalents and prohibits invented reverse conversion.
+- Explanation: A selected level has an explicit calculation value. A historical percentage does not by itself tell us which level a teacher intended. The new classroom_level format preserves this distinction while existing records retain their original format.
+- Project example: New R means50 and 1− means51. An old direct78% remains a direct mark; it is not silently relabelled3+. Feedback-only remains ungraded.
+- Evidence: Exact17 save/finalize/restart/restore tests pass; no demonstrated recall claimed.
+- Deferred learning check: Why should an old78% record remain a direct mark even though the new3+ choice calculates as78? Unanswered; ask when useful without blocking authorized work.

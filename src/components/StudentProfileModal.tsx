@@ -381,14 +381,15 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
       confirmDiscardMessage="You have unsaved changes in this student profile. Are you sure you want to discard them?"
       title={`Student Profile: ${student.preferredName || student.firstName} ${student.lastName}`}
       hideHeader={true}
-      maxWidthClass="max-w-4xl"
-      contentClassName="!p-0 h-[90vh] !rounded-3xl"
+      maxWidthClass="max-w-none sm:w-[85vw] lg:w-[50vw]"
+      contentClassName="h-[90vh] h-[90dvh] !rounded-3xl"
+      bodyClassName="flex min-h-0 flex-1 overflow-hidden"
       testId="student-profile-modal"
     >
       {({ requestDismiss }) => (
-        <div className="bg-white rounded-3xl w-full h-full shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+        <div className="bg-white rounded-3xl w-full min-h-0 flex-1 shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
           {/* Header Profile Bar */}
-          <div className="bg-slate-900 text-white p-6 flex items-start justify-between">
+          <div className="bg-slate-900 text-white p-4 sm:p-6 flex shrink-0 gap-2 items-start justify-between">
             <div className="flex items-center space-x-4">
               {safePhotoSource(student.photoUrl) ? (
                 <img
@@ -480,8 +481,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           )}
 
         {/* Tab Navigation */}
-        <div className="bg-slate-100 border-b border-slate-200 px-6 flex items-center justify-between">
-          <div className="flex items-center space-x-1">
+        <div className="bg-slate-100 border-b border-slate-200 px-3 flex shrink-0 flex-wrap gap-2 items-center justify-between">
+          <div className="flex min-w-0 max-w-full overflow-x-auto items-center space-x-1">
             {[
               { id: 'overview', label: 'Overview', icon: BookOpen },
               { id: 'assessments', label: `Assessments (${studentAssessmentList.length})`, icon: FileText },
@@ -495,7 +496,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   key={tab.id}
                   data-testid={`profile-tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition ${
+                  className={`flex shrink-0 items-center space-x-2 py-3 px-3 text-xs font-bold border-b-2 transition ${
                     activeTab === tab.id
                       ? 'border-blue-600 text-blue-700 bg-white shadow-sm rounded-t-xl'
                       : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -517,7 +518,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

@@ -22,6 +22,7 @@ export interface ModalDialogProps {
   children: React.ReactNode | ((props: { requestDismiss: () => void }) => React.ReactNode);
   maxWidthClass?: string;
   contentClassName?: string;
+  bodyClassName?: string;
   hideHeader?: boolean;
   testId?: string;
   initialFocusRef?: React.RefObject<HTMLElement>;
@@ -37,6 +38,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
   children,
   maxWidthClass = 'max-w-md',
   contentClassName = '',
+  bodyClassName = 'overflow-y-auto min-h-0 flex-1 p-4',
   hideHeader = false,
   testId = 'modal-dialog',
   initialFocusRef
@@ -73,7 +75,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
 
     // Initial focus on intelligent visible target
     const timer = setTimeout(() => {
-      if (!dialogRef.current) return;
+      if (!dialogRef.current || getTopmostModalId() !== modalId) return;
 
       // React autofocus or a fast keyboard user may already have entered a
       // field. Delayed setup must not redirect their typing to another input.
@@ -98,7 +100,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       // 3. First visible editable input, select, or textarea (ignoring hidden file inputs)
       const visibleInputs = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
+          'input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled)'
         )
       ).filter(isElementVisible);
       if (visibleInputs.length > 0) {
@@ -109,7 +111,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       // 4. First visible actionable button that is not the header close X button
       const visibleButtons = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]):not([data-testid="modal-close-x-btn"])'
+          'button:not(:disabled):not([data-testid="modal-close-x-btn"])'
         )
       ).filter(isElementVisible);
       if (visibleButtons.length > 0) {
@@ -120,7 +122,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       // 5. Fallback to first visible focusable element or container
       const allFocusable = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
         )
       ).filter(isElementVisible);
 
@@ -137,6 +139,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
         if (activeModalStack[activeModalStack.length - 1] === modalId) {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           requestDismiss();
         }
         return;
@@ -148,22 +151,26 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
 
         const focusable = Array.from(
           dialogRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
           ) || []
         ).filter(isElementVisible);
 
-        if (focusable.length === 0) return;
+        if (focusable.length === 0) {
+          e.preventDefault();
+          dialogRef.current?.focus();
+          return;
+        }
 
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
 
         if (e.shiftKey) {
-          if (document.activeElement === first) {
+          if (document.activeElement === first || !dialogRef.current?.contains(document.activeElement)) {
             e.preventDefault();
             last.focus();
           }
         } else {
-          if (document.activeElement === last) {
+          if (document.activeElement === last || document.activeElement === dialogRef.current || !dialogRef.current?.contains(document.activeElement)) {
             e.preventDefault();
             first.focus();
           }
@@ -194,7 +201,8 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
   if (!isOpen) return null;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
+    e.stopPropagation();
+    if (e.target === e.currentTarget && getTopmostModalId() === modalId) {
       requestDismiss();
     }
   };
@@ -204,6 +212,12 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       data-testid={testId}
       className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
       onClick={handleBackdropClick}
+      onPointerDown={event => event.stopPropagation()}
+      onPointerUp={event => event.stopPropagation()}
+      onMouseDown={event => event.stopPropagation()}
+      onMouseUp={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}
+      onKeyDown={event => event.stopPropagation()}
     >
       <div
         ref={dialogRef}
@@ -228,7 +242,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
             </button>
           </div>
         )}
-        <div className="overflow-y-auto flex-1 p-4">
+        <div className={bodyClassName}>
           {typeof children === 'function' ? children({ requestDismiss }) : children}
         </div>
       </div>

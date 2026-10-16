@@ -14,7 +14,7 @@ describe('cross-version legacy report evidence', () => {
     const before = structuredClone(fixture.input);
     const current = renderMarkingReport(fixture.input);
     expect(current).not.toBe(fixture.html);
-    expect(canonicalLegacyReport(current)).toBe(canonicalLegacyReport(fixture.html));
+    expect(canonicalLegacyReport(current)).toBe(canonicalLegacyReport(fixture.html.replace('Criterion / KTAC', 'Criterion / KTCA')));
     expect(fixture.input).toEqual(before);
     expect(fixture.input.attempt).not.toHaveProperty('archivedAt');
     expect(current).not.toContain('<h2>Archived assessment</h2>');

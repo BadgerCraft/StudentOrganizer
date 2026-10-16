@@ -1,3 +1,4 @@
+import { getClassroomLevel } from './classroomLevels';
 import type {
   AchievementCategoryCode,
   Assessment,
@@ -44,6 +45,14 @@ export function normalizeEnteredScore(
   const trimmed = rawScore.trim();
   if (!trimmed) {
     return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore };
+  }
+
+  if (format === 'classroom_level') {
+    const level = getClassroomLevel(trimmed);
+    if (!level) return { normalizedPercentage: null, pointsEarned: null, pointsPossibleSnapshot: maxScore,
+      error: `Invalid classroom level: "${trimmed}"` };
+    return { normalizedPercentage: level.percentage, pointsEarned: (level.percentage / 100) * maxScore,
+      pointsPossibleSnapshot: maxScore };
   }
 
   if (format === 'scale_code') {

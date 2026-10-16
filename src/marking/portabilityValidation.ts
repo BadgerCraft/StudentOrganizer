@@ -139,7 +139,7 @@ export function validateMarkingBackup(tables: BackupTables): void {
       resultCategories.add(result.assessmentCategoryId);
     }
     const assessed = commit.draft.judgments.filter(judgment => judgment.assessed);
-    if (assessed.length !== resultCategories.size || assessed.some(judgment => !resultCategories.has(judgment.assessmentCategoryId))) fail('committed results do not cover the saved assessed categories');
+    if (assessed.some(judgment => !resultCategories.has(judgment.assessmentCategoryId)) || [...resultCategories].some(categoryId => !commit.draft.judgments.some(judgment => judgment.assessmentCategoryId === categoryId && (judgment.assessed || judgment.feedback.trim())))) fail('committed results do not cover the saved assessed categories');
     if (commit.previousCommitId !== null) {
       const previous = ref('markingCommits', commit.previousCommitId);
       // Different authorized teachers may contribute official results over time, while

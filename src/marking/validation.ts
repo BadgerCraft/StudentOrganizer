@@ -1,3 +1,4 @@
+import { getClassroomLevel } from '../services/classroomLevels';
 import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { MARKING_LIMITS } from './types';
 import { ValidationError } from '../services/markbookService';
@@ -35,7 +36,7 @@ export function assertCategorySnapshot(value: unknown, assessmentId: string): as
     const category = object(item, 'Saved assessment category');
     str(category.id, 'Saved category ID', 200);
     if (category.assessmentId !== assessmentId) fail('Saved category belongs to a different assessment.');
-    if (!['K', 'T', 'A', 'C'].includes(category.categoryCode as string)) fail('Saved category must use KTAC.');
+    if (!['K', 'T', 'A', 'C'].includes(category.categoryCode as string)) fail('Saved category must use KTCA.');
     if (typeof category.maxScore !== 'number' || !Number.isFinite(category.maxScore) || category.maxScore <= 0) fail('Saved category maximum is invalid.');
     if (typeof category.evidenceWeight !== 'number' || !Number.isFinite(category.evidenceWeight) || category.evidenceWeight < 0) fail('Saved category weight is invalid.');
     nullableId(category.markScaleVersionId, 'Saved category scale');
@@ -67,7 +68,7 @@ export function assertRubricContent(value: unknown): asserts value is RubricCont
   for (const item of v.criteria) {
     const criterion = object(item, 'Criterion'); str(criterion.id, 'Criterion ID', 200); ids.push(criterion.id);
     str(criterion.name, 'Criterion name', 500);
-    if (!['K', 'T', 'A', 'C'].includes(criterion.categoryCode as string)) fail('Confirm a KTAC category for every criterion.');
+    if (!['K', 'T', 'A', 'C'].includes(criterion.categoryCode as string)) fail('Confirm a KTCA category for every criterion.');
     const descriptors = object(criterion.descriptors, 'Descriptors');
     if (Object.keys(descriptors).length !== v.levels.length) fail('Each criterion must preserve the complete descriptor matrix.');
     for (const level of v.levels as string[]) {
@@ -196,7 +197,7 @@ export function assertAttemptDraft(draft: MarkingDraft, attempt: MarkingAttempt,
   if (draft.archivedFeedback?.length && !attempt.archivedAt) fail('Archived written feedback belongs only to an archived attempt.');
   if (attempt.archivedAt && !attempt.keepStudentWork && (draft.annotations.length || draft.pending || (draft.imageFeedback?.length ?? 0))) fail('Archived source material must have been removed.');
   for (const entry of draft.archivedFeedback ?? []) {
-    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || !rubric.levels.includes(entry.level)))) fail('Archived feedback must use the pinned rubric.');
+    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || (!rubric.levels.includes(entry.level) && !getClassroomLevel(entry.level))))) fail('Archived feedback must use the pinned rubric.');
   }
   if (mode !== 'oral' && draft.oral !== undefined) fail('Presentation evidence belongs only to an oral attempt.');
   if (mode === 'oral' && draft.oral === undefined) fail('Oral attempts must retain their presentation evidence.');
@@ -205,10 +206,10 @@ export function assertAttemptDraft(draft: MarkingDraft, attempt: MarkingAttempt,
   if (mode !== 'written' && (pages.length || draft.annotations.length || draft.pending)) fail('This marking mode cannot contain written-page annotations.');
   if (draft.rubricFeedback !== undefined && draft.rubricFeedback.length !== rubric.criteria.length) fail('Retain feedback for every pinned rubric criterion.');
   for (const entry of draft.rubricFeedback ?? []) {
-    if (!rubric.criteria.some(c => c.id === entry.criterionId) || (entry.level && !rubric.levels.includes(entry.level))) fail('Rubric evidence must use the pinned criterion and achievement labels.');
+    if (!rubric.criteria.some(c => c.id === entry.criterionId) || (entry.level && (!rubric.levels.includes(entry.level) && !getClassroomLevel(entry.level)))) fail('Rubric evidence must use the pinned criterion and achievement labels.');
   }
   for (const entry of feedback.flatMap(p => p.annotations)) {
-    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || !rubric.levels.includes(entry.level)))) fail('Visual evidence must use the pinned rubric.');
+    if ((entry.criterionId !== null && !rubric.criteria.some(c => c.id === entry.criterionId)) || (entry.level && (!entry.criterionId || (!rubric.levels.includes(entry.level) && !getClassroomLevel(entry.level))))) fail('Visual evidence must use the pinned rubric.');
   }
 }
 function annotation(value: unknown): asserts value is MarkingAnnotation {
@@ -228,13 +229,13 @@ export function assertMarkingDraft(value: unknown, rubric?: MarkingRubric, docum
     const judgment = object(item, 'Category judgment'); str(judgment.assessmentCategoryId, 'Assessment category ID', 200); ids.push(judgment.assessmentCategoryId);
     if (typeof judgment.assessed !== 'boolean') fail('Category judgment must explicitly state whether it is assessed.');
     str(judgment.rawScore, 'Official score', 200, true); str(judgment.feedback, 'Category feedback', 20000, true);
-    if (!['scale_code', 'raw_points', 'percentage', 'descriptive'].includes(judgment.inputFormat as string)) fail('Unsupported official score format.');
+    if (!['scale_code', 'classroom_level', 'raw_points', 'percentage', 'descriptive'].includes(judgment.inputFormat as string)) fail('Unsupported official score format.');
   }
   unique(ids, 'Category judgments'); str(v.overallFeedback, 'Overall feedback', 50000, true);
   if (categoryIds && (ids.length !== categoryIds.length || ids.some(id => !categoryIds.includes(id as string)))) fail('Review judgments for every current assessment category.');
   const annotations: MarkingAnnotation[] = [...savedAnnotations, ...(v.pending === null ? [] : [v.pending as MarkingAnnotation])];
   for (const item of annotations) {
-    if (rubric && (!rubric.criteria.some(c => c.id === item.criterionId) || (item.level !== '' && !rubric.levels.includes(item.level)))) fail('Annotation criterion or level does not belong to this rubric version.');
+    if (rubric && (!rubric.criteria.some(c => c.id === item.criterionId) || (item.level !== '' && (!rubric.levels.includes(item.level) && !getClassroomLevel(item.level))))) fail('Annotation criterion or level does not belong to this rubric version.');
     if (documents) {
       const doc = documents.find(d => d.id === item.documentId);
       if (!doc || doc.text.slice(item.start, item.end) !== item.quote || item.end > doc.text.length) fail('Annotation does not match its immutable document range.');
@@ -245,7 +246,7 @@ export function assertMarkingDraft(value: unknown, rubric?: MarkingRubric, docum
 export function assertMarkingRecord(table: MarkingTableName, value: unknown): asserts value is MarkingRubric | MarkingAttempt | MarkingSession | MarkingCommit {
   const v = object(value, table); base(v);
   if (table === 'markingRubrics') {
-    assertRubricContent(v); if (v.confirmed !== true) fail('Stored rubric must have confirmed KTAC mapping.');
+    assertRubricContent(v); if (v.confirmed !== true) fail('Stored rubric must have confirmed KTCA mapping.');
   } else if (table === 'markingAttempts') {
     str(v.rubricId, 'Rubric ID', 200); nullableId(v.classEnrollmentId, 'Enrollment ID'); nullableId(v.previousAttemptId, 'Previous attempt ID');
     if (v.mode !== undefined && !['written', 'oral', 'rubric'].includes(v.mode as string)) fail('Unsupported marking mode.');

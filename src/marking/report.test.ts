@@ -64,7 +64,7 @@ describe('saved marking report', () => {
     const input = reportInput();
     input.commit.draft.judgments[0].assessed = false;
     input.commit.draft.judgments[0].rawScore = '';
-    expect(renderMarkingReport(input)).toContain('Not assessed');
+    expect(renderMarkingReport(input)).toContain('Feedback only');
     input.attempt.id = 'other-attempt';
     expect(() => renderMarkingReport(input)).toThrow('do not match');
     input.attempt.id = 'attempt';

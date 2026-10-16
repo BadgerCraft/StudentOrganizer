@@ -126,7 +126,9 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
   const policiesBefore = await records(page, 'gradingPolicies');
   const policy = policiesBefore.find(row => row.classSectionId === summative.classSectionId && row.deletedAt === null)!;
   assert.equal(policy.excludeFormative, true, 'fixture excludes formative course evidence');
-  const percentages = { K: 90, T: 70, C: 50, A: 30 };
+  const levels = { K: '4(high)', T: '3−', C: 'R', A: '1' };
+  const percentages = { K: 91, T: 71, C: 50, A: 55 };
+  await page.getByRole('button', { name: 'Show percentage details', exact: true }).click();
   let courseAfterSummative = '';
   let persistedAfterSummative: number | null = null;
   for (const type of ['summative', 'formative']) {
@@ -137,18 +139,17 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
     for (const code of ['K', 'T', 'C', 'A'] as const) {
       const category = categoryDefinitions.find(row => row.categoryCode === code)!;
       await page.getByTestId(`markbook-cell-${enrollment.id}-${category.id}`).click();
-      await page.getByPlaceholder('e.g. 4+, 88%, 18/20').fill(String(percentages[code]));
-      await page.locator('select').filter({ has: page.locator('option[value="percentage"]') }).selectOption('percentage');
+      await page.getByRole('group', { name: `Assigned ${code} level`, exact: true }).getByRole('button', { name: levels[code], exact: true }).click();
       await page.getByRole('button', { name: 'Complete', exact: true }).click();
       await page.getByRole('button', { name: 'Save Result', exact: true }).click();
       await page.getByRole('button', { name: 'Save Result', exact: true }).waitFor({ state: 'hidden' });
       const assignment = await waitForRecord(page, 'studentAssessments', row => row.assessmentId === assessmentId &&
         row.classEnrollmentId === enrollment.id && row.deletedAt === null && row.completionStatus === 'complete');
       await waitForRecord(page, 'categoryResults', row => row.studentAssessmentId === assignment.id &&
-        row.assessmentCategoryId === category.id && row.deletedAt === null && row.rawScore === String(percentages[code]) &&
+        row.assessmentCategoryId === category.id && row.deletedAt === null && row.rawScore === levels[code] && row.inputFormat === 'classroom_level' &&
         row.normalizedPercentage === percentages[code]);
       await waitForVisibleText(page.getByTestId(`markbook-cell-${enrollment.id}-${category.id}`),
-        String(percentages[code]), `${type} ${code} saved score must be rendered before proceeding`);
+        `${levels[code]}\n${percentages[code]}%`, `${type} ${code} saved score must be rendered before proceeding`);
     }
     const studentRow = page.getByTestId(`markbook-cell-${enrollment.id}-${categoryDefinitions[0].id}`).locator('..');
     const expectedCourse = await persistedCourseGrade(page, enrollment.id, summative.classSectionId);
@@ -168,7 +169,7 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
   const weights = { K: policy.weightK, T: policy.weightT, C: policy.weightC, A: policy.weightA };
   const expected = Math.round((Object.keys(percentages) as Array<keyof typeof percentages>)
     .reduce((sum, code) => sum + percentages[code] * weights[code], 0) / 100 * 10 ** policy.decimalPrecision) / 10 ** policy.decimalPrecision;
-  assert.notEqual(expected, 60, 'unequal policy weights must not be replaced by a flat category average');
+  assert.notEqual(expected, Object.values(percentages).reduce((sum, percentage) => sum + percentage, 0) / 4, 'unequal policy weights must not be replaced by a flat category average');
   for (const type of ['summative', 'formative']) {
     const summary = page.getByTestId(`markbook-summary-${enrollment.id}-${assessmentIds[type]}`);
     await summary.waitFor();

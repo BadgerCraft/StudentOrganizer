@@ -201,7 +201,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
             Central Assessment Hub &amp; Rubrics
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Create, configure, and weight evaluations using Ontario achievement chart criteria (K, T, C, A).
+            Create assessments using Knowledge/Understanding, Thinking, Communication, and Application (KTCA). Classroom levels are available automatically when marking.
           </p>
         </div>
         <button
@@ -332,7 +332,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <label className="flex items-center space-x-2 font-bold text-blue-700">
                       <input type="checkbox" checked={kChecked} onChange={e => setKChecked(e.target.checked)} />
-                      <span>K (Knowledge &amp; Understanding)</span>
+                      <span>K (Knowledge/Understanding)</span>
                     </label>
                     <div className="flex items-center space-x-2">
                       <span className="text-[11px] text-slate-400">Max:</span>
@@ -343,7 +343,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <label className="flex items-center space-x-2 font-bold text-purple-700">
                       <input type="checkbox" checked={tChecked} onChange={e => setTChecked(e.target.checked)} />
-                      <span>T (Thinking &amp; Inquiry)</span>
+                      <span>T (Thinking)</span>
                     </label>
                     <div className="flex items-center space-x-2">
                       <span className="text-[11px] text-slate-400">Max:</span>

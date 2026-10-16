@@ -1,3 +1,4 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
 import { preview } from 'vite';
 import { chromium, webkit, type Page, type BrowserContext } from 'playwright';
 import { readFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
@@ -24,8 +25,10 @@ async function selectTeacher(page: Page) {
   const teacher = page.locator('[data-testid^="select-teacher-"]').first();
   await Promise.race([
     teacher.waitFor({ state: 'visible' }),
+    page.getByPlaceholder('Enter Teacher here').waitFor({ state: 'visible' }),
     page.locator('[data-testid="header-teacher-btn"]').waitFor({ state: 'visible' })
   ]);
+  if (await page.getByPlaceholder('Enter Teacher here').isVisible()) await installFictionalClassroom(page);
   if (await teacher.isVisible()) await teacher.tap();
 }
 async function noPageOverflow(page: Page, label: string) {
@@ -196,11 +199,10 @@ async function main() {
     const studentRow = page.locator('table tbody tr').filter({ has: page.getByRole('button', { name: `${editedStudent.lastName}, ${editedStudent.preferredName}`, exact: true }) });
     assert.equal(await studentRow.count(), 1, 'Mark must be entered for the edited fictional student');
     await studentRow.locator('td').nth(knowledgeColumn).tap();
-    await page.getByPlaceholder('e.g. 4+, 88%, 18/20').fill('88%');
-    await page.getByPlaceholder('e.g. 4+, 88%, 18/20').locator('..').locator('..').locator('select').selectOption('percentage');
+    await page.getByRole('group', { name: 'Assigned K level', exact: true }).getByRole('button', { name: '4(low)', exact: true }).tap();
     await page.getByPlaceholder('Optional constructive feedback for this category...').fill('Fictional iPad K feedback');
     await page.getByRole('button', { name: 'Save Result', exact: true }).tap();
-    await waitForRecords(page, 'categoryResults', rows => rows.some(row => row.rawScore === '88%' && row.normalizedPercentage === 88 && row.feedback === 'Fictional iPad K feedback'));
+    await waitForRecords(page, 'categoryResults', rows => rows.some(row => row.rawScore === '4(low)' && row.inputFormat === 'classroom_level' && row.normalizedPercentage === 88 && row.feedback === 'Fictional iPad K feedback'));
     await noPageOverflow(page, 'markbook horizontal scrolling');
     await page.screenshot({ path: join(evidenceDir, 'markbook-result.png'), fullPage: true });
     await page.locator('[data-testid="nav-portability-btn"]').tap();
@@ -239,7 +241,7 @@ async function main() {
     await page.getByText(/Database successfully restored/).waitFor();
     assert.ok((await records(page, 'assessments')).some(row => row.title === title));
     assert.ok(!(await records(page, 'assessments')).some(row => row.title === afterBackupTitle));
-    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
+    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '4(low)' && row.inputFormat === 'classroom_level' && row.feedback === 'Fictional iPad K feedback'));
     await assertBackupTables(page, backupJson.tables);
     await page.getByRole('button', { name: 'Report a problem', exact: true }).tap();
     await page.getByTestId('bug-report-summary').fill('Fictional installed pilot local draft');
@@ -261,7 +263,7 @@ async function main() {
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     assert.ok((await records(page, 'students')).some(row => row.preferredName === 'Fictional Tablet' && row.photoUrl));
     assert.ok((await records(page, 'participationEvents')).some(row => row.note === 'Fictional iPad observation'));
-    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '88%' && row.feedback === 'Fictional iPad K feedback'));
+    assert.ok((await records(page, 'categoryResults')).some(row => row.rawScore === '4(low)' && row.inputFormat === 'classroom_level' && row.feedback === 'Fictional iPad K feedback'));
     await page.getByRole('button', { name: 'Report a problem', exact: true }).tap();
     await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('[data-testid="bug-report-summary"]')?.value === 'Fictional installed pilot local draft');
     assert.equal(await page.getByTestId('bug-report-summary').inputValue(), 'Fictional installed pilot local draft');

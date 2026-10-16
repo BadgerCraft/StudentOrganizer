@@ -18,7 +18,7 @@ export function CategoryRecoveryReview({ review, onReconcile, onCancel }: Props)
     <p>Your draft is saved locally with its original categories. Review the pinned rubric and each judgment before reconciling. This does not change official marks or accept newer manual results.</p>
     <p>Pinned rubric: <strong>{review.rubricTitle}</strong></p>
     <ul>{review.criteria.map((criterion, index) => <li key={index}>{criterion.name} → {criterion.categoryCode}</li>)}</ul>
-    <p>{review.compatible ? 'Pinned rubric is compatible with the current KTAC categories.' : review.reasons.join(' ')}</p>
+    <p>{review.compatible ? 'Pinned rubric is compatible with the current KTCA categories.' : review.reasons.join(' ')}</p>
     <p>Current categories: {review.currentCategories.length ? sortCategoriesForDisplay(review.currentCategories).map(c => `${c.categoryCode} (maximum ${c.maxScore}, weight ${c.evidenceWeight})`).join('; ') : 'none'}.</p>
     {sortCategoriesForDisplay(review.previousCategories).map(previous => <div key={previous.id} className="border rounded p-3 space-y-2">
       <p>Original {previous.categoryCode}: maximum {previous.maxScore}, weight {previous.evidenceWeight}.</p>
@@ -29,7 +29,7 @@ export function CategoryRecoveryReview({ review, onReconcile, onCancel }: Props)
         {review.currentCategories.filter(current => compatibleCategoryTarget(previous, current)).map(current => <option key={current.id} value={current.id}>{current.categoryCode} — retain judgment with current category</option>)}
       </select></label>
     </div>)}
-    <p className="text-sm">Changed or removed originals remain in Retained category feedback. Only matching KTAC categories, score maximums and scales can retain a judgment. Other current judgments start unassessed; review them yourself before finalizing.</p>
+    <p className="text-sm">Changed or removed originals remain in Retained category feedback. Only matching KTCA categories, score maximums and scales can retain a judgment. Other current judgments start unassessed; review them yourself before finalizing.</p>
     <button className="border rounded px-3 py-2 disabled:opacity-50" disabled={!review.compatible || review.previousCategories.some(c => !choices[c.id])} onClick={() => onReconcile(Object.fromEntries(Object.entries(choices).map(([id, choice]) => [id, choice === '__retain__' ? null : choice])))}>Reconcile reviewed categories</button>
     <button className="border rounded px-3 py-2 ml-2" onClick={onCancel}>Close category review</button>
   </section>;
