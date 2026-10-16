@@ -1,3 +1,14 @@
+# Current classroom-use fixes — October 15, 2026
+
+PR31 is merged: live main `495ba2af97663123ac332ba258a8c0e7f820ec13`, including `0fe0e0c`. Current authorized branch `codex/classroom-use-20261015` starts from that main. Tyler requested the complete usable import → marking → saved Markbook path, then profile/presentation fixes. Implementation, verification, commit/push and review preparation are authorized; merge/release remain reserved. Current IDs TUV-C01–C10 and deferred TUV-PARTICIPATION are in [FEATURE_QUEUE.md](../FEATURE_QUEUE.md); [work order](../work-orders/CLASSROOM-USE-2026-10-15.md) owns measured evidence. Earlier pending PR31 merge statements below are historical.
+
+
+Implementation now covers TUV-C01–C09. Full unit regression581/58 passes; guided workflow, fresh profiles, popup/evidence, production marking, Archive, backup/restore, authority, category recovery and shared classroom browser checks pass. Final bank/photo checks and production build also pass; source commit and PR readback follow in the current work order. New desktop CI/device evidence is not yet claimed. Comment banks export separately from app backups; student feedback remains in normal backups. Deferred participation behavior remains unchanged.
+
+No real student data, services, mobile/Control Panel expansion or application distribution in this batch. Preserve explicit local actor checks, existing profiles, grade/history records and backup compatibility. Physical desktop acceptance remains separate from browser checks.
+
+---
+
 # Current phase — P0 teacher-use readiness
 
 Tyler's independent-review request supersedes the feature-expansion priorities below. Reviewed PR31 source `4335c29b0fa37d70962c189d381f65403d6548cf` had one demonstrated Archive/backup identifier-bound blocker; this follow-up applies the smallest repair with 53 focused tests passing, without relaxing validation. The two recent PDF/legacy comparison repairs were specifically inspected. Review findings, repair proof, follow-up cards and merge/build/device gates: [current review work order](../work-orders/PR31-INDEPENDENT-REVIEW.md). Older evidence below is preserved history, not a current feature queue.

@@ -6,7 +6,7 @@ Completed on branch `codex/markinator-integration-20261006`. Source/test commit:
 
 | Command | Actual UI sequence and checked result |
 | --- | --- |
-| `npm run test:marking:inputs` | Manually enter a two-criterion/four-label descriptor matrix; reject a duplicate label and malformed pasted replacement without losing descriptors; correct custom labels and save exact KTAC mappings. |
+| `npm run test:marking:inputs` | Manually enter a two-criterion/four-label descriptor matrix; reject a duplicate label and malformed pasted replacement without losing descriptors; correct custom labels and save exact KTCA mappings. |
 | Same suite | Group two TXT attachments for one student, comment independently on each, import an explicitly linked resubmission, return to the predecessor and reload. Original bytes, document-bound comments and both attempts remain intact. |
 | Same suite | Select malformed DOCX, unsupported PDF, invalid UTF-8, a simulated unreadable file and a valid remainder. Named errors appear; preview makes no writes; only the explicitly matched valid remainder imports. |
 | Same suite | Fail the second batch item's audit write after its attempt write. That transaction rolls back, the first item/audit remains once, the failed item's roster choice stays visible, retry creates each item/audit exactly once, and duplicate reimport is rejected. Official records remain unchanged. |

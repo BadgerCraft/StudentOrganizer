@@ -11,7 +11,7 @@ Setup paste/TXT → start → select exact passage → choose rubric category �
 | Existing path | New connection and direction | Integrity boundary |
 |---|---|---|
 | AssessmentHubView / ClassSettingsService.createAssessment | Optional Marking workspace from assessment; no rubric required for existing creation | Existing IDs and direct marking preserved |
-| New MarkingWorkspace rubric editor | MarkingService.saveRubric → markingRubrics | Confirmed explicit KTAC mapping; immutable new rubric version on edit |
+| New MarkingWorkspace rubric editor | MarkingService.saveRubric → markingRubrics | Confirmed explicit KTCA mapping; immutable new rubric version on edit |
 | Assessment/classEnrollments/students | getContext → explicit import matching → markingAttempts | Stable enrollment IDs, confirmation; unmatched permitted; no filename auto-commit |
 | Local parser | bytes → immutable MarkingDocument in attempt | Bounded safe UTF-8/DOCX extraction; raw originals retained locally with hash; text preview |
 | MarkingWorkspace | MarkingService.saveDraft → markingSessions | Per-actor durable draft, revision/version checks; no grade writes |

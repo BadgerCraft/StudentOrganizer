@@ -131,7 +131,7 @@ try {
     assert.equal(await archivedCard.getByRole('textbox').count(), 0, 'archive is read-only');
     assert.equal(await page.getByTestId(`marking-session-open-${attempt.id}`).count(), 0);
     assert.deepEqual(await official(page, assessment.id), grades, 'archiving preserves official grades');
-    const stored = (await records(page, 'markingAttempts')).find(row => row.id === attempt.id);
+    const stored: any = (await records(page, 'markingAttempts')).find(row => row.id === attempt.id);
     assert.equal(!!stored.archivedAt, true);
     assert.equal(stored.documents.length, keep ? 1 : 0);
     scenarios.push(`${keep ? 'Explicit retain' : 'Default removal'}: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation`);

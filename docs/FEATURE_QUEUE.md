@@ -1,10 +1,10 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-Updated: October 14, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
+Updated: October 15, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
 
 ## P0 – Teacher-use readiness
 
-Goal: get the integrated desktop application into Tyler's hands for routine fictional-data / personal workflow validation as quickly as safely possible. Authority: Tyler's explicit independent-review/phase-change request in this task. Review and a demonstrated blocker repair are authorized; merge, release/distribution, real-student data, iPad reactivation, services and unrelated cleanup remain separately reserved. Earlier feature rows below retain provenance; this P0 sequence owns current priority.
+Goal: get the integrated desktop application into Tyler's hands for routine fictional-data / personal workflow validation as quickly as safely possible. Authority: Tyler's explicit independent-review/phase-change request in this task. The October15 classroom-use implementation, testing, commit/push and review preparation are authorized; merge, release/distribution, real-student data, iPad reactivation, services and unrelated cleanup remain separately reserved. Earlier feature rows below retain provenance; this P0 sequence owns current priority.
 
 > **Current product phase: integrated teacher-use validation. Prefer making the existing workflow usable and trustworthy over adding new capabilities. New work should answer one of three questions: does it block Tyler from using the app, risk student data, or materially disrupt the marking/classroom workflow? If not, queue it as a follow-up.**
 
@@ -12,7 +12,7 @@ Goal: get the integrated desktop application into Tyler's hands for routine fict
 
 | Order | Stable ID | Current disposition | Next action / gate |
 | --- | --- | --- | --- |
-| 1 | TUV-REVIEW | Independent review of PR31 at `4335c29` found PR31-B01; bounded Archive-ID repair verified by 53 focused tests. PDF/Electron, legacy comparison, backup and classroom paths reviewed; old CI remains green evidence for unaffected source. | Publish/check repaired candidate and request Tyler's explicit merge approval. Do not call the original pinned head clean or merge automatically. [Review and proof](work-orders/PR31-INDEPENDENT-REVIEW.md). |
+| 1 | TUV-REVIEW | PR31 verified merged on GitHub; main `495ba2af97663123ac332ba258a8c0e7f820ec13` includes Archive fix `0fe0e0c`. | Review complete; current authorized classroom-use fixes proceed from fresh main. |
 | 2 | TUV-WIN-BUILD | One clean current Windows build is the next delivery preparation, after review/merge decision. No manual build or handoff performed by this review. | Use reviewed/merged source; record exact commit/build/checksum and choose one current installer. Build artifacts are not release/distribution approval. |
 | 3 | TUV-WIN-DEVICE | Short physical acceptance on Tyler's actual Windows machine remains unverified. | Obtain explicit handoff/installation approval, use fictional data and recoverable/disposable test profile; preserve existing data. OS/device problems become small cards unless they threaten integrity/privacy/authorization/recovery or materially block routine use. |
 | 4 | TUV-WORKFLOW | Complete normal teacher workflow is the acceptance target; CI is supporting evidence, not Tyler's walkthrough. | Class/student setup; participation/classroom tools; assessment creation; all three Markinator modes; photo import/markup; rubric/feedback; marked PDF; Archive; historical retrieval; backup/restore; restart/persistence. Record friction and exact build/device. No developer intervention or implementation knowledge should be needed. |
@@ -29,13 +29,31 @@ Goal: get the integrated desktop application into Tyler's hands for routine fict
 | TUV-UX-002 | Important follow-up; non-blocking fictional use; no implementation started | Dropped-enrollment nonarchived attempts remain stored but are hidden by the existing active-roster queue filter. Add authorized read-only historical discovery while preventing new marking writes. `markingService.ts:119–138`; validate practical interruption during Tyler's walkthrough. |
 | PR31-L01 | Non-blocking documented native limitation | PDF cleanup is best effort on OS refusal; power-loss/process-termination cleanup is not established. Physical dialogs and device policy still need the short actual-Windows pass. |
 
-External GitHub issue creation was rejected by automatic approval review; these stable-ID queue cards are the recorded follow-up tickets. No external issue creation or alternate route was attempted. Merge/release/distribution approval remains pending; the immediate user-owned decision after the repaired candidate is verified is PR31 merge approval.
+External GitHub issue creation was rejected by automatic approval review; these stable-ID queue cards are the recorded follow-up tickets. No external issue creation or alternate route was attempted. PR31 was subsequently merged at `495ba2a` (verified October15). Current classroom-use fixes have separate review/merge and physical-device gates.
+
+## October 15 classroom-use fixes — authorized active batch
+
+Tyler explicitly authorized implementation, relevant tests/build/interaction checks, commits, normal feature-branch push and review preparation. Current branch: `codex/classroom-use-20261015`, based on refreshed main `495ba2a`; PR31 merge verified through Git and GitHub. Merge/release/distribution, real student data, cloud services, Control Panel/mobile expansion remain reserved. [Execution work order](work-orders/CLASSROOM-USE-2026-10-15.md).
+
+| ID | Reported issue / scope | Disposition / acceptance |
+| --- | --- | --- |
+| TUV-C01 | Fresh teacher, second profile, choose/edit/switch | Implemented; verification recorded in work order; explicit local actor, preserved saved profiles/history, restart checks. |
+| TUV-C02 | Markbook levels, headings, KTCA, immediate saved results | Implemented; verification recorded in work order; percentages secondary, no invented historical reverse conversion. |
+| TUV-C03 | Student popup size, backdrop, keyboard/focus | Implemented; verification recorded in work order; half-width desktop/tall panel, responsive margins, dirty guards, no background clicks. |
+| TUV-C04 | Full rubric parsing and editable mappings | Implemented; verification recorded in work order; reproduce full-table defect, preserve descriptors/multiple criteria, require uncertain category confirmation. |
+| TUV-C05 | Guided source/import/student matching | Implemented; verification recorded in work order; text/DOCX/paste/images, explicit matches, multipage student, Back/Undo/retry protection. |
+| TUV-C06 | Focused comments and comment bank | Implemented; verification recorded in work order; local import review, select/edit, criterion links and subsequent review preserved. |
+| TUV-C07 | Shared 17-choice exact level scale | Implemented; verification recorded in work order; R distinct from absent/feedback-only; preserve historical scale/percentage meaning. |
+| TUV-C08 | Criterion/category marking review | Implemented; verification recorded in work order; ready categories, Feedback only/Level choices, descriptors/comments/evidence together. |
+| TUV-C09 | Clear controls and final saving | Implemented; verification recorded in work order; save-and-next/return only after successful official save, visible status, repeat-click protection. |
+| TUV-C10 | Fictional end-to-end acceptance | 581 unit tests and integrated browser checks pass; photo/bank repair checks, final production build and strict harness typecheck pass; source `41adaef` committed, review publication in progress. Physical desktop checks remain separate. |
+| TUV-PARTICIPATION | Single versus group participation selection | **Deferred to Tyler's deliberation.** Preserve current intentional group selection. Discuss single-student default with explicit group mode; prevent accidental overlay background activation without changing group marking behavior. |
 
 ## Active feature register
 
 | ID | Feature / requested outcome | Current disposition | Next step / source |
 | --- | --- | --- | --- |
-| TUV-P0 | Integrated teacher-use validation | Active P0 by Tyler's explicit request; independent review found and repaired PR31-B01; no real-student use | Follow TUV-REVIEW → one Windows build → actual-device fictional workflow → separate real-data gate. [Current work order](work-orders/PR31-INDEPENDENT-REVIEW.md). |
+| TUV-P0 | Integrated teacher-use validation | Active P0; PR31 merged; TUV-C01–C10 classroom-use fixes implemented, final verification/publication in progress | Review the classroom-use branch, then approved current Windows build/device validation; no real-student use. [Current work order](work-orders/CLASSROOM-USE-2026-10-15.md). |
 | QA-20261005-01 | Explicit teacher prompt each launch | Prior isolated UI cleanup ready for review; see priority row / `66a3477` | Preserve verified implementation on `codex/ui-cleanup-20261013`; review/integration and native gates remain separate. |
 | QA-20261005-02 | Imported roster appears on seating; populate discoverable | Merged PR18; development verified | No repeat work; device pilot separate |
 | QA-20261005-03 | Seating randomization confirmation | Merged PR18; development verified | No repeat work |
