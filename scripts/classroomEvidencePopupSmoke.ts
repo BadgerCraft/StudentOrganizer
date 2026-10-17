@@ -120,7 +120,7 @@ try {
   assert.equal(await image.locator('svg').getByText('Unrelated image feedback', { exact: true }).count(), 0, 'other image comments hidden in editor');
   await imageEditor.fill('Edited image feedback');
   await image.getByRole('button', { name: '4+(med)', exact: true }).click();
-  await image.getByRole('button', { name: 'Done — review image', exact: true }).click();
+  await image.getByRole('button', { name: 'Save feedback', exact: true }).click();
   await image.getByRole('button', { name: 'Write a comment', exact: true }).click();
   assert.match(await image.innerText(), /Click the page where/);
   await image.getByRole('button', { name: 'Pen', exact: true }).click();

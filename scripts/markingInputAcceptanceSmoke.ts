@@ -220,6 +220,25 @@ try {
     await selectPassage(page, 0, 13);
     await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
     if (index === 0) {
+      await page.getByRole('button',{name:'Save now',exact:true}).click();
+      await page.getByTestId('marking-save-status').filter({hasText:'Saved locally'}).waitFor();
+      const pendingBefore=(await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending;
+      assert.equal(pendingBefore.text,expectedPassageFeedback[index],'text pending feedback autosaves');
+      await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+      await documentSelect.selectOption(grouped.documents[1].id);
+      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      assert.equal(await documentSelect.inputValue(),document.id,'unfinished text prevents document switch');
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(),expectedPassageFeedback[index],'Back and submission changes retain unfinished text');
+      await selectPassage(page,14,20);
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(),expectedPassageFeedback[index],'another highlight cannot replace unfinished text');
+      page.once('dialog',dialog=>dialog.accept());
+      await page.getByRole('button',{name:'Cancel comment',exact:true}).click();
+      assert.equal(await page.getByTestId('marking-feedback').count(),0,'cancel finishes new text feedback');
+      await selectPassage(page,0,13);
+      await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
+      console.log('PASS: pending text autosave, Back/document/submission/selection guards and cancel/reselect preserve exact feedback');
+    }
+    if (index === 0) {
       // A single mapped criterion exposes earlier independent evidence only once recorded.
       // Save and edit this same annotation so both passage and retained-evidence banks are exercised.
       await page.getByTestId('marking-comment-save').click();

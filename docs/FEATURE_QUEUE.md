@@ -1,5 +1,13 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 17 — annotation feedback follow-up
+
+Parent verified PR40 merged into current main `fc4074b6554506007aa38b15977e68258563ef91`; this supersedes earlier PR39/PR40 pending-merge checkpoints below. Tyler's highlight/comment/level request authorizes this bounded follow-up, routine verification and review publication on `codex/annotation-feedback-20261017`. Parent review precedes worker commit/push; no main merge, release, signing, real student files or Android rebuild.
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-ANNOTATION-FEEDBACK | Implemented locally: each completed photo pen/highlight stroke or comment point selects its exact feedback; visible first-criterion default matches text highlights and makes the 17 exact level buttons usable. Save finishes; Cancel removes a new mark or restores an existing mark's opening feedback. Autosave remains active. New marks, saved-mark/document/page/submission changes and departure cannot silently interrupt feedback. Read-only feedback has a non-writing Close action. | Focused Chromium reproduction/lifecycle and existing text-input/workflow/popup checks PASS; 688 unit tests and build PASS. Final complete photo/mode/persistence/coordinate and interruption regression PASS; independent root source review found no blocker. Frozen-source final688/688 unit tests PASS; parent commit/publication/CI are next; physical Windows/Mac checks remain pending. Existing Ontario mappings/validators unchanged. [Evidence](work-orders/CLASSROOM-USE-2026-10-15.md#october-17--annotation-feedback-follow-up). |
+
 ## October 17 — Android 0.3 unsigned update preparation
 
 F-008-CAPTURE: parent verified PR39 merged at `223453eb191aa9479319f9f04b095a1d3776a42e` after Tyler's explicit merge approval and delegated the already approved unsigned phone update kit. Isolated `codex/capture-android-v03-20261017` changes Android versionCode to3/versionName `0.3-fictional-pilot` only; source Drive setup default remains false. Current touch crop and Save & Finish from PR39 are included. Fresh phone production build, default78 native tests and configured release assembly/lint PASS (0 errors/11 existing warnings). APK contents verify same package, production flags, version, byte-identical web assets, unsigned state and alignment. Existing origin/databases/schemas/storage paths and restricted Drive scope remain unchanged. Root review, version/documentation commit, draft PR and single owner-local signing ZIP delivery are next; version PR merge remains reserved. Signing/key access, installation, live camera/Drive tests and real data are excluded. Supporting evidence and exact artifact hash: existing Android work order below.
