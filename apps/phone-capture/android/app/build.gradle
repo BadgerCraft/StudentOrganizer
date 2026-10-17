@@ -6,8 +6,8 @@ android {
         applicationId 'org.studentorganizer.capture'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '0.2-fictional-pilot'
+        versionCode 3
+        versionName '0.3-fictional-pilot'
         buildConfigField 'boolean', 'CAPTURE_DRIVE_SETUP_APPROVED', providers.gradleProperty('captureDriveSetupApproved').getOrElse('false') == 'true' ? 'true' : 'false'
     }
     testOptions { unitTests.includeAndroidResources = true }
