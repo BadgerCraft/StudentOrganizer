@@ -29,4 +29,15 @@ describe('criterion review evidence', () => {
     expect(html).toContain('Selected level: Not selected'); expect(html).not.toContain('aria-pressed="true"');
     expect(html).toContain('Write a comment'); expect(html).toContain('No feedback recorded yet.');
   });
+  it('uses one explicit category editor for a direct mapping and preserves previous evidence separately', () => {
+    const fresh = renderToStaticMarkup(<RubricEvidenceEditor rubric={rubric} value={undefined} disabled={false} onChange={() => {}} renderCategory={() => <div>Official Thinking judgment</div>} />);
+    expect(fresh).toContain('Official Thinking judgment');
+    expect(fresh).not.toContain('evidence level (optional)');
+    expect(fresh).not.toContain('Saved rubric');
+    const existing = renderToStaticMarkup(<RubricEvidenceEditor rubric={rubric} value={[{criterionId:'reason', level:'Secure', feedback:'Earlier independent evidence'}]} disabled={false} onChange={() => {}} renderCategory={() => <div>Official Thinking judgment</div>} />);
+    expect(existing).toContain('Earlier independent evidence');
+    expect(existing).toContain('Previous criterion evidence (retained separately)');
+    expect(existing).toContain('Clear evidence');
+  });
+
 });

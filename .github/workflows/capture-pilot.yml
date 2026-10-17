@@ -10,6 +10,11 @@ on:
       - 'src/db/**'
       - 'src/services/**'
       - 'scripts/captureDesktopSmoke.ts'
+      - 'scripts/unifiedMarkingSmoke.ts'
+      - 'scripts/helpers/unifiedMarking.ts'
+      - 'src/components/AssessmentHubView.tsx'
+      - 'src/components/MarkingWorkspace.tsx'
+      - 'src/App.tsx'
       - 'scripts/captureLateWorkSmoke.ts'
       - 'scripts/captureLargePhotoSmoke.ts'
       - '.github/workflows/capture-pilot.yml'
@@ -52,6 +57,7 @@ jobs:
           CAPTURE_PHONE_ZIP=/tmp/capture-phone-e2e.zip node --import tsx scripts/captureDesktopSmoke.ts
           npm run test:capture:late-work
           npm run test:capture:large-photo
+          npm run test:marking:unified
   android-mocked:
     runs-on: ubuntu-latest
     timeout-minutes: 30

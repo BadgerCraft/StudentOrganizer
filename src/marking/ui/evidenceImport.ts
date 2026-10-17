@@ -1,14 +1,14 @@
-import type { MarkingDocument, MarkingImagePage } from '../types';
+import { MARKING_LIMITS, type MarkingDocument, type MarkingImagePage } from '../types';
 import { assertMarkingDocuments, assertMarkingImagePages } from '../validation';
 
-export type EvidenceWork = { kind: 'documents'; document: MarkingDocument } | { kind: 'pictures'; page: MarkingImagePage };
+export type EvidenceWork = { kind: 'documents'; document: MarkingDocument; sourceKey?: string; sourceLabel?: string } | { kind: 'pictures'; page: MarkingImagePage };
 export type EvidenceImportGroup = { key: string; enrollmentId: string; previousAttemptId: string | null } & (
   { kind: 'documents'; documents: MarkingDocument[] } | { kind: 'pictures'; pages: MarkingImagePage[] }
 );
 export const workId = (work: EvidenceWork) => work.kind === 'documents' ? work.document.id : work.page.id;
-export const workName = (work: EvidenceWork) => work.kind === 'documents' ? work.document.name : work.page.name;
+export const workName = (work: EvidenceWork) => work.kind === 'documents' ? work.sourceLabel ?? work.document.name : work.page.name;
 const fingerprint = (work: EvidenceWork) => work.kind === 'documents'
-  ? `document:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : `picture:${work.page.hash.toLowerCase()}`;
+  ? `document:${work.sourceKey ?? ''}:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : `picture:${work.page.hash.toLowerCase()}`;
 
 /** Re-selecting successful files during recovery never creates additional work items. */
 export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWork[]) {
@@ -19,7 +19,13 @@ export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWo
     seen.add(fingerprint(item)); items.push(item);
   }
   if (items.some(item => item.kind !== items[0].kind)) throw new Error('Import pictures and text as separate submissions.');
-  if (items[0]?.kind === 'documents') assertMarkingDocuments(items.map(item => (item as Extract<EvidenceWork, { kind: 'documents' }>).document));
+  if (items[0]?.kind === 'documents') {
+    const documents = items.map(item => (item as Extract<EvidenceWork, { kind: 'documents' }>).document);
+    if (items.some(item => item.kind === 'documents' && item.sourceKey)) {
+      if (documents.length > 40 || documents.reduce((sum, document) => sum + (document.original?.size ?? new TextEncoder().encode(document.text).byteLength), 0) > MARKING_LIMITS.batchBytes) throw new Error('A class set supports up to 40 documents and 10 MB total.');
+      documents.forEach(document => assertMarkingDocuments([document]));
+    } else assertMarkingDocuments(documents);
+  }
   if (items[0]?.kind === 'pictures') assertMarkingImagePages(items.map(item => (item as Extract<EvidenceWork, { kind: 'pictures' }>).page));
   return { items, skipped };
 }
@@ -45,7 +51,11 @@ export function evidenceImportGroups(items: EvidenceWork[], selected: string[], 
     const work = items.filter(item => matches[workId(item)] === enrollmentId);
     const key = JSON.stringify([enrollmentId, work.map(workId)]);
     const base = { key, enrollmentId, previousAttemptId: previous[enrollmentId] || null };
-    if (work.every((item): item is Extract<EvidenceWork, { kind: 'documents' }> => item.kind === 'documents')) return { ...base, kind: 'documents', documents: work.map(item => item.document) };
+    if (work.every((item): item is Extract<EvidenceWork, { kind: 'documents' }> => item.kind === 'documents')) {
+      const documents = work.map(item => item.document);
+      assertMarkingDocuments(documents);
+      return { ...base, kind: 'documents', documents };
+    }
     if (work.every((item): item is Extract<EvidenceWork, { kind: 'pictures' }> => item.kind === 'pictures')) return { ...base, kind: 'pictures', pages: work.map(item => item.page) };
     throw new Error('Import pictures and text as separate submissions.');
   });

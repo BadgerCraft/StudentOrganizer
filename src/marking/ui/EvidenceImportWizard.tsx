@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPastedDocument, parseMarkingFiles } from '../importDocuments';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPastedDocument, parseMarkingFiles, sha256 } from '../importDocuments';
 import { parseMarkingImages } from '../importImages';
+import { parseMarkingDocumentArchive } from '../importDocumentArchive';
+import { CaptureMatchingWorkspace } from '../../capture/CaptureMatchingWorkspace';
 import type { MarkingContext } from '../types';
 import { confirmEvidenceMatch, createEvidenceGroups, evidenceImportGroups, mergeEvidenceWork, retainEvidenceMatches, workId, workName, type EvidenceImportGroup, type EvidenceWork } from './evidenceImport';
 
@@ -8,11 +10,12 @@ const buttonBase = 'border border-slate-400 rounded-lg px-3 py-2 text-sm disable
 const button = `${buttonBase} bg-white text-slate-900`;
 const primary = `${buttonBase} bg-blue-700 text-white font-semibold`;
 const field = 'border border-slate-400 rounded-lg p-2 w-full bg-white text-slate-900';
-type Source = 'documents' | 'paste' | 'pictures';
+type Source = 'documents' | 'archive' | 'paste' | 'pictures' | 'phone';
 type Step = 'source' | 'add' | 'students' | 'match' | 'review';
 export interface EvidenceImportWizardProps {
   context: MarkingContext;
   rubricId: string;
+  userId: string;
   /** Include both teacher ID and identity epoch. Changing it discards the previous teacher's preview. */
   identityKey: string;
   validateTeacher: () => unknown;
@@ -29,7 +32,9 @@ export function EvidenceImportWizard(props: EvidenceImportWizardProps) {
   return <EvidenceImportSteps key={props.identityKey} {...props} />;
 }
 
-function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = false, onCreate, onStart, onDirtyChange, onBusyChange }: EvidenceImportWizardProps) {
+function EvidenceImportSteps({ context, rubricId, userId, validateTeacher, disabled = false, onCreate, onStart, onDirtyChange, onBusyChange }: EvidenceImportWizardProps) {
+  const [captureDirty, setCaptureDirty] = useState(false);
+  const captureDirtyChanged = useCallback((value: boolean) => setCaptureDirty(value), []);
   const [step, setStep] = useState<Step>('source');
   const [source, setSource] = useState<Source | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -40,7 +45,7 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
   const [matches, setMatches] = useState<Record<string, string>>({});
   const [previous, setPrevious] = useState<Record<string, string>>({});
   const [itemChoice, setItemChoice] = useState(''), [studentChoice, setStudentChoice] = useState('');
-  const [readErrors, setReadErrors] = useState<{ id: string; name: string; message: string; file: File; source: 'documents' | 'pictures' }[]>([]);
+  const [readErrors, setReadErrors] = useState<{ id: string; name: string; message: string; file: File; sourceKey?: string; source: 'documents' | 'archive' | 'pictures' }[]>([]);
   const [acceptPartial, setAcceptPartial] = useState(false);
   const [notice, setNotice] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [savedCount, setSavedCount] = useState(0);
@@ -48,7 +53,7 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
   const receipts = useRef<Record<string, string>>({});
   const creationRubric = useRef('');
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const dirty = items.length > 0 || paste.trim().length > 0 || files.length > 0 || readErrors.length > 0;
+  const dirty = captureDirty || items.length > 0 || paste.trim().length > 0 || files.length > 0 || readErrors.length > 0;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -74,11 +79,21 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
     try {
       validateTeacher();
       const inputSource = retry?.source ?? source, inputFiles = replacement ? [replacement] : retry ? [retry.file] : files;
-      let incoming: EvidenceWork[] = [], errors: { name: string; message: string; file: File }[] = [];
+      let incoming: EvidenceWork[] = [], errors: { name: string; message: string; file: File; sourceKey?: string }[] = [];
       if (inputSource === 'paste') incoming = [{ kind: 'documents', document: await createPastedDocument(name.trim(), paste) }];
-      else if (inputSource === 'documents') {
+      else if (inputSource === 'archive') {
+        if (inputFiles.length !== 1) throw new Error('Choose one ZIP of DOCX student work.');
+        const result = await parseMarkingDocumentArchive(inputFiles[0]);
+        const archiveHash = await sha256(new Uint8Array(await inputFiles[0].arrayBuffer()));
+        incoming = result.documents.map(document => {
+          const path = result.sources.find(row => row.documentId === document.id)!.path;
+          return { kind: 'documents', document, sourceLabel: path, sourceKey: `${archiveHash}:${path}` };
+        });
+        // Failed entries retain the extracted File and retry as individual documents.
+        errors = result.errors.map(row => ({ ...row, name: row.path, sourceKey: `${archiveHash}:${row.path}` }));
+      } else if (inputSource === 'documents') {
         const result = await parseMarkingFiles(inputFiles);
-        incoming = result.documents.map(document => ({ kind: 'documents', document })); errors = result.errors;
+        incoming = result.documents.map(document => ({ kind: 'documents', document, sourceLabel: retry?.sourceKey ? retry.name : undefined, sourceKey: retry?.sourceKey })); errors = result.errors.map(row => ({ ...row, name: retry?.sourceKey ? retry.name : row.name, sourceKey: retry?.sourceKey }));
       } else {
         const result = await parseMarkingImages(inputFiles);
         incoming = result.pages.map(page => ({ kind: 'pictures', page })); errors = result.errors;
@@ -97,7 +112,7 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
       // File object identity is deliberate: names (and metadata) can match different work.
       // Retry uses the retained original File, including after a transient read failure.
       setReadErrors(current => [...current.filter(row => replacement ? row !== retry : inputSource === 'paste' || !inputFiles.includes(row.file)),
-        ...errors.map(row => ({ ...row, id: crypto.randomUUID(), source: inputSource as 'documents' | 'pictures' }))]);
+        ...errors.map(row => ({ ...row, id: crypto.randomUUID(), source: inputSource === 'archive' && !row.file.name.toLowerCase().endsWith('.zip') ? 'documents' as const : inputSource as 'documents' | 'archive' | 'pictures' }))]);
       setAcceptPartial(false);
       setNotice(merged.skipped.length ? `Already added; no extra copies: ${merged.skipped.join(', ')}.` : '');
       // Replacement must leave the separate Add work selection untouched.
@@ -160,23 +175,29 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
     <p className="text-sm text-slate-600">{({ source: '1 · Choose source', add: '2 · Add work', students: '3 · Select students', match: '4 · Match work to students', review: '5 · Review and start marking' })[step]}</p>
     {error && <p role="alert" className="text-red-800 whitespace-pre-wrap">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
+    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : row.source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
     {step === 'source' && <>
       <h3 className="font-bold text-lg">Where is the student work?</h3>
-      <div className="grid gap-3 sm:grid-cols-3">{(['documents', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures') !== (items[0].kind === 'pictures'))} onChange={() => { setSource(value); setFiles([]); setError(''); }} />{value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
+      <div className="grid gap-3 sm:grid-cols-3">{(['phone', 'documents', 'archive', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures' || value === 'phone') !== (items[0].kind === 'pictures') || (!!items.length && value === 'phone'))} onChange={() => { if (captureDirty && value !== 'phone' && !window.confirm('Leave unmatched phone page sets? Saved matches are retained; reopen the ZIP to finish the rest.')) return; setSource(value); setFiles([]); setError(''); }} />{value === 'phone' ? 'Phone-photo ZIP' : value === 'archive' ? 'ZIP of DOCX essays (class set)' : value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
       {!!items.length && <p>Added work is kept. To switch between pictures and text, remove the added work in the next step.</p>}
       <button className={primary} disabled={!source || inactive} onClick={() => setStep('add')}>Continue</button>
     </>}
-    {step === 'add' && <>
-      <h3 className="font-bold text-lg">{source === 'paste' ? 'Paste student work' : source === 'pictures' ? 'Add pictures of student work' : 'Add text or document files'}</h3>
+    {step === 'add' && source !== 'phone' && <>
+      <h3 className="font-bold text-lg">{source === 'paste' ? 'Paste student work' : source === 'pictures' ? 'Add pictures of student work' : source === 'archive' ? 'Add a ZIP of DOCX student work' : 'Add text or document files'}</h3>
       {source === 'paste' ? <><label className="block">Work title<input className={field} value={name} disabled={inactive} onChange={e => setName(e.target.value)} /></label><label className="block">Student work<textarea className={`${field} min-h-48`} value={paste} disabled={inactive} onChange={e => setPaste(e.target.value)} placeholder="Paste the student's text here. You can review it before marking." /></label></> : <>
-        <p>{source === 'pictures' ? 'PNG, JPEG and WebP are supported. Up to 10 pages, 8 MB each and 32 MB total. Images stay on this device; text is not extracted.' : 'UTF-8 .txt and Word .docx are supported: up to 10 files, 2 MB each and 10 MB total. Older .doc files are not supported. Save a .doc as .docx or .txt in Word first.'}</p>
-        <label className="block">{source === 'pictures' ? 'Choose pictures' : 'Choose text/document files'}<input className={field} type="file" multiple accept={source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : '.txt,.docx'} disabled={inactive} onChange={e => { const next = Array.from(e.target.files ?? []); e.target.value = ''; if (next.length) setFiles(next); }} /></label>
+        <p>{source === 'pictures' ? 'PNG, JPEG and WebP are supported. Up to 10 pages, 8 MB each and 32 MB total. Images stay on this device; text is not extracted.' : source === 'archive' ? 'Choose one ZIP containing up to 40 DOCX essays, 2 MB each and 10 MB total. Review each document and explicitly confirm its student; filenames never assign students.' : 'UTF-8 .txt and Word .docx are supported: up to 10 files, 2 MB each and 10 MB total. Older .doc files are not supported. Save a .doc as .docx or .txt in Word first.'}</p>
+        <label className="block">{source === 'pictures' ? 'Choose pictures' : source === 'archive' ? 'Choose DOCX class ZIP' : 'Choose text/document files'}<input className={field} type="file" multiple={source !== 'archive'} accept={source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive} onChange={e => { const next = Array.from(e.target.files ?? []); e.target.value = ''; if (next.length) setFiles(next); }} /></label>
         {!!files.length && <ul aria-label="Files to add">{files.map((file, index) => <li key={index}>{file.name}</li>)}</ul>}
       </>}
       {!!items.length && <details><summary>{items.length} work item(s) already added</summary>{items.map(item => <article className="border rounded p-2 space-y-2" key={workId(item)}><strong>{workName(item)}</strong>{reviewWork(item)}<button className={button} disabled={inactive} onClick={() => removeWork(workId(item))}>Remove {workName(item)}</button></article>)}</details>}
       <div className="flex flex-wrap gap-2"><button className={button} disabled={inactive} onClick={() => setStep('source')}>Back</button>{(source === 'paste' ? !!paste.trim() : !!files.length) ? <button className={primary} disabled={inactive || (source === 'paste' && !name.trim())} onClick={() => void addWork()}>Add work and select students</button> : <button className={primary} disabled={inactive || !items.length} onClick={() => setStep('students')}>Continue with added work</button>}</div>
     </>}
+    {(step === 'source' || (step === 'add' && source === 'phone')) && <CaptureMatchingWorkspace
+      key={`${context.assessment.id}:${userId}`}
+      assessmentId={context.assessment.id} userId={userId} embedded
+      showImport={step === 'add' && source === 'phone'} confirmedRubricId={rubricId}
+      onClose={() => setStep('source')} onSwitchTeacher={() => {}}
+      onStart={onStart} onBusyChange={onBusyChange} onDirtyChange={captureDirtyChanged} />}
     {step === 'students' && <>
       <h3 className="font-bold text-lg">Who does this work belong to?</h3>
       <p>{items.length} work item(s) added. {items.map(workName).join(', ')}</p>

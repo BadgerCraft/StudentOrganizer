@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { CommentBankPicker } from './CommentBankPicker';
 import { LevelPicker } from '../../components/LevelPicker';
 import { CLASSROOM_LEVEL_LABELS } from '../../services/classroomLevels';
@@ -30,8 +30,9 @@ export function MarkingModePicker({ onSelect, disabled = false }: {
   </section>;
 }
 
-export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange }: {
+export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange, renderCategory }: {
   rubric: MarkingRubric;
+  renderCategory?: (criterion: MarkingRubric['criteria'][number]) => ReactNode;
   value: MarkingRubricFeedback[] | undefined;
   onChange: (next: MarkingRubricFeedback[]) => void;
   disabled: boolean;
@@ -56,8 +57,9 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
   };
   return <section aria-labelledby={titleId} data-testid="marking-rubric-evidence" className="rounded-xl border bg-white p-4 space-y-3">
     <h3 id={titleId} className="font-semibold">{editingCriterion ? 'Write a comment' : 'Criteria and feedback'}</h3>
-    <p className="text-sm text-slate-600">{rubric.title}. Criterion levels record evidence. Choose category levels separately when you review the assessment.</p>
+    <p className="text-sm text-slate-600">{rubric.title}. KTCA mappings are confirmed in this rubric. A category with one criterion is marked here once. With several criteria, record evidence here and choose the overall category judgment below; levels are never averaged.</p>
     <div className="space-y-3">{rubric.criteria.filter(criterion => !editingCriterion || criterion.id === editingCriterion).map(criterion => {
+      const categoryEditor = renderCategory?.(criterion);
       const current = entries.find(entry => entry.criterionId === criterion.id);
       const otherCharacters = entries.reduce((sum, entry) => sum + (entry.criterionId === criterion.id ? 0 : entry.feedback.length), 0);
       const feedbackLimit = Math.max(0, Math.min(noteLimit, totalNoteLimit - otherCharacters));
@@ -67,7 +69,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
         <h4 className="font-medium">{criterion.name} · {criterion.categoryCode}</h4>
         {editingCriterion ? <>
           <label className="block text-sm">{criterion.name} feedback
-            <textarea autoFocus className={`${field} min-h-32`} data-testid={`marking-criterion-feedback-${criterion.id}`} value={current?.feedback ?? ''} maxLength={feedbackLimit} disabled={disabled} onChange={event => update(criterion.id, { feedback: event.target.value.slice(0, feedbackLimit) })} />
+            <textarea className={`${field} min-h-32`} data-testid={`marking-criterion-feedback-${criterion.id}`} value={current?.feedback ?? ''} maxLength={feedbackLimit} disabled={disabled} onChange={event => update(criterion.id, { feedback: event.target.value.slice(0, feedbackLimit) })} />
           </label>
           {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
             const existing = current?.feedback ?? '';
@@ -81,13 +83,15 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
           <details className="text-sm text-slate-600"><summary>Descriptors for {criterion.name}</summary>
             <dl className="space-y-2 mt-2">{rubric.levels.map(level => <div key={level}><dt className="font-medium">{level}</dt><dd className="whitespace-pre-wrap">{criterion.descriptors[level] || 'No descriptor provided.'}</dd></div>)}</dl>
           </details>
+          {categoryEditor}
+          {(!categoryEditor || current?.level || current?.feedback || textComments.length > 0 || imageComments.length > 0) && <details open={!categoryEditor}><summary>{categoryEditor ? 'Previous criterion evidence (retained separately)' : 'Criterion evidence (optional)'}</summary>
           <p className="text-sm font-medium">Selected level: {current?.level || 'Not selected'}</p>
           <LevelPicker value={current?.level ?? ''} onChange={level => update(criterion.id, { level })} disabled={disabled} label={`${criterion.name} evidence level (optional)`} />
-          {rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).length > 0 && <label className="block text-sm">Saved rubric labels
+          {rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).length > 0 && <details className="text-sm"><summary>Other rubric labels</summary>
             <select className={field} disabled={disabled} data-testid={`marking-criterion-level-${criterion.id}`} value={current?.level && !CLASSROOM_LEVEL_LABELS.includes(current.level) ? current.level : ''} onChange={event => { if (event.target.value) update(criterion.id, { level: event.target.value }); }}>
               <option value="">Choose a saved rubric label</option>{rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).map(level => <option key={level} value={level}>{level}</option>)}
             </select>
-          </label>}
+          </details>}
           {current?.level && <button type="button" disabled={disabled} className={button} onClick={() => update(criterion.id, { level: '' })}>Clear evidence level</button>}
           <div className="space-y-2" aria-label={`${criterion.name} recorded feedback`}>
             {current?.feedback && <p className="whitespace-pre-wrap text-sm">{current.feedback}</p>}
@@ -101,6 +105,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
             {!current?.feedback && !textComments.length && !imageComments.length && <p className="text-sm text-slate-500">No feedback recorded yet.</p>}
           </div>
           <button type="button" className={`${button} bg-blue-700 text-white`} disabled={disabled} onClick={() => setEditingCriterion(criterion.id)}>{current?.feedback ? 'Edit comment' : 'Write a comment'}</button>
+          </details>}
         </>}
       </div>;
     })}</div>
