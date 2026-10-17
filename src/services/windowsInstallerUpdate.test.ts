@@ -1,3 +1,4 @@
+import { CAPTURE_BACKUP_MAX_BYTES } from '../capture/backupCapacity';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -6,11 +7,11 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 const { CancellationToken } = require('builder-util-runtime');
-const { TABLES, validateBackup, saveBackup, assertWritableInstallation, inspectSignature, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, installAndReopen, createInstallerUpdate } = require('../../electron/windowsInstallerUpdate.cjs');
+const { TABLES, MAX_BACKUP, validateBackup, saveBackup, assertWritableInstallation, inspectSignature, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, installAndReopen, createInstallerUpdate } = require('../../electron/windowsInstallerUpdate.cjs');
 const { NsisUpdater } = require('electron-updater/out/NsisUpdater');
 const sha512 = Buffer.alloc(64, 7).toString('base64');
 const manifest = { version: '1.0.1', files: [{ url: 'OntarioTeacherAssessment-1.0.1-x64-nsis.exe', sha512 }] };
-const backupJSON = JSON.stringify({ version: 2, schemaVersion: 4, exportedAt: new Date().toISOString(), tables: Object.fromEntries(TABLES.map((name: string) => [name, []])) });
+const backupJSON = JSON.stringify({ version: 2, schemaVersion: 5, exportedAt: new Date().toISOString(), tables: Object.fromEntries(TABLES.map((name: string) => [name, []])) });
 function setup(options: Record<string, unknown> = {}) {
   const updater = Object.assign(new EventEmitter(), {
     setFeedURL: vi.fn(), checkForUpdates: vi.fn(async () => ({ updateInfo: manifest })),
@@ -260,3 +261,5 @@ describe('Windows PowerShell signature subprocess contract', () => {
     }
   });
 });
+
+it('keeps capture matching capacity aligned with mandatory native backup bound', () => { expect(CAPTURE_BACKUP_MAX_BYTES).toBe(MAX_BACKUP); });

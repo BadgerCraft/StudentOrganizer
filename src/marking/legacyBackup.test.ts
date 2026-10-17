@@ -17,7 +17,7 @@ import { MarkingService } from './markingService';
 const legacyJSON = readFileSync(new URL('./fixtures/legacy-b9a8790-backup.json', import.meta.url), 'utf8');
 const legacy = JSON.parse(legacyJSON);
 const sorted = (rows: any[]) => [...rows].sort((a, b) => a.id.localeCompare(b.id));
-const expectedTables = Object.fromEntries(Object.entries(legacy.tables).map(([name, rows]) => [name, sorted(rows as any[])]));
+const expectedTables = Object.fromEntries(Object.entries({ ...legacy.tables, captureAttachments: [], captureImportReceipts: [] }).map(([name, rows]) => [name, sorted(rows as any[])]));
 
 describe('actual pre-Archive schema4 backup compatibility', () => {
   let db: OntarioTeacherDB;
@@ -37,7 +37,7 @@ describe('actual pre-Archive schema4 backup compatibility', () => {
     expect(legacy.tables.markingAttempts[0]).not.toHaveProperty('archivedAt');
     expect(legacy.tables.markingAttempts[0]).not.toHaveProperty('keepStudentWork');
     const before = await snapshot();
-    expect(portability.validateBackupJSON(legacyJSON).tableCount).toBe(39);
+    expect(portability.validateBackupJSON(legacyJSON).tableCount).toBe(41);
     expect(await snapshot()).toEqual(before);
     await portability.restoreFromJSON(legacyJSON);
     expect(await snapshot()).toEqual(expectedTables);
@@ -61,7 +61,7 @@ describe('actual pre-Archive schema4 backup compatibility', () => {
   it('roundtrips the current exporter after historical recovery without adding or dropping data', async () => {
     await portability.restoreFromJSON(legacyJSON);
     const currentJSON = await portability.createFullBackupJSON();
-    expect(JSON.parse(currentJSON).schemaVersion).toBe(4);
+    expect(JSON.parse(currentJSON).schemaVersion).toBe(5);
     await db.markingSessions.clear();
     await portability.restoreFromJSON(currentJSON);
     expect(await snapshot()).toEqual(expectedTables);

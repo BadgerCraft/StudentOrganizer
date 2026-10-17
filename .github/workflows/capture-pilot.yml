@@ -1,0 +1,70 @@
+name: Private capture pilot checks
+
+on:
+  pull_request:
+    paths:
+      - 'apps/phone-capture/**'
+      - 'shared/**'
+      - 'src/capture/**'
+      - 'src/marking/**'
+      - 'src/db/**'
+      - 'src/services/**'
+      - 'scripts/captureDesktopSmoke.ts'
+      - 'scripts/captureLateWorkSmoke.ts'
+      - '.github/workflows/capture-pilot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fictional-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/phone-capture/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix apps/phone-capture
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run build
+      - run: npm test --prefix apps/phone-capture
+      - run: npm run build --prefix apps/phone-capture
+      - name: Repeated phone capture and completed ZIP to desktop matching
+        shell: bash
+        run: |
+          export CHROMIUM_PATH="$(node --input-type=module -e "import {chromium} from 'playwright'; process.stdout.write(chromium.executablePath())")"
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$CHROMIUM_PATH"
+          npm run preview --prefix apps/phone-capture -- --port 4173 &
+          CAPTURE_PREVIEW_PID=$!
+          trap 'kill "$CAPTURE_PREVIEW_PID"' EXIT
+          for attempt in {1..30}; do curl --fail --silent http://127.0.0.1:4173 >/dev/null && break; sleep 1; done
+          npm run test:browser --prefix apps/phone-capture
+          npm run test:native-browser --prefix apps/phone-capture
+          CAPTURE_PHONE_ZIP=/tmp/capture-phone-e2e.zip node --import tsx scripts/captureDesktopSmoke.ts
+          npm run test:capture:late-work
+  android-mocked:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm ci --prefix apps/phone-capture
+      - run: npm run build --prefix apps/phone-capture
+      - name: Build and test default-disabled native app
+        working-directory: apps/phone-capture/android
+        run: bash gradlew :app:assembleDebug :app:testDebugUnitTest :transfer-core:test :app:lintDebug --console=plain --max-workers=2

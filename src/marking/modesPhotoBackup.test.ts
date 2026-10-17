@@ -75,7 +75,7 @@ describe('atomic recovery of all marking modes and original photographs', () => 
   it('roundtrips written legacy attempts, all modes, private evidence and original bytes without losing order or transforms', async () => {
     const records = await fixture();
     const json = await portability.createFullBackupJSON();
-    expect(JSON.parse(json).schemaVersion).toBe(4);
+    expect(JSON.parse(json).schemaVersion).toBe(5);
     const restored = new OntarioTeacherDB(`modes-photo-restored-${crypto.randomUUID()}`);
     try {
       await new PortabilityService(restored).restoreFromJSON(json);

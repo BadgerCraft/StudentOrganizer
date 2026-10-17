@@ -67,10 +67,10 @@ describe('existing Organizer v3 databases open with Markinator v4', () => {
       legacy.close();
 
       await upgraded.open();
-      expect(upgraded.verno).toBe(4);
+      expect(upgraded.verno).toBe(5);
       expect(await snapshot(upgraded)).toEqual(before);
       expect(upgraded.tables.map(table => table.name).sort()).toEqual(
-        [...Object.keys(organizerV3Stores), ...markingTables].sort()
+        [...Object.keys(organizerV3Stores), ...markingTables, 'captureAttachments', 'captureImportReceipts'].sort()
       );
       for (const [tableName, indexes] of Object.entries(priorIndexes)) {
         expect(upgraded.table(tableName).schema.indexes.map(index => ({
@@ -119,7 +119,7 @@ describe('existing Organizer v3 databases open with Markinator v4', () => {
       await legacy.open();
       legacy.close();
       await upgraded.open();
-      expect(upgraded.verno).toBe(4);
+      expect(upgraded.verno).toBe(5);
       for (const table of upgraded.tables) expect(await table.count()).toBe(0);
       upgraded.close();
       await upgraded.open();

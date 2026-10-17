@@ -327,9 +327,16 @@ async function runLegacyBootstrap() {
     running = await launchInstalled(executable, pair.A);
     assert.equal(await running.page.evaluate(() => typeof window.desktopUpdates?.install), 'undefined', 'The actual legacy bridge must have no installer capability');
     await openHub(running.page);
-    marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
+    marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination), 4);
     const before = await snapshotAll(running.page);
-    assert.equal(Object.keys(before).length, 39, 'Bootstrap acceptance must cover every current-schema table');
+    const legacyDatabaseSource = execFileSync('git', ['show', `${legacySource}:src/db/database.ts`], { cwd: '.legacy-bootstrap-source', encoding: 'utf8' });
+    const legacyTableNames = [...legacyDatabaseSource.matchAll(/^  (\w+)!: Table</gm)].map(match => match[1]).sort();
+    assert.equal(legacyTableNames.length, 39, 'Pinned schema-4 source inventory must remain explicit');
+    assert.deepEqual(Object.keys(before).sort(), legacyTableNames, 'Bootstrap snapshot must cover exactly the pinned legacy tables');
+    for (const table of ['captureAttachments', 'captureImportReceipts']) assert.equal(Object.prototype.hasOwnProperty.call(before, table), false);
+    // Schema 5 adds only empty capture tables; every legacy record remains exact.
+    const migratedBefore = { ...before, captureAttachments: [], captureImportReceipts: [] };
+    assert.equal(Object.keys(migratedBefore).length, 41);
     const backupPath = path.join(evidenceDir, 'legacy-complete-backup.json');
     await download(running.app, () => running!.page.getByTestId('create-backup-btn').click(), backupPath);
     const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
@@ -346,7 +353,7 @@ async function runLegacyBootstrap() {
     await waitForExit(setup, 120000);
     running = await launchInstalled(executable, pair.B);
     assert.equal(running.userData, profileA, 'Manual bootstrap must discover the exact legacy profile');
-    assert.deepEqual(await snapshotAll(running.page), before, 'Manual bootstrap must preserve every existing table and record');
+    assert.deepEqual(await snapshotAll(running.page), migratedBefore, 'Manual bootstrap must preserve every existing table and record');
     assert.equal((await state(running.page)).installationAvailable, true, 'The bootstrapped real installed bridge must enable future updates');
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
@@ -382,11 +389,11 @@ async function runLegacyBootstrap() {
     assert.deepEqual(await snapshotAll(running.page), changed, 'Legacy backup preview must leave the later bootstrapped edit intact');
     await running.page.getByTestId('confirm-restore-btn').click();
     await running.page.getByText(/Database successfully restored/).waitFor();
-    assert.deepEqual(await snapshotAll(running.page), before, 'The real legacy full backup must restore all records through the current UI');
+    assert.deepEqual(await snapshotAll(running.page), migratedBefore, 'The real legacy full backup must restore all records through the current UI');
     await running.app.close(); running = undefined;
     running = await launchInstalled(executable, pair.B);
     assert.equal(running.userData, profileA);
-    assert.deepEqual(await snapshotAll(running.page), before, 'A second B restart must retain all restored legacy records');
+    assert.deepEqual(await snapshotAll(running.page), migratedBefore, 'A second B restart must retain all restored legacy records');
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const restoredReport = path.join(evidenceDir, 'markinator-report-restored-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
@@ -397,12 +404,13 @@ async function runLegacyBootstrap() {
       versions: pair, legacySource, currentSource: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), signatures,
       acknowledgedUnsigned: true, profilePreserved: true, backupPath,
       installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])),
-      tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), marking,
+      tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])),
+      migratedTables: Object.keys(migratedBefore).sort(), legacySchemaVersion: 4, currentSchemaVersion: 5, marking,
       checks: ['actual pinned metadata-only legacy source', 'actual complete UI backup readback', 'deliberate per-user NSIS manual bootstrap', 'same legacy userData and every record',
         'future installer bridge available', 'visible marking originals/rubric/pending and official feedback', 'legacy report content unchanged except category display order', 'identical current report bytes after restore and restart', 'current UI replaces a later saved B edit from the actual legacy backup', 'second B restart'],
       limits: ['unsigned fictional CI only', 'no physical Windows/UAC/dialog or managed-device acceptance', 'manual bootstrap does not prove automatic updater reopening', 'no installation interruption or future-schema claim', 'no live GitHub delivery or public release']
     });
-    console.log('PASS: Actual metadata-only legacy A manually bootstrapped to updater-enabled B; exact profile, all39 tables, originals/rubrics/pending/official feedback, report bytes and real legacy-backup UI restore survived another restart.');
+    console.log('PASS: Actual metadata-only legacy A manually bootstrapped to updater-enabled B; exact profile, all 39 legacy tables plus two empty capture tables, originals/rubrics/pending/official feedback, report bytes and real legacy-backup UI restore survived another restart.');
   } catch (error) {
     writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined, legacySource, versions: pair, signatures, marking });
     console.error('BOOTSTRAP PRIMARY FAILURE:', error);
@@ -486,7 +494,7 @@ async function runInstallRecovery() {
     await openHub(running.page);
     marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
     const before = await snapshotAll(running.page);
-    assert.equal(Object.keys(before).length, 39, 'Install recovery must cover every current-schema table');
+    assert.equal(Object.keys(before).length, 41, 'Install recovery must cover every current-schema table');
     const profileA = running.userData;
     await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
     const updates = running.page.getByRole('region', { name: 'Windows updates' });
@@ -522,7 +530,7 @@ async function runInstallRecovery() {
     assert.ok(backups.length, 'The verified safety backup must survive the post-launch installer failure');
     safetyBackup = path.join(backupDirectory, backups.at(-1)!);
     const backup = JSON.parse(fs.readFileSync(safetyBackup, 'utf8'));
-    assert.equal(backup.schemaVersion, 4);
+    assert.equal(backup.schemaVersion, 5);
     for (const [table, rows] of Object.entries(before)) {
       assert.deepEqual((backup.tables[table] || []).sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))), rows,
         `Safety backup must preserve ${table} before the failed replacement`);
@@ -598,7 +606,7 @@ async function runInstallRecovery() {
       limits: ['controlled NSIS failure injection, not actual power loss or OS shutdown', 'unsigned fictional hosted-runner evidence only',
         'no native dialogs/UAC or physical/managed-device acceptance', 'no future-schema, live GitHub delivery, public release or publisher-trust claim']
     });
-    console.log('PASS: A deterministic post-launch NSIS failure left the app unusable while preserving the complete safety backup; manual B repair plus actual UI restore recovered all39 tables, visible marking and identical report bytes across another restart.');
+    console.log('PASS: A deterministic post-launch NSIS failure left the app unusable while preserving the complete safety backup; manual B repair plus actual UI restore recovered all 41 current tables, visible marking and identical report bytes across another restart.');
   } catch (error) {
     writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined,
       versions: pair, signatures, safetyBackup, fixtureDownload, marking, requests });

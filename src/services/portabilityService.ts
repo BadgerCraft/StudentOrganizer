@@ -1,3 +1,4 @@
+import { normalizeLegacyCaptureTables, validateCaptureBackup, validateCaptureBackupFiles } from '../capture/portabilityValidation';
 import { getClassroomLevel } from './classroomLevels';
 import { normalizeLegacyMarkingTables, validateMarkingBackup, validateMarkingBackupFiles } from '../marking/portabilityValidation';
 import { isLocalPhoto } from '../utils/localPhoto';
@@ -803,7 +804,7 @@ export class PortabilityService {
   async createFullBackupJSON(): Promise<string> {
     const backup: Record<string, any> = {
       version: 2,
-      schemaVersion: 4,
+      schemaVersion: 5,
       exportedAt: new Date().toISOString(),
       tables: {}
     };
@@ -837,9 +838,9 @@ export class PortabilityService {
     }
 
     // v4 adds marking records; old v2/v3 backups migrate to empty additive tables.
-    if (!Number.isInteger(data.schemaVersion) || data.schemaVersion < 2 || data.schemaVersion > 4) {
+    if (!Number.isInteger(data.schemaVersion) || data.schemaVersion < 2 || data.schemaVersion > 5) {
       throw new Error(
-        `Invalid backup file: Unsupported or missing schemaVersion (${data.schemaVersion}). Supported versions are 2, 3 and 4.`
+        `Invalid backup file: Unsupported or missing schemaVersion (${data.schemaVersion}). Supported versions are 2, 3, 4 and 5.`
       );
     }
 
@@ -848,6 +849,7 @@ export class PortabilityService {
     }
 
     normalizeLegacyMarkingTables(data.tables, data.schemaVersion);
+    normalizeLegacyCaptureTables(data.tables, data.schemaVersion);
     const knownTables = new Set(this.db.tables.map(t => t.name));
     for (const name of Object.keys(data.tables)) if (!knownTables.has(name)) throw new Error(`Invalid backup file: Unknown table ${name}.`);
 
@@ -1363,6 +1365,7 @@ export class PortabilityService {
     }
 
     validateMarkingBackup(data.tables);
+    validateCaptureBackup(data.tables);
 
     return {
       version: typeof data.version === 'number' ? data.version : 1,
@@ -1382,7 +1385,9 @@ export class PortabilityService {
     const metadata = this.validateBackupJSON(jsonString);
     const data = JSON.parse(jsonString);
     normalizeLegacyMarkingTables(data.tables, data.schemaVersion);
+    normalizeLegacyCaptureTables(data.tables, data.schemaVersion);
     await validateMarkingBackupFiles(data.tables);
+    await validateCaptureBackupFiles(data.tables);
 
     // 2. Backfill legacy participationEventTypes
     if (Array.isArray(data.tables.participationEventTypes)) {

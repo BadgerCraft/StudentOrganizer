@@ -1,3 +1,5 @@
+import type { CaptureAttachment } from '../capture/types';
+import { assertCaptureBackupCapacity } from '../capture/backupCapacity';
 import Dexie from 'dexie';
 import { archiveDraft, archiveSnapshot, discardUnfinishedDraft } from './archive';
 import type { OntarioTeacherDB } from '../db/database';
@@ -7,7 +9,7 @@ import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '.
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertRubricContent, sessionCategories } from './validation';
-import { validateMarkingImageBytes } from './importImages';
+import { validateMarkingImageBytes, inspectMarkingImage } from './importImages';
 import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
 
 const live = <T extends { deletedAt: string | null }>(rows: T[]) => rows.filter(row => row.deletedAt === null);
@@ -205,9 +207,88 @@ export class MarkingService {
       await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
     });
   }
+  /** Explicitly bind retained capture originals to a chosen never-finalized photo submission. */
+  async bindCaptureRoot(rootId: string, choice: { rubricId?: string; attemptId?: string; expectedVersion?: number; sessionVersions?: Record<string, number> }, actor: MarkingActor): Promise<MarkingAttempt> {
+    return this.transaction(actor, true, async () => {
+      const root = await this.db.captureAttachments.get(rootId);
+      if (!root || root.createdBy !== actor.userId || (root.rootAttachmentId && root.rootAttachmentId !== root.id)) throw new ValidationError('Choose an owned saved capture submission.');
+      await this.context(root.assessmentId, actor, true);
+      const sources = await this.db.captureAttachments.where('assessmentId').equals(root.assessmentId).filter(a => a.id === root.id || a.rootAttachmentId === root.id).sortBy('rootSequence');
+      sources.sort((a, b) => (a.rootSequence ?? 0) - (b.rootSequence ?? 0));
+      if (root.markingAttemptId) throw new ValidationError('This capture submission is already associated with marking.');
+      let attempt: MarkingAttempt;
+      if (choice.attemptId) {
+        attempt = (await this.attemptContext(choice.attemptId, actor, true)).attempt;
+        this.version(attempt, choice.expectedVersion!);
+        await this.captureDraftOnly(attempt, root, choice.sessionVersions ?? {});
+        const allPages = sources.flatMap(a => a.pages);
+        if (attempt.captureSources?.length || attempt.documents.length || attempt.imagePages?.length !== allPages.length || !attempt.imagePages.every((page, index) => page.base64 === allPages[index].base64 && page.hash === allPages[index].metadata.sha256)) throw new ValidationError('The selected marking submission must contain exactly these original pages in order. Names are not used to associate work.');
+      } else {
+        const { assessment } = await this.context(root.assessmentId, actor, true);
+        await this.enrollment(assessment, root.classEnrollmentId);
+        const rubric = this.owned(await this.db.markingRubrics.get(choice.rubricId ?? ''), actor, 'Rubric');
+        if (!rubric.confirmed || rubric.assessmentId !== assessment.id || rubric.classSectionId !== assessment.classSectionId) throw new ValidationError('Choose a confirmed rubric for this assignment.');
+        attempt = { ...this.base(assessment, actor), rubricId: rubric.id, mode: 'written', documents: [], imagePages: sources.flatMap(source => this.captureImages(source)), classEnrollmentId: root.classEnrollmentId, previousAttemptId: null };
+      }
+      assertMarkingImagePages(attempt.imagePages);
+      let offset = 0;
+      const provenance = sources.map(source => { const pageIds = attempt.imagePages!.slice(offset, offset + source.pages.length).map(p => p.id); offset += source.pages.length; return { attachmentId: source.id, pageIds }; });
+      const next = { ...attempt, captureSources: provenance, version: choice.attemptId ? attempt.version + 1 : attempt.version, updatedAt: new Date().toISOString() };
+      await this.db.markingAttempts.put(next);
+      await this.audit('markingAttempts', next, choice.attemptId ? attempt : null, actor);
+      for (const source of sources) await this.db.captureAttachments.update(source.id, { rootAttachmentId: root.id, rootSequence: source.rootSequence ?? 0, markingAttemptId: next.id });
+      const session = await this.openSession(next.id, actor);
+      // A new association applies capture edits only to newly created sessions. Existing
+      // marking feedback and edits remain untouched when binding an exact manual import.
+      if (!choice.attemptId) {
+        const edits = sources.flatMap(s => s.pages.map(p => p.metadata.edits));
+        const adjusted = { ...session, draft: { ...session.draft, imageFeedback: next.imagePages!.map((p, i) => ({ pageId: p.id, ...edits[i], annotations: [] })) }, version: session.version + 1, updatedAt: new Date().toISOString() };
+        await this.db.markingSessions.put(adjusted); await this.audit('markingSessions', adjusted, session, actor);
+      } else { const adjusted = { ...session, version: session.version + 1, updatedAt: new Date().toISOString() }; await this.db.markingSessions.put(adjusted); await this.audit('markingSessions', adjusted, session, actor); }
+      await assertCaptureBackupCapacity(this.db);
+      return next;
+    });
+  }
+  private captureImages(source: CaptureAttachment): MarkingImagePage[] {
+    return source.pages.map(page => ({ id: crypto.randomUUID(), name: page.metadata.path.split('/').pop()!, base64: page.base64, size: page.metadata.byteLength, hash: page.metadata.sha256, ...inspectMarkingImage(Uint8Array.from(atob(page.base64), c => c.charCodeAt(0))) }));
+  }
+  private async captureDraftOnly(attempt: MarkingAttempt, source: CaptureAttachment, versions: Record<string, number>) {
+    if (attempt.assessmentId !== source.assessmentId || attempt.classSectionId !== source.classSectionId || attempt.classEnrollmentId !== source.classEnrollmentId || attempt.createdBy !== source.createdBy || attempt.deletedAt !== null || attempt.archivedAt) throw new ValidationError('The target must be an active submission for this exact assignment and enrollment.');
+    const sessions = await this.db.markingSessions.where('attemptId').equals(attempt.id).toArray();
+    if ((await this.db.markingCommits.where('attemptId').equals(attempt.id).count()) || sessions.some(s => s.status !== 'draft' || s.commitId || s.deletedAt !== null)) throw new ValidationError('Finalized or archived submissions cannot receive late pages.');
+    if (sessions.length !== Object.keys(versions).length || sessions.some(s => versions[s.id] !== s.version)) throw new ConcurrencyConflictError('The marking draft changed. Reload before associating or appending pages.');
+    return sessions;
+  }
+  /** Called inside the atomic capture match transaction, after original bytes validate. */
+  async appendCaptureSource(rootId: string, sourceId: string, expectedVersion: number, sessionVersions: Record<string, number>, actor: MarkingActor): Promise<void> {
+    if (!Dexie.currentTransaction) throw new ValidationError('Late pages require the atomic capture match transaction.');
+    await this.transaction(actor, true, async () => {
+      const root = await this.db.captureAttachments.get(rootId), source = await this.db.captureAttachments.get(sourceId);
+      const receipt = await this.db.captureImportReceipts.where('attachmentId').equals(sourceId).first();
+      if (!root || !source || !receipt || source.rootAttachmentId !== root.id || source.markingAttemptId !== root.markingAttemptId || source.createdBy !== actor.userId || receipt.contentHash !== source.contentHash || receipt.createdBy !== actor.userId || receipt.assessmentId !== source.assessmentId || receipt.classEnrollmentId !== source.classEnrollmentId || receipt.packageId !== source.packageId || receipt.submissionId !== source.submissionId) throw new ValidationError('Late pages require their persisted authenticated source and receipt.');
+      const { attempt, rubric } = await this.attemptContext(root.markingAttemptId!, actor, true);
+      this.version(attempt, expectedVersion);
+      const sessions = await this.captureDraftOnly(attempt, source, sessionVersions);
+      if (!attempt.captureSources?.some(p => p.attachmentId === root.id)) throw new ValidationError('The original capture is not explicitly bound to this marking submission.');
+      if (attempt.captureSources?.some(p => p.attachmentId === source.id)) throw new ValidationError('These late pages are already associated.');
+      const pages = this.captureImages(source);
+      for (const page of pages) await Dexie.waitFor(validateMarkingImageBytes(page));
+      const next = { ...attempt, imagePages: [...(attempt.imagePages ?? []), ...pages], captureSources: [...attempt.captureSources, { attachmentId: source.id, pageIds: pages.map(p => p.id) }], version: attempt.version + 1, updatedAt: new Date().toISOString() };
+      assertMarkingImagePages(next.imagePages);
+      await this.db.markingAttempts.put(next); await this.audit('markingAttempts', next, attempt, actor);
+      for (const session of sessions) {
+        const draft = { ...session.draft, imageFeedback: [...(session.draft.imageFeedback ?? []), ...pages.map((p, index) => ({ pageId: p.id, ...source.pages[index].metadata.edits, annotations: [] }))] };
+        assertAttemptDraft(draft, next, rubric);
+        const updated = { ...session, draft, version: session.version + 1, updatedAt: next.updatedAt };
+        await this.db.markingSessions.put(updated); await this.audit('markingSessions', updated, session, actor);
+      }
+      await assertCaptureBackupCapacity(this.db);
+    });
+  }
   async matchAttempt(id: string, enrollmentId: string, expectedVersion: number, actor: MarkingActor): Promise<MarkingAttempt> {
     return this.transaction(actor, true, async () => {
       const { attempt, assessment } = await this.attemptContext(id, actor, true); this.version(attempt, expectedVersion);
+      if (attempt.captureSources?.length && attempt.classEnrollmentId !== enrollmentId) throw new ValidationError('A capture-associated submission cannot be reassigned to another enrollment.');
       await this.enrollment(assessment, enrollmentId);
       if (await this.db.markingSessions.where('attemptId').equals(id).count()) throw new ValidationError('A submission with marking history cannot be reassigned to another student. Import a new attempt.');
       if (attempt.previousAttemptId) {

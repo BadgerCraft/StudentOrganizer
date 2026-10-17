@@ -1,45 +1,52 @@
-# Phone capture companion — fictional-data pilot
+# Phone capture companion — private fictional-data pilot
 
-Separate package, entry point, build and IndexedDB database. No imports from the desktop app or desktop runtime/data/schema changes. The browser stays local-only. The separate Android shell now implements explicitly approved direct private Drive transfer; no backend or AI relay. The browser remains a local prototype; `android/` packages it with native camera/import/export and gated private Drive authorization/queueing. Native/device/live-account acceptance is separate.
+Separate phone entry point and IndexedDB database, with shared package validation and photo rendering code. The Android app bundles its web assets and uses native camera/local files plus setup-gated direct private Drive transfer. There is no app backend, AI/OCR processing, analytics or assistant relay. Live account, installation and physical-device acceptance remain separate gates.
 
-## Local development
+## Development and verification
 
-From this directory (Node 22+):
+Install root dependencies first because shared code reuses the desktop image validator. From repository root:
 
 ```sh
-npm ci --ignore-scripts
-npm run build
+npm ci
+npm ci --prefix apps/phone-capture
 npm test
-npm run preview
-# In another terminal, with Chromium installed:
-CHROMIUM_PATH=/usr/bin/chromium npm run test:browser
+npm run build
+npm test --prefix apps/phone-capture
+npm run build --prefix apps/phone-capture
+npm run preview --prefix apps/phone-capture
 ```
 
-The preview binds to `127.0.0.1:4173` only. It is a local development harness, not a deployment/transfer server. `npm run dev` uses `127.0.0.1:5174`. Use the same origin to revisit the same browser storage. No phone access, hosting, installation, APK or service adoption is supplied by these commands. Dependencies and test discovery are package-local; run the checks here separately from the desktop checks.
+With the preview running on loopback port4173:
 
-## Working slice
+```sh
+CHROMIUM_PATH=/usr/bin/chromium npm run test:browser --prefix apps/phone-capture
+CHROMIUM_PATH=/usr/bin/chromium npm run test:native-browser --prefix apps/phone-capture
+CAPTURE_PHONE_ZIP=/tmp/capture-phone-e2e.zip npm run test:capture:desktop
+npm run test:capture:late-work
+```
 
-1. Choose a **fictional** class and assignment. The catalog is hard-coded demonstration data; no roster is read or transferred.
-2. Use Take a photo (a browser camera hint) or Import photos. Supported: JPEG/PNG, 8 MiB per photo, 10 pages and 32 MiB per batch; decoded image limit 20 × 1024 × 1024 pixels, aligned with the pinned desktop source. No cropping, compression or OCR.
-3. Label each page. Choose Save labels to commit edits, or Export to save and export them together. Reordering also commits current labels; leaving with unsaved edits requests a browser warning. Blank labels block export. Duplicate labels remain allowed and unmatched; use them for multiple pages of one fictional submission or ambiguous names.
-4. Reorder pages. Context, original bytes, labels and order persist locally after committed saves and reload. Class/assignment are locked once pages exist.
-5. Deliberately export a local ZIP. Check the downloaded file before resetting. Export never deletes pages or confirms that download/transfer succeeded.
-6. On a desktop, extract locally, review `manifest.json`, and import numbered photos through the existing Markinator image flow. **The desktop does not yet ingest this manifest.** Choose class/assignment and explicitly match each student in desktop UI. No automatic identity assignment is implemented. Group ordered photos per intended submission manually.
+The phone browser test writes a fictional completed ZIP to `/tmp/capture-phone-e2e.zip`; the desktop test consumes that exact package. For the larger generated workload, use the phone development server (`npm run dev`, port5174) and `CAPTURE_TEST_URL=http://127.0.0.1:5174 npm run test:capacity-browser`. It saves `/tmp/capture-class-capacity.zip`; `npm run test:capture:capacity` at repository root validates/imports that package through the desktop browser services and verifies full backup capacity. These are development harnesses, not deployment or transfer servers. Scanner-specific CI runs browser and mocked native checks; no credentials or real uploads are used.
 
-Browser storage is not a backup: eviction, site-data clearing and private browsing can lose it. Keep original photos and the checked export. Original metadata, including possible EXIF location, is retained. Use fictional fixtures only. Multiple tabs use revision checks and reject stale writes; reload the stale tab before editing. Reset asks before removing the current local batch. Failed writes preserve the previously committed batch and leave unsaved labels visible for retry or copying; those edits are not durable until a save succeeds. A stale tab must copy any unsaved labels before reloading. Export also rejects a stale tab even when no labels were edited, and exports the committed snapshot checked at the start of the operation. No claim of crash/power-loss durability.
+## Capture and match
 
-## Export contract v1
+1. Name the assignment. Start continuous native camera capture for **one student**. Each successful photo starts the next camera capture; cancel the camera when ready to Preview. Browser users have a camera-file hint or local photo chooser instead.
+2. Preview, crop, rotate, reorder or remove individual photos. Cropping and rotation are metadata; original bytes remain untouched. Enter the required student-name **label**, then Save student group. Repeat for the next student. Duplicate labels remain separate groups.
+3. Select **All done**. The app validates export limits before freezing the assignment. Export a local ZIP, or explicitly request private Drive transfer after separately authorized setup/consent. Intermediate saved groups never upload. Retained assignments and originals are deleted only by explicit assignment deletion; exports never purge them.
+4. On desktop, select the intended class/assignment in Assessments and choose **Upload picture assignment**. Choose the ZIP from local files (manual Drive download is supported). Select a page set on the left and the actual roster student on the right, then Confirm match.
+5. Confirmation saves every page and an import receipt atomically before marking the set saved. Failures remain retryable. Reopening/reimporting recovers prior receipts without duplicate attachments. Matching does not require a rubric, start marking or change official grades. Saved attachments are available for authorized review. Select a confirmed rubric and explicitly start marking, or associate the exact existing photo submission; original page bytes and order must match for association.
 
-ZIP contains `manifest.json`, `README.txt` and ordered `pages/001.png` (or `.jpg`) paths. Paths are generated independently of labels and original filenames. Manifest includes `format: studentorganizer-capture`, `version: 1`, `fictional: true`, unique capture `batchId`, revision, class/assignment **hints**, and `requiresExplicitDesktopMatching: true`. Each page records immutable page ID, order, path, label hint, original filename, MIME, byte count and SHA-256. Every page has `studentId: null` and `matchStatus: unmatched`. Same names cannot become matches. Export hashes and ZIP generation occur outside the storage transaction. A new batch gets a new capture ID while retaining the database slot and monotonic revision.
+6. For late work, reopen the completed phone assignment and select **Add late work**. Capture only the additional pages/new students, then All done and export the new package. Earlier packages remain unchanged. On desktop select the actual student and explicitly choose **Append to** the existing submission, or save a new student submission. Existing marking annotations, judgments and page IDs remain unchanged. Finalized/archived submissions cannot receive additions; support after finalization is deferred. Restart/reimport recovers the append receipt. Deleting one phone package does not delete related late-work packages.
 
-This draft interchange contract has no trusted importer. Future ingestion must validate paths/limits/hashes/version, preview, and require explicit context/student matching before atomic writes. Do not import it into a live database as a backup.
+Limits:40 student groups,10 pages each,8 MiB per JPEG/PNG,20 million pixels per photo,800 million aggregate pixels and256 MiB ZIP/expanded bytes. Retained removed originals count toward local storage limits. A combined draft submission remains limited to10 pages/32MiB for marking; additions exceeding that limit fail without changing prior work. Desktop confirms also preserve the256 MiB complete-backup ceiling across the entire database; a match that would exceed it rolls back. Count limits are upper bounds, not a guarantee every maximum-size combination fits. Real phone memory/storage/latency remains unverified.
 
-## Verification limits / next gates
+Browser storage can be cleared/evicted; verify a local ZIP backup. Original EXIF metadata is retained. Legacy flat batches remain recoverable for grouping; the old v1 ZIP format is deliberately rejected by the v2 desktop importer. No claim of physical power-loss durability follows from browser tests.
 
-Unit tests cover rollback/retry, concurrent writers, persistence and export integrity; the browser test covers actual IndexedDB, decoding, mobile layout, downloaded ZIP contents and recovery. Headless Linux Chromium with a mobile viewport is not Android/native camera verification. Native camera, permissions, installability, offline cold launch, Android lifecycle/quota/capacity and actual phone-to-desktop transfer are **UNVERIFIED**. Desktop manifest ingestion and real catalog handoff remain future decisions. Android implementation and opt-in direct private Drive upload are now approved as described below; native installation and live account setup remain separate. No iPad reactivation, remote OCR/AI, broad cloud sync, paid services, public deployment or real student data.
+## Completed ZIP v2
 
-## Approved Android / private Drive extension
+`manifest.json` records stable package/assignment/submission/page IDs, display-name hints, zero-based ordered pages, safe generated paths, MIME, byte length, SHA-256, crop/rotation and revision. Only completed packages are accepted. Labels never establish identity; no imported roster/student IDs are accepted. ZIP validation rejects unsafe paths, duplicate paths/IDs/order, unsupported/encrypted/symlink/nested entries, invalid framing/metadata/images/hashes and bounded expansion/pixel violations. Original bytes are validated sequentially; contents never execute.
 
-See [current architecture, evidence and exact setup gate](../../docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md) (repository path: `docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md`). Build native source with the separate Gradle project in `android/`; Drive remains disabled unless approved setup is explicitly enabled in a build. No account or OAuth grant was configured during implementation. After configured consent and explicit opt-in, saved fully-labelled revisions queue automatically, default Wi-Fi/unmetered only. Native settings pause/retry/reconnect/revoke. No AI processing, relay, public links or automatic original deletion. This describes app behavior, not a promise about Google's internal storage automation.
+## Android and Drive
 
-New checks: `npm run test:native-browser` uses a fictional bridge (no actual Drive); native/core test commands and live acceptance limits are recorded in the work order. Local export still works without Drive. Desktop handling remains manual extraction/photo import and explicit matching.
+See [existing work order and exact setup gates](../../docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md). `CAPTURE_DRIVE_SETUP_APPROVED` stays false by default. When separately configured, the user chooses their account and enables transfer, then deliberately queues a completed ZIP. The assignment-named private folder and file use persisted generated IDs, owner/permission checks and retry-safe checksums. No destination is selected by name alone. Process restart requires explicit re-enable; settings failures stop transfer. No automatic original purge. Less-friction desktop retrieval remains deferred in F-008-CAPTURE-SEAMLESS.
+
+Native camera/permissions/lifecycle/storage pressure, live OAuth, real Drive delivery and physical desktop acceptance are not established by mocked transport or headless browser checks. Use fictional data only; no release, installation or real-student use is authorized by this source pilot.

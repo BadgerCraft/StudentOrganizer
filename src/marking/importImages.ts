@@ -26,7 +26,7 @@ function encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 function decode(value: string): Uint8Array {
-  if (typeof value !== 'string' || value.length > Math.ceil(MARKING_LIMITS.imageBytes / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) fail('Image bytes must be bounded local base64, without URLs or data prefixes.');
+  if (typeof value !== 'string' || value.length > Math.ceil(MARKING_LIMITS.imageBytes / 3) * 4 || (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value))) fail('Image bytes must be bounded local base64, without URLs or data prefixes.');
   const bytes = Uint8Array.from(atob(value), c => c.charCodeAt(0));
   if (encode(bytes) !== value) fail('Image bytes are not canonical base64.');
   return bytes;

@@ -14,7 +14,7 @@ export interface MarkingPageFeedback { pageId: string; rotation: 0 | 90 | 180 | 
 export interface MarkingOralEvidence { items: { id: string; label: string; checked: boolean; note: string }[]; notes: string }
 export interface MarkingRubricFeedback { criterionId: string; level: string; feedback: string }
 export interface ArchivedMarkingFeedback { id: string; criterionId: string | null; level: string; text: string }
-export interface MarkingAttempt extends MarkingBase { archivedAt?: string | null; keepStudentWork?: boolean; classEnrollmentId: string | null; rubricId: string; documents: MarkingDocument[]; previousAttemptId: string | null; mode?: MarkingMode; imagePages?: MarkingImagePage[] }
+export interface MarkingAttempt extends MarkingBase { captureSources?: { attachmentId: string; pageIds: string[] }[]; archivedAt?: string | null; keepStudentWork?: boolean; classEnrollmentId: string | null; rubricId: string; documents: MarkingDocument[]; previousAttemptId: string | null; mode?: MarkingMode; imagePages?: MarkingImagePage[] }
 export interface MarkingAnnotation { id: string; documentId: string; start: number; end: number; quote: string; criterionId: string; level: string; text: string }
 export interface MarkingJudgment { assessmentCategoryId: string; assessed: boolean; rawScore: string; inputFormat: ScoreInputFormat; feedback: string }
 export interface MarkingDraft { archivedFeedback?: ArchivedMarkingFeedback[]; annotations: MarkingAnnotation[]; pending: MarkingAnnotation | null; judgments: MarkingJudgment[]; overallFeedback: string; imageFeedback?: MarkingPageFeedback[]; oral?: MarkingOralEvidence; rubricFeedback?: MarkingRubricFeedback[] }

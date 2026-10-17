@@ -1,48 +1,32 @@
 import { chromium } from 'playwright';
 import { strict as assert } from 'node:assert';
-import { unzipSync, strFromU8 } from 'fflate';
-const base = process.env.CAPTURE_TEST_URL ?? 'http://127.0.0.1:4173';
-const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH ?? '/usr/bin/chromium',args:['--no-sandbox']});
-const context = await browser.newContext({viewport:{width:390,height:844}});
-const page = await context.newPage();const requests=[];const errors=[];
-context.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('blob:'))requests.push(r.url());});
-page.on('pageerror',e=>errors.push(String(e)));
-await page.addInitScript(() => {
-  window.CaptureNative = {
-    getTransferStatus: () => JSON.stringify({available:true,enabled:localStorage.getItem('fictional-enabled')==='true',wifiOnly:true,summary:'Fictional native test double; no actual Drive upload'}),
-    requestDriveSetup: () => localStorage.setItem('fictional-enabled','true'),
-    enqueueCapture: (bytes,id,revision) => {
-      if(localStorage.getItem('fictional-enabled')!=='true')return JSON.stringify({accepted:false,error:'off'});
-      const rows=JSON.parse(localStorage.getItem('fictional-queue')??'[]');const previous=rows.find(r=>r.id===id&&r.revision===revision);
-      if(previous&&previous.bytes!==bytes)return JSON.stringify({accepted:false,error:'changed revision'});
-      if(!previous){rows.push({bytes,id,revision});localStorage.setItem('fictional-queue',JSON.stringify(rows));}
-      return JSON.stringify({accepted:true,summary:'Retained by fictional native queue. Upload not verified.'});
-    },
-    saveLocalZip: bytes => {localStorage.setItem('fictional-export',bytes);return JSON.stringify({accepted:true});}
-  };
+const base=process.env.CAPTURE_TEST_URL??'http://127.0.0.1:4173';
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH??'/usr/bin/chromium',args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:390,height:844}});const errors=[];page.on('pageerror',e=>errors.push(String(e)));page.on('dialog',d=>void d.accept());
+await page.addInitScript(()=>{
+ const receipt=(value={})=>JSON.stringify({accepted:true,...value});let chunks=[];
+ window.CaptureNative={
+ getTransferStatus:()=>JSON.stringify({available:true,enabled:true,wifiOnly:true,summary:'Mock private transport — no upload'}),requestDriveSetup:()=>{},enqueueCapture:()=>{throw Error('Legacy transfer forbidden');},saveLocalZip:()=>{throw Error('Legacy transfer forbidden');},
+ startCamera:(batchId,submissionId,remaining)=>{localStorage.setItem('session',JSON.stringify({batchId,submissionId,remaining}));return receipt();},
+ getPendingCaptures:(batchId,submissionId)=>JSON.stringify(JSON.parse(localStorage.getItem('pending')??'[]').filter(p=>p.batchId===batchId&&p.submissionId===submissionId).map(p=>({id:p.id}))),
+ readPendingCapture:(id,batchId,submissionId)=>{const p=JSON.parse(localStorage.getItem('pending')??'[]').find(p=>p.id===id&&p.batchId===batchId&&p.submissionId===submissionId);return JSON.stringify(p??{error:'wrong owner'});},
+ acknowledgeCapture:(id,batchId,submissionId)=>{const p=JSON.parse(localStorage.getItem('pending')??'[]');localStorage.setItem('pending',JSON.stringify(p.filter(p=>p.id!==id||p.batchId!==batchId||p.submissionId!==submissionId)));return receipt();},
+ discardPendingCapture:(id,batchId,submissionId)=>{const p=JSON.parse(localStorage.getItem('pending')??'[]');localStorage.setItem('pending',JSON.stringify(p.filter(p=>p.id!==id||p.batchId!==batchId||p.submissionId!==submissionId)));localStorage.setItem('omitted',id);return receipt();},
+ beginZip:()=>{chunks=[];return receipt({token:'mock-token'});},appendZip:(_,data)=>{chunks.push(data);return receipt();},cancelZip:()=>receipt(),
+ finishZip:(_,id,revision,mode)=>{if(localStorage.getItem('fail-transfer')==='true')return JSON.stringify({accepted:false,error:'Fictional interrupted transport'});const rows=JSON.parse(localStorage.getItem('transfers')??'[]');if(!rows.some(r=>r.id===id&&r.revision===revision&&r.mode===mode))rows.push({id,revision,mode,chunks:chunks.length});localStorage.setItem('transfers',JSON.stringify(rows));return receipt({summary:'Mock transfer retained'});}
+ };
 });
-const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);
-const rows=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('fictional-queue')??'[]'));
-try {
-  await page.goto(base);await settle();
-  await page.selectOption('#class','fictional-science');await settle();
-  await page.selectOption('#assignment','Fictional leaf study');await settle();
-  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=2;c.height=2;return c.toDataURL('image/png').split(',')[1];});
-  await page.setInputFiles('#files',{name:'fictional.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});await settle();
-  await page.locator('article input').fill('Fictional closed-loop');await page.click('#save-labels');await settle();
-  assert.equal((await rows()).length,0);
-  await page.click('#drive-settings');
-  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('fictional-queue')??'[]').length===1,{},{timeout:15000});
-  const first=(await rows())[0];const manifest=JSON.parse(strFromU8(unzipSync(Buffer.from(first.bytes,'base64'))['manifest.json']));
-  assert.equal(manifest.pages[0].studentId,null);assert.equal(manifest.pages[0].labelHint,'Fictional closed-loop');
-  await page.reload();await settle();
-  await page.waitForFunction(()=>document.querySelector('#transfer-status').textContent.includes('fictional native queue'),{},{timeout:15000});
-  assert.equal((await rows()).length,1); // replay exact revision after reload deduplicates
-  await page.click('#export');await settle();assert.ok(await page.evaluate(()=>localStorage.getItem('fictional-export')));
-  await page.evaluate(()=>localStorage.setItem('fictional-enabled','false'));
-  await page.locator('article input').fill('Fictional offline retained');await page.click('#save-labels');await settle();
-  assert.equal((await rows()).length,1);
-  assert.equal(await page.locator('article input').inputValue(),'Fictional offline retained');
-  assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);
-  console.log('PASS: fictional native bridge opt-in/off, labelled snapshot autoqueue, exact revision replay dedup, native local save, unchanged student matching, zero external network. Native Android runtime/Drive not exercised.');
-} finally {await browser.close();}
+const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);const click=async s=>{await page.click(s);await settle();};
+try{
+ await page.goto(base);await settle();assert.equal(await page.locator('#browser-camera').isVisible(),false);await page.fill('#assignment','Fictional native study');await click('#name');await click('#native-camera');
+ await page.evaluate(()=>{const c=document.createElement('canvas');c.width=400;c.height=600;const session=JSON.parse(localStorage.getItem('session'));localStorage.setItem('pending',JSON.stringify([{...session,id:'fictional-native-1',dataUrl:c.toDataURL('image/png')},{...session,id:'fictional-native-2',dataUrl:c.toDataURL('image/png')},{...session,id:'fictional-bad',dataUrl:'data:image/jpeg;base64,YmFk'}]));});
+ // Simulates process death after native photos persist, before renderer receives events.
+ await page.reload();await settle();await page.waitForFunction(()=>document.querySelectorAll('#pages article').length===2);await settle();
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pending')).length),0);assert.equal(await page.evaluate(()=>localStorage.getItem('omitted')),'fictional-bad');
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('capture-preview')));await settle();await page.waitForSelector('#label-section:visible');await page.fill('#label','Fictional Avery');await click('#save-group');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('transfers')),null);await click('#done');
+ await page.evaluate(()=>localStorage.setItem('fail-transfer','true'));await click('#drive-queue');assert.match(await page.locator('#status').innerText(),/interrupted transport/);
+ await page.evaluate(()=>localStorage.removeItem('fail-transfer'));await click('#drive-queue');await click('#drive-queue');assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('transfers')).length),1);
+ await page.reload();await settle();assert.equal(await page.locator('#groups article').count(),1);assert.deepEqual(errors,[]);
+ console.log('PASS mocked native recovery scoped to assignment/student, preview cancellation, no intermediate transfer, failed transfer retry/dedup, completed restart. Native camera/OAuth/upload UNVERIFIED.');
+}finally{await browser.close();}

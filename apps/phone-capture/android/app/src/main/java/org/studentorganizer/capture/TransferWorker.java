@@ -32,17 +32,11 @@ public final class TransferWorker extends Worker {
             if(auth.hasResolution()||auth.getAccessToken()==null){p.pause("Reconnect Google in settings; queued originals retained");return Result.success();}
             HttpDriveGateway drive=new HttpDriveGateway(auth::getAccessToken,()->enabled(c)&&!isStopped()&&account.equals(p.text("accountId","")));
             if(!account.equals(drive.identity())){p.pause("Google account mismatch; transfers paused");return Result.success();}
-            String folder=p.text("folder-"+account,""),root=drive.rootId();
-            if(folder.isEmpty()){folder=drive.generateId();if(!p.saveFolder(account,folder))throw new java.io.IOException("Cannot persist folder ID");}
-            if(drive.metadata(folder)==null){try{drive.createFolder(folder,"StudentOrganizer Capture (private)");}catch(DriveGateway.Failure e){if(e.status!=409)throw e;}}
-            DriveGateway.Metadata metadata=drive.metadata(folder);
-            if(!TransferEngine.privateOwned(metadata,account)||!"application/vnd.google-apps.folder".equals(metadata.mimeType)||metadata.parents==null||metadata.parents.size()!=1||!metadata.parents.contains(root)){p.pause("Destination is shared or moved. Transfer paused; no permissions were changed.");return Result.success();}
             boolean retry=false;
             for(UploadRecord r:queue.all()){
                 if(isStopped()||!enabled(c))break;
                 if(r.state==State.COMPLETE||!account.equals(r.accountId))continue;
                 if(r.state==State.BLOCKED||r.state==State.NEEDS_AUTH)continue;
-                if(r.folderId==null){r.folderId=folder;r.folderParentId=root;queue.save(r);}
                 State state=new TransferEngine(drive,queue,()->enabled(c)&&!isStopped(),()->p.text("accountId","")).run(r.queueId);
                 retry|=state==State.RETRY;
                 if(state==State.NEEDS_AUTH){Identity.getAuthorizationClient(c).clearToken(ClearTokenRequest.builder().setToken(auth.getAccessToken()).build());break;}

@@ -9,7 +9,8 @@
     "test": "vitest run",
     "preview": "vite preview --host 127.0.0.1",
     "test:browser": "node tests/browser.mjs",
-    "test:native-browser": "node tests/native-browser.mjs"
+    "test:native-browser": "node tests/native-browser.mjs",
+    "test:capacity-browser": "node tests/capacity-browser.mjs"
   },
   "dependencies": {
     "dexie": "4.0.11",

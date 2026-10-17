@@ -31,7 +31,7 @@ describe('marking records participate in atomic Organizer recovery',()=>{
   const revision=await service.openSession(attempt.id,actor);return {attempt,commit,revision};
  }
  it('roundtrips originals, feedback-only commits and draft revisions without changing official feedback',async()=>{
-  const f=await fixture();const json=await portability.createFullBackupJSON();expect(JSON.parse(json).schemaVersion).toBe(4);
+  const f=await fixture();const json=await portability.createFullBackupJSON();expect(JSON.parse(json).schemaVersion).toBe(5);
   const other=new OntarioTeacherDB(`restore-${crypto.randomUUID()}`);
   try{await new PortabilityService(other).restoreFromJSON(json);expect(await other.markingAttempts.get(f.attempt.id)).toEqual(f.attempt);expect(await other.markingCommits.get(f.commit.id)).toEqual(f.commit);expect(await other.markingSessions.get(f.revision.id)).toEqual(f.revision);expect((await other.studentAssessments.get(f.commit.studentAssessmentId))?.overallFeedback).toBe('Fictional feedback-only result');}finally{await other.delete();}
  });
