@@ -36,7 +36,8 @@
     "test:classroom": "node --import tsx scripts/teacherProfilesSmoke.ts && node --import tsx scripts/classroomUseSmoke.ts && node --import tsx scripts/classroomEvidencePopupSmoke.ts",
     "test:capture:desktop": "node --import tsx scripts/captureDesktopSmoke.ts",
     "test:capture:capacity": "node --import tsx scripts/captureCapacitySmoke.ts",
-    "test:capture:late-work": "node --import tsx scripts/captureLateWorkSmoke.ts"
+    "test:capture:late-work": "node --import tsx scripts/captureLateWorkSmoke.ts",
+    "test:capture:large-photo": "node --import tsx scripts/captureLargePhotoSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
