@@ -4,7 +4,7 @@ Updated: October 17, 2026 (America/Toronto). Tyler directed P0 teacher-use readi
 
 ## Current local reliability batch — October 17
 
-Tyler approved C13, C15, TUV-UX-001/002, C12 and C18 with “Make it so” and requested notification when reviewable. Fresh main is verified at `753ac300f0b0e08059539a18de42a01e939764b3` (PR33 merged, superseding earlier pending-merge descriptions). Local branch `codex/reliability-20261017`; all six fixes locally implemented and verified, independent source review completed with demonstrated blockers repaired. Local commit readback follows in the work order. Local commits and independent review are authorized. **No push, merge, release, installer update, OAuth changes, scanner work or real student data in this batch.** [Measured evidence and recovery checkpoint](work-orders/CLASSROOM-USE-2026-10-15.md#october-17--approved-reliability-batch-local-review).
+Tyler approved C13, C15, TUV-UX-001/002, C12 and C18 with “Make it so” and requested notification when reviewable. Fresh main is verified at `753ac300f0b0e08059539a18de42a01e939764b3` (PR33 merged, superseding earlier pending-merge descriptions). Local branch `codex/reliability-20261017`; all six fixes locally implemented and verified, independent source review completed with demonstrated blockers repaired. Implementation commit `a78a0f848fe34771ffcdfac188aace3d136262db` independently reviewed/read back PASS; no remaining source blocker. Local commits and independent review are authorized. **No push, merge, release, installer update, OAuth changes, scanner work or real student data in this batch.** [Measured evidence and recovery checkpoint](work-orders/CLASSROOM-USE-2026-10-15.md#october-17--approved-reliability-batch-local-review).
 
 ## P0 – Teacher-use readiness
 
