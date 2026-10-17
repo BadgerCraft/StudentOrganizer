@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
-import { CaptureDB, listBatchSummaries, deleteSavedBatch, MAX_BYTES, appendPages, emptyBatch, recoverBatch, exportBatch, exportSavedBatch, movePage, removePage, saveGroup, completeBatch, defaultEdits, readPhoto, save, type Batch, type Page } from '../src/store';
+import { CaptureDB, listBatchSummaries, deleteSavedBatch, openLateWork, MAX_BYTES, appendPages, emptyBatch, recoverBatch, exportBatch, exportSavedBatch, movePage, removePage, saveGroup, completeBatch, defaultEdits, readPhoto, save, type Batch, type Page } from '../src/store';
 const databases:CaptureDB[]=[];
 const database=()=>{const db=new CaptureDB(`capture-test-${crypto.randomUUID()}`);databases.push(db);return db;};
 // Valid 1×1 PNG, fictional generated fixture.
@@ -68,7 +68,7 @@ describe('retained archive listing and deliberate deletion',()=>{
  it('lists only summaries while retaining all original bytes in saved assignments',async()=>{
   const db=database();const first=await save(db,appendPages(batch(),[page()]));const second=await save(db,completeBatch(group(appendPages(batch(),[page()]))));
   const summaries=await listBatchSummaries(db);expect(summaries).toHaveLength(2);
-  expect(summaries.every(row=>Object.keys(row).sort().join(',')==='assignment,completed,id')).toBe(true);
+  expect(summaries.every(row=>Object.keys(row).sort().join(',')==='assignment,assignmentId,completed,id')).toBe(true);
   expect(await db.batches.get(first.id)).toEqual(first);expect(await db.batches.get(second.id)).toEqual(second);
  });
  it('blocks stale deletion before native deletion, then allows only the current revision',async()=>{
@@ -82,5 +82,56 @@ describe('retained archive listing and deliberate deletion',()=>{
   const remove=db.batches.delete.bind(db.batches);vi.spyOn(db.batches,'delete').mockImplementationOnce((...args)=>remove(...args).then(()=>{Dexie.currentTransaction!.abort();throw new Error('Simulated disk failure');}));
   await expect(deleteSavedBatch(db,saved)).rejects.toThrow();expect(await db.batches.get(saved.id)).toEqual(saved);
   await deleteSavedBatch(db,saved);expect(await db.batches.get(saved.id)).toBeUndefined();
+ });
+});
+
+describe('immutable completed packages and linked late work',()=>{
+ const completed=async(db:CaptureDB)=>save(db,completeBatch(group(appendPages(batch(),[page(),page()]))));
+ it('creates an empty linked draft, exports only new labelled pages, and preserves original ZIP bytes',async()=>{
+  const db=database(),original=await completed(db),oldZip=await exportSavedBatch(db,original);
+  let late=await openLateWork(db,original);
+  expect(late).toMatchObject({assignmentId:original.assignmentId,assignment:original.assignment,parentBatchId:original.id,completed:false,pages:[],groups:[],removed:[]});
+  expect(late.id).not.toBe(original.id);expect(late.captureId).not.toBe(original.captureId);expect(late.draftGroupId).not.toBe(original.draftGroupId);
+  const additional=page();late=await save(db,group(appendPages(late,[additional]),original.groups[0].label));
+  late=await save(db,group(appendPages(late,[page()]),'Fictional late student'));
+  late=await save(db,completeBatch(late));const manifest=JSON.parse(strFromU8(unzipSync(await exportSavedBatch(db,late))['manifest.json']));
+  expect(manifest.assignmentId).toBe(original.assignmentId);expect(manifest.packageId).not.toBe(original.captureId);expect(manifest.submissions).toHaveLength(2);
+  expect(manifest.submissions[0].pages.map((p:{id:string})=>p.id)).toEqual([additional.id]);
+  expect(manifest.submissions.every((g:{id:string})=>!original.groups.some(old=>old.id===g.id))).toBe(true);
+  expect(await db.batches.get(original.id)).toEqual(original);expect(await exportSavedBatch(db,original)).toEqual(oldZip);
+ });
+ it('reuses exactly one draft across concurrent clicks, restart and requests from another completed supplement',async()=>{
+  const db=database(),original=await completed(db);
+  const [first,duplicate]=await Promise.all([openLateWork(db,original),openLateWork(db,original)]);expect(duplicate.id).toBe(first.id);expect(await db.batches.count()).toBe(2);
+  const saved=await save(db,appendPages(first,[page()]));db.close();await db.open();expect(await openLateWork(db,original)).toEqual(saved);
+  const done=await save(db,completeBatch(group(saved)));const next=await openLateWork(db,done);expect(next.id).not.toBe(first.id);expect(next.groups).toEqual([]);expect(next.parentBatchId).toBe(done.id);
+  expect((await openLateWork(db,original)).id).toBe(next.id);expect(await db.batches.count()).toBe(3);
+ });
+ it('rolls back quota failure while creating a draft and leaves retry safe',async()=>{
+  const db=database(),original=await completed(db),zip=await exportSavedBatch(db,original);const add=db.batches.add.bind(db.batches);
+  vi.spyOn(db.batches,'add').mockImplementationOnce((...args)=>add(...args).then(()=>{Dexie.currentTransaction!.abort();throw new Error('Fictional quota failure');}));
+  await expect(openLateWork(db,original)).rejects.toThrow('quota');expect(await db.batches.count()).toBe(1);expect(await exportSavedBatch(db,original)).toEqual(zip);
+  await openLateWork(db,original);expect(await db.batches.count()).toBe(2);
+ });
+ it('rejects stale source and stale draft writes while retaining photos and locked assignment identity',async()=>{
+  const db=database(),original=await completed(db);
+  await expect(openLateWork(db,{...original,revision:original.revision-1})).rejects.toThrow('another tab');
+  await expect(openLateWork(db,{...original,captureId:'wrong'})).rejects.toThrow('another tab');expect(await db.batches.count()).toBe(1);
+  const late=await openLateWork(db,original),saved=await save(db,appendPages(late,[page()]));
+  await expect(save(db,appendPages(late,[page()]))).rejects.toThrow('another tab');
+  await expect(save(db,{...saved,assignment:'Different assignment'})).rejects.toThrow('original assignment name');
+  await expect(save(db,{...saved,assignmentId:crypto.randomUUID()})).rejects.toThrow('identities');
+  await expect(save(db,{...saved,parentBatchId:undefined})).rejects.toThrow('identities');expect(await db.batches.get(saved.id)).toEqual(saved);
+ });
+ it('deletes original and supplemental packages independently, preserving orphan recovery/export',async()=>{
+  const db=database(),original=await completed(db);let late=await openLateWork(db,original);late=await save(db,completeBatch(group(appendPages(late,[page()]))));const lateZip=await exportSavedBatch(db,late);
+  const native=vi.fn();await deleteSavedBatch(db,original,()=>native(original.id,original.captureId));expect(native).toHaveBeenCalledWith(original.id,original.captureId);expect(await exportSavedBatch(db,late)).toEqual(lateZip);
+  db.close();await db.open();expect(recoverBatch((await db.batches.get(late.id))!).parentBatchId).toBe(original.id);
+  const next=await openLateWork(db,late);await deleteSavedBatch(db,next);expect(await exportSavedBatch(db,late)).toEqual(lateZip);
+ });
+ it('retains per-package page limits and refuses late work from unfinished packages',async()=>{
+  const db=database(),draft=await save(db,batch());await expect(openLateWork(db,draft)).rejects.toThrow('Complete');
+  const original=await completed(db),late=await openLateWork(db,original);
+  expect(()=>appendPages(late,Array.from({length:11},()=>page()))).toThrow('10 pages');expect(()=>completeBatch(late)).toThrow('Save');
  });
 });

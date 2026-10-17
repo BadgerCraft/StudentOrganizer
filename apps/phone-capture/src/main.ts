@@ -1,11 +1,11 @@
-import { CaptureDB, listBatchSummaries, deleteSavedBatch, emptyBatch, recoverBatch, save, readPhoto, appendPages, movePage, removePage, saveGroup, completeBatch, exportBatch, exportSavedBatch, defaultEdits, type Batch, type Page } from './store';
+import { CaptureDB, listBatchSummaries, deleteSavedBatch, openLateWork, emptyBatch, recoverBatch, save, readPhoto, appendPages, movePage, removePage, saveGroup, completeBatch, exportBatch, exportSavedBatch, defaultEdits, type Batch, type Page } from './store';
 import { drawCapturePreview } from '../../../shared/capturePreview';
 import { inspectMarkingImage } from '../../../src/marking/importImages';
 import { transferStatus, acceptedReceipt, transferZip } from './native';
 import './style.css';
 const root = document.querySelector<HTMLDivElement>('#app')!;
 root.innerHTML = `<h1>Phone capture</h1><p>Fictional-data pilot · no AI processing</p><p class="notice">Name an assignment, capture one student’s pages, then Preview and label the set. Originals stay here until you explicitly delete the assignment. Keep a local ZIP backup: browser storage can be cleared.</p><p id="status" role="status" aria-live="polite">Opening local assignments…</p><fieldset id="controls" disabled>
-<label>Saved assignments<select id="archive"></select></label><button id="new">New assignment</button><button id="delete">Delete this assignment</button>
+<label>Saved assignments<select id="archive"></select></label><button id="new">New assignment</button><button id="delete">Delete this package</button><button id="late-work">Add late work</button><section id="assignment-history" aria-label="Linked assignment history"></section><p id="late-work-help" hidden>Capture only the new work or additional pages. The completed package stays unchanged. On desktop, choose the student and explicitly append to their existing draft. Finalized or archived marking cannot receive appended pages.</p>
 <label>Assignment name<input id="assignment" maxlength="120" placeholder="Fictional leaf study"></label><button id="name">Save assignment name</button>
 <p id="phase"></p><section id="intake"><button id="native-camera">Start continuous camera</button><label id="browser-camera">Take a photo (browser)<input id="camera" type="file" accept="image/jpeg,image/png" capture="environment"></label><label>Import photos for this student<input id="files" type="file" accept="image/jpeg,image/png" multiple></label><small>Up to 40 students × 10 pages; 8 MB / 20 megapixels per photo; 800 megapixels and 256 MB per assignment including retained originals. Cancel the native camera when ready to Preview. Camera cancellation keeps saved pages.</small><button id="preview">Preview this student</button></section>
 <section id="pages" aria-label="Current student pages"></section><section id="label-section"><label>Student name label<input id="label" maxlength="120"></label><small>This is a label only. Choose the actual student on desktop.</small><button id="save-group">Save student group</button><button id="resume">Take more photos</button><button id="discard-draft">Discard current student draft</button></section>
@@ -19,11 +19,29 @@ async function render() {
   const archived = await listBatchSummaries(db);
   if (generation !== renderGeneration) return;
   const select = el<HTMLSelectElement>('archive'); select.replaceChildren();
-  for (const item of archived) select.add(new Option(`${item.assignment || 'Unnamed assignment'}${item.completed ? ' · completed' : ' · in progress'} (${item.id.slice(0,8)})`,item.id));
+  for (const item of archived) select.add(new Option(`${item.assignment || 'Unnamed assignment'}${item.parentBatchId ? ' · late work' : ''}${item.completed ? ' · completed' : ' · in progress'} (${item.id.slice(0,8)})`,item.id));
   if (!archived.some(a => a.id === batch.id)) select.add(new Option('New assignment',batch.id)); select.value = batch.id;
+  if (archived.some(item => item.id === batch.id)) localStorage.setItem('capture-selected-batch', batch.id);
   el<HTMLButtonElement>('delete').disabled = !archived.some(a => a.id === batch.id);
+  el<HTMLButtonElement>('late-work').hidden = !batch.completed;
+  const related = archived.filter(item => item.assignmentId === batch.assignmentId);
+  el<HTMLButtonElement>('late-work').textContent = related.some(item => item.parentBatchId && !item.completed) ? 'Continue late work' : 'Add late work';
+  el('late-work-help').hidden = !batch.parentBatchId;
+  el('assignment-history').replaceChildren();
+  if (batch.parentBatchId || related.length > 1) {
+    const title = document.createElement('h2'); title.textContent = 'Linked assignment packages'; el('assignment-history').append(title);
+    for (const item of related) {
+      const button = document.createElement('button'); button.textContent = `${item.parentBatchId ? 'Late work' : 'Original package'} · ${item.completed ? 'completed' : 'draft'} (${item.id.slice(0,8)})`;
+      button.dataset.batchId = item.id; button.disabled = item.id === batch.id;
+      button.onclick = () => void run(async () => { const saved = await db.batches.get(item.id); if (saved) batch = recoverBatch(saved); else throw new Error('This linked package was deleted. Reload to refresh the list.'); });
+      el('assignment-history').append(button);
+    }
+    if (batch.parentBatchId && !related.some(item => item.id === batch.parentBatchId)) {
+      const note = document.createElement('p'); note.textContent = 'The earlier local package was deleted. This late-work package is retained independently.'; el('assignment-history').append(note);
+    }
+  }
   el<HTMLInputElement>('assignment').value = batch.assignment;
-  el<HTMLInputElement>('assignment').disabled = batch.completed || !!batch.pages.length || !!batch.groups.length;
+  el<HTMLInputElement>('assignment').disabled = batch.completed || !!batch.parentBatchId || !!batch.pages.length || !!batch.groups.length;
   el<HTMLButtonElement>('name').disabled = el<HTMLInputElement>('assignment').disabled;
   el('phase').textContent = batch.completed ? 'Completed assignment · ready for deliberate export or transfer' : batch.stage === 'preview' ? 'Preview, edit, then label this student’s page set' : 'Capture pages for one student';
   el('intake').hidden = batch.completed || batch.stage === 'preview'; el('label-section').hidden = batch.completed || batch.stage !== 'preview';
@@ -84,9 +102,10 @@ el('resume').onclick=()=>void run(()=>persist({...batch,stage:'capture'}));
 el('discard-draft').onclick=()=>{if(confirm('Discard this student draft? Its original photos remain in this assignment until you delete the assignment.'))void run(async()=>{await drainNative();await persist({...batch,removed:[...batch.removed,...batch.pages],pages:[],draftLabel:'',editingGroupId:undefined,draftGroupId:crypto.randomUUID(),stage:'capture'});localStorage.removeItem('capture-camera-batch');});};
 el('save-group').onclick=()=>void run(async()=>{await drainNative();await persist(saveGroup(batch));localStorage.removeItem('capture-camera-batch');});
 el('done').onclick=()=> {if(confirm('All done? This freezes all saved student groups. Originals will remain here.'))void run(async()=>{await drainNative();const completed=completeBatch(batch);status('Checking all photos and the completed ZIP before freezing. Keep this screen open…');await exportBatch({...completed,revision:completed.revision+1});await persist(completed);});};
+el('late-work').onclick=()=>{if(confirm('Open a separate late-work package for this assignment? The completed package stays unchanged.'))void run(async()=>{batch=await openLateWork(db,batch);await drainNative();status('Opened linked late-work draft. Capture only the new student work or additional pages.');});};
 el('new').onclick=()=>void run(async()=>{batch=emptyBatch();await persist(batch);});
 el<HTMLSelectElement>('archive').onchange=event=>{const id=(event.target as HTMLSelectElement).value;void run(async()=>{const saved=await db.batches.get(id);if(saved)batch=recoverBatch(saved);});};
-el('delete').onclick=()=>{if(confirm('Permanently delete this assignment and its local originals? Downloaded or Drive copies remain separate. Export and verify your ZIP first.'))void run(async()=>{await deleteSavedBatch(db,batch,()=>{if(window.CaptureNative?.deleteAssignment)acceptedReceipt(window.CaptureNative.deleteAssignment(batch.id,batch.captureId));});batch=emptyBatch();await persist(batch);});};
+el('delete').onclick=()=>{if(confirm('Permanently delete this package and its local originals? Linked late-work packages, downloaded copies and Drive copies remain separate. Export and verify your ZIP first.'))void run(async()=>{await deleteSavedBatch(db,batch,()=>{if(window.CaptureNative?.deleteAssignment)acceptedReceipt(window.CaptureNative.deleteAssignment(batch.id,batch.captureId));});batch=emptyBatch();await persist(batch);});};
 el('export').onclick=()=>void run(async()=>{const bytes=await exportSavedBatch(db,batch);if(window.CaptureNative){status(await transferZip(window.CaptureNative,bytes,batch,'local'));return;}const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'application/zip'}));const a=document.createElement('a');a.href=url;a.download=`capture-${batch.captureId}.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);status('ZIP download requested. Verify the saved file. Local originals retained.');});
 el('drive-queue').onclick=()=>void run(async()=>{if(!window.CaptureNative)throw new Error('Native transfer unavailable.');status(await transferZip(window.CaptureNative,await exportSavedBatch(db,batch),batch,'drive'));});
 el('drive-settings').onclick=()=>window.CaptureNative?.requestDriveSetup();
@@ -119,5 +138,5 @@ window.addEventListener('capture-photo',()=>void recoverNative());
 window.addEventListener('capture-preview',()=>{pendingPreview=true;void recoverNative();});
 setInterval(()=>{if(pendingNative&&!busy){pendingNative=false;void recoverNative();}},500);
 window.addEventListener('beforeunload',event=>{if(busy||el<HTMLInputElement>('label').value!==batch.draftLabel){event.preventDefault();event.returnValue='';}});
-try {const rows=await listBatchSummaries(db);const selected=rows.find(b=>b.id===localStorage.getItem('capture-camera-batch'))??rows.find(b=>!b.completed)??rows[0];batch=selected?recoverBatch(await db.batches.get(selected.id)??emptyBatch()):emptyBatch();await render();el<HTMLFieldSetElement>('controls').disabled=false;status('Opened local assignments. Saved pages and groups retained.');if(batch.assignment&&!batch.completed)await recoverNative();}
+try {const rows=await listBatchSummaries(db);const selected=rows.find(b=>b.id===localStorage.getItem('capture-camera-batch'))??rows.find(b=>b.id===localStorage.getItem('capture-selected-batch'))??rows.find(b=>!b.completed)??rows[0];batch=selected?recoverBatch(await db.batches.get(selected.id)??emptyBatch()):emptyBatch();await render();el<HTMLFieldSetElement>('controls').disabled=false;status('Opened local assignments. Saved pages and groups retained.');if(batch.assignment&&!batch.completed)await recoverNative();}
 catch(error){status(`Local storage could not open: ${String(error)}. No changes made.`);}

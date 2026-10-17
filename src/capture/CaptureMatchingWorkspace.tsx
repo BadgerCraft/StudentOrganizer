@@ -1,3 +1,4 @@
+import { MarkingService } from '../marking/markingService';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { db } from '../db/database';
 import { getActiveTeacherId, getAppIdentity, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
@@ -30,6 +31,8 @@ function Preview({ page }: { page: Page }) {
 export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwitchTeacher }: { assessmentId: string; userId: string; onClose: () => void; onSwitchTeacher: () => void }) {
   const epoch = useSyncExternalStore(subscribeIdentityChange, getIdentityEpoch);
   const [actor, setActor] = useState<Actor | null>(null);
+  const [lifecycle, setLifecycle] = useState<Awaited<ReturnType<CaptureAttachmentService['lifecycle']>> | null>(null);
+  const [appendRoot, setAppendRoot] = useState(''), [rubricId, setRubricId] = useState(''), [markingTarget, setMarkingTarget] = useState('');
   const [context, setContext] = useState<Context | null>(null);
   const [pkg, setPackage] = useState<ParsedCapturePackage | null>(null);
   const [receipts, setReceipts] = useState<CaptureImportReceipt[]>([]);
@@ -45,7 +48,8 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
       const value = { userId: identity.userId, deviceId: identity.deviceId, identityEpoch: started };
       if (identity.userId !== userId || !valid(value)) return;
       const next = await service.context(assessmentId, value);
-      if (valid(value)) { setActor(value); setContext(next); }
+      const life = await service.lifecycle(assessmentId, value);
+      if (valid(value)) { setActor(value); setContext(next); setLifecycle(life); }
     }).catch(error => { if (mounted.current) setError(String(error.message)); });
     return () => { mounted.current = false; };
   }, [assessmentId, userId]);
@@ -69,6 +73,7 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
       if (!valid(actor)) throw new Error('Teacher context changed. Reopen under the intended teacher.');
       const saved = await service.reconcile(assessmentId, next, actor);
       const current = await service.context(assessmentId, actor);
+      const life = await service.lifecycle(assessmentId, actor); setLifecycle(life); setAppendRoot('');
       if (!valid(actor)) throw new Error('Teacher context changed. Reopen under the intended teacher.');
       setPackage(next); setReceipts(saved); setContext(current); setSubmissionId(''); setEnrollmentId('');
       setStatus(`${next.submissions.length} page sets ready; ${saved.length} already saved. Select a page set and a student, then Confirm match.`);
@@ -79,13 +84,15 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
     if (!actor || !pkg || !selected || !student || lock.current || stale || matched.has(selected.id)) return;
     lock.current = true; setBusy(true); setError('');
     try {
-      const receipt = await service.confirm(assessmentId, pkg, selected.id, student.enrollment.id, actor);
+      const root = lifecycle?.roots.find(r => r.id === appendRoot);
+      const target = lifecycle?.targets.find(t => t.id === root?.markingAttemptId);
+      const receipt = await service.confirm(assessmentId, pkg, selected.id, student.enrollment.id, actor, root ? { rootAttachmentId: root.id, expectedAttemptVersion: target?.version, sessionVersions: target?.sessionVersions } : undefined);
       // Only a committed receipt changes the matched presentation.
       if (!valid(actor)) return;
       setReceipts(previous => [...previous.filter(item => item.id !== receipt.id), receipt]);
       setStatus(`Saved all ${selected.pages.length} pages to ${name(receipt.classEnrollmentId)}. Matching is complete for this set.`);
-      setSubmissionId(''); setEnrollmentId('');
-      try { const next = await service.context(assessmentId, actor); if (valid(actor)) setContext(next); } catch { /* Receipt already confirms the durable save. Reopening reloads the saved list. */ }
+      setSubmissionId(''); setEnrollmentId(''); setAppendRoot('');
+      try { setLifecycle(await service.lifecycle(assessmentId, actor)); const next = await service.context(assessmentId, actor); if (valid(actor)) setContext(next); } catch { /* Receipt already confirms the durable save. Reopening reloads the saved list. */ }
     } catch (error) { if (mounted.current) setError(`${error instanceof Error ? error.message : String(error)} Your selection is retained; retry when ready.`); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -93,8 +100,18 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
     if (!actor || stale || lock.current) return;
     lock.current = true; setBusy(true); setError('');
     try {
-      const attachment = await service.getAttachment(assessmentId, attachmentId, actor);
+      const attachment = await service.groupedAttachment(assessmentId, attachmentId, actor);
       if (valid(actor)) setSavedPreview({label:attachment.label,pages:attachment.pages.map(page=>({metadata:page.metadata,bytes:base64ToBytes(page.base64)}))});
+    } catch (error) { if (mounted.current) setError(error instanceof Error ? error.message : String(error)); }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
+  }
+  async function bind(rootId: string, existing: boolean) {
+    if (!actor || stale || lock.current) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      const target = lifecycle?.targets.find(t => t.id === markingTarget);
+      await new MarkingService(db).bindCaptureRoot(rootId, existing ? { attemptId: markingTarget, expectedVersion: target?.version, sessionVersions: target?.sessionVersions } : { rubricId }, { userId: actor.userId, deviceId: actor.deviceId, epoch: actor.identityEpoch });
+      if (valid(actor)) { setStatus('Capture submission associated with marking. Open Rubric & marking for this assignment to continue. Original capture receipts are retained.'); try { setLifecycle(await service.lifecycle(assessmentId, actor)); } catch { setStatus('Association saved. Reopen this assignment to refresh its marking destination.'); } }
     } catch (error) { if (mounted.current) setError(error instanceof Error ? error.message : String(error)); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -118,8 +135,14 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
             {submission.label} · {submission.pages.length} page(s) <span className="text-xs">(set {pkg.submissions.indexOf(submission) + 1})</span>{receipt && <span className="block">Saved to {name(receipt.classEnrollmentId)}</span>}
           </button>;
         })}</div><div className="space-y-3 mt-3">{selected?.pages.map(page => <Preview key={page.metadata.id} page={page} />)}</div></section>
-      <section aria-label="Authorized class roster"><h3 className="font-semibold mb-2">Class roster</h3><p className="text-sm mb-2">Choose the student for the selected page set.</p><div className="space-y-2">{[...(context?.roster ?? [])].sort((a, b) => Number(matchedStudents.has(a.enrollment.id)) - Number(matchedStudents.has(b.enrollment.id))).map(row => <button type="button" key={row.enrollment.id} data-testid={`capture-student-${row.enrollment.id}`} aria-pressed={enrollmentId === row.enrollment.id} disabled={busy || stale} onClick={() => setEnrollmentId(row.enrollment.id)} className={`${button} block w-full text-left ${enrollmentId === row.enrollment.id ? 'bg-blue-100 border-blue-700' : matchedStudents.has(row.enrollment.id) ? 'bg-slate-100 text-slate-600' : 'bg-white'}`}>{name(row.enrollment.id)}{matchedStudents.has(row.enrollment.id) && <span className="block text-sm">Has saved pages</span>}</button>)}</div></section>
-    </div><div className="sticky bottom-0 p-3 bg-white border rounded-lg"><p>{selected && student ? `Save “${selected.label}” (${selected.pages.length} pages) to ${name(student.enrollment.id)}?` : 'Select one page set and one student.'}</p><button type="button" data-testid="capture-confirm" className={`${button} mt-2 bg-blue-700 text-white`} disabled={busy || stale || !selected || !student || matched.has(submissionId)} onClick={() => void confirmMatch()}>{busy ? 'Working…' : 'Confirm match'}</button></div></>}
-    {!pkg && !!context?.attachments.length && <section><h2 className="font-semibold">Saved picture attachments</h2><p>Reopen the original ZIP to resume unmatched sets or review import receipts.</p><ul>{context.attachments.map(attachment => <li key={attachment.id} className="my-2"><button className={button} disabled={busy || stale} onClick={() => void previewSaved(attachment.id)}>{attachment.label} · {attachment.pageCount} pages · {name(attachment.classEnrollmentId)} · View saved pages</button></li>)}</ul>{savedPreview && <div><h3>{savedPreview.label} — saved pages</h3>{savedPreview.pages.map(page=><Preview key={page.metadata.id} page={page}/>)}</div>}</section>}
+      <section aria-label="Authorized class roster"><h3 className="font-semibold mb-2">Class roster</h3><p className="text-sm mb-2">Choose the student for the selected page set.</p><div className="space-y-2">{[...(context?.roster ?? [])].sort((a, b) => Number(matchedStudents.has(a.enrollment.id)) - Number(matchedStudents.has(b.enrollment.id))).map(row => <button type="button" key={row.enrollment.id} data-testid={`capture-student-${row.enrollment.id}`} aria-pressed={enrollmentId === row.enrollment.id} disabled={busy || stale} onClick={() => { setEnrollmentId(row.enrollment.id); setAppendRoot(''); }} className={`${button} block w-full text-left ${enrollmentId === row.enrollment.id ? 'bg-blue-100 border-blue-700' : matchedStudents.has(row.enrollment.id) ? 'bg-slate-100 text-slate-600' : 'bg-white'}`}>{name(row.enrollment.id)}{matchedStudents.has(row.enrollment.id) && <span className="block text-sm">Has saved pages</span>}</button>)}</div></section>
+    </div><div className="sticky bottom-0 p-3 bg-white border rounded-lg"><p>{selected && student ? `Save “${selected.label}” (${selected.pages.length} pages) to ${name(student.enrollment.id)}?` : 'Select one page set and one student.'}</p><label className="block mt-2">Save destination<select data-testid="capture-append-target" className={button} value={appendRoot} disabled={busy || stale || !student} onChange={event => setAppendRoot(event.target.value)}><option value="">New independent submission</option>{lifecycle?.roots.filter(root => root.enrollmentId === enrollmentId).map(root => { const target = lifecycle.targets.find(t => t.id === root.markingAttemptId); return <option key={root.id} value={root.id} disabled={!!target?.blocked}>Append to {root.label} · {root.pageCount} pages · reference {root.id.slice(-6)}{target?.blocked ? ' — finalized or archived; append blocked' : ''}</option>; })}</select></label><button type="button" data-testid="capture-confirm" className={`${button} mt-2 bg-blue-700 text-white`} disabled={busy || stale || !selected || !student || matched.has(submissionId)} onClick={() => void confirmMatch()}>{busy ? 'Working…' : 'Confirm match'}</button></div></>}
+    {!!lifecycle?.roots.length && <section><h2 className="font-semibold">Saved picture attachments</h2><p>Each submission keeps its original page sets and receipts. Appending late pages requires an explicit destination. Finalized or archived marking submissions are read-only.</p>
+      <label className="block">Confirmed rubric for starting marking<select data-testid="capture-rubric" value={rubricId} onChange={e => setRubricId(e.target.value)} disabled={busy || stale}><option value="">Choose a confirmed rubric</option>{lifecycle.rubrics.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></label>
+      <label className="block">Existing marking submission to associate<select data-testid="capture-marking-target" value={markingTarget} onChange={e => setMarkingTarget(e.target.value)} disabled={busy || stale}><option value="">Choose exact existing photo submission</option>{lifecycle.targets.map(t => <option key={t.id} value={t.id} disabled={t.blocked}>{name(t.enrollmentId ?? '')} · {t.pageCount} pages · reference {t.id.slice(-6)}{t.blocked ? ' — finalized or archived' : ''}</option>)}</select></label>
+      <ul>{lifecycle.roots.map(root => <li key={root.id} className="my-3 border rounded p-2"><button className={button} disabled={busy || stale} onClick={() => void previewSaved(root.id)}>{root.label} · {root.pageCount} pages · {name(root.enrollmentId)} · View saved pages</button>{root.markingAttemptId ? <p>Associated with marking · reference {root.markingAttemptId.slice(-6)}{lifecycle.targets.find(t => t.id === root.markingAttemptId)?.blocked ? ' — finalized or archived; late append blocked.' : ' — draft; late pages can be appended explicitly.'}</p> : <div><button data-testid={`capture-start-${root.id}`} className={button} disabled={busy || stale || !rubricId} onClick={() => void bind(root.id, false)}>Start marking this submission</button><button data-testid={`capture-link-${root.id}`} className={button} disabled={busy || stale || !markingTarget} onClick={() => void bind(root.id, true)}>Associate exact existing marking submission</button></div>}</li>)}</ul>
+      {savedPreview && <div><h3>{savedPreview.label} — saved pages</h3>{savedPreview.pages.map((page, index) => <Preview key={`${index}-${page.metadata.id}`} page={page}/>)}</div>}
+    </section>}
+
   </section>;
 }

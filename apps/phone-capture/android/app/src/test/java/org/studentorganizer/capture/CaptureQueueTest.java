@@ -109,4 +109,38 @@ public class CaptureQueueTest {
         try(CaptureQueue q=queue()){String id=q.enqueue(bytes.toByteArray(),"class-package",1,"account-one");try(ZipFile retained=new ZipFile(q.load(id).localPath)){assertEquals(401,retained.size());}}
     }
 
+    @Test public void assignmentFolderReservationSurvivesRestartAndCaptureDeletionWithoutCrossAccountReuse()throws Exception{
+        try(CaptureQueue q=queue()){
+            q.enqueue(fixture("A"),"fictional-batch",1,"account-one");q.enqueue(fixture("B","supplement"),"supplement",1,"account-one");
+            q.reserveAssignmentFolder("account-one","assignment-one",new QueueStore.AssignmentFolder("stable-folder","root","Same assignment name"));
+            assertEquals("stable-folder",q.reserveAssignmentFolder("account-one","assignment-one",new QueueStore.AssignmentFolder("loser-folder","root","Renamed hint")).id);
+            assertEquals("second-folder",q.reserveAssignmentFolder("account-two","assignment-one",new QueueStore.AssignmentFolder("second-folder","root-two","Same assignment name")).id);
+            assertEquals("different-folder",q.reserveAssignmentFolder("account-one","assignment-two",new QueueStore.AssignmentFolder("different-folder","root","Same assignment name")).id);
+            q.deleteCapture("fictional-batch");assertEquals(1,q.all().size());assertTrue(new File(q.all().get(0).localPath).exists());
+        }
+        try(CaptureQueue q=queue()){assertEquals("stable-folder",q.assignmentFolder("account-one","assignment-one").id);assertEquals("second-folder",q.assignmentFolder("account-two","assignment-one").id);assertEquals("different-folder",q.assignmentFolder("account-one","assignment-two").id);assertEquals(1,q.all().size());}
+    }
+    @Test public void concurrentQueueInstancesSelectOneDurableFolderBeforeAnyCreate()throws Exception{
+        try(CaptureQueue first=queue();CaptureQueue second=queue()){
+            first.getWritableDatabase();second.getWritableDatabase();java.util.concurrent.ExecutorService pool=java.util.concurrent.Executors.newFixedThreadPool(2);java.util.concurrent.CountDownLatch start=new java.util.concurrent.CountDownLatch(1);
+            try{java.util.concurrent.Future<QueueStore.AssignmentFolder> a=pool.submit(()->{start.await();return first.reserveAssignmentFolder("account","assignment",new QueueStore.AssignmentFolder("candidate-a","root","Fictional"));});java.util.concurrent.Future<QueueStore.AssignmentFolder> b=pool.submit(()->{start.await();return second.reserveAssignmentFolder("account","assignment",new QueueStore.AssignmentFolder("candidate-b","root","Fictional"));});start.countDown();assertEquals(a.get(10,java.util.concurrent.TimeUnit.SECONDS).id,b.get(10,java.util.concurrent.TimeUnit.SECONDS).id);}
+            finally{pool.shutdownNow();}
+        }
+    }
+    @Test public void failedFolderInsertDoesNotReportUnsavedCandidateAndCanRetry()throws Exception{
+        try(CaptureQueue q=queue()){
+            q.getWritableDatabase().execSQL("CREATE TRIGGER fictional_folder_disk_full BEFORE INSERT ON assignment_folders BEGIN SELECT RAISE(ABORT, 'fictional disk full'); END");
+            assertThrows(IOException.class,()->q.reserveAssignmentFolder("account","assignment",new QueueStore.AssignmentFolder("candidate","root","Fictional")));assertNull(q.assignmentFolder("account","assignment"));
+            q.getWritableDatabase().execSQL("DROP TRIGGER fictional_folder_disk_full");assertEquals("candidate",q.reserveAssignmentFolder("account","assignment",new QueueStore.AssignmentFolder("candidate","root","Fictional")).id);
+        }
+    }
+    @Test public void versionOneMigrationPreservesEarliestDestinationWithoutRewritingQueue()throws Exception{
+        try(CaptureQueue q=queue()){
+            String first=q.enqueue(fixture("A"),"fictional-batch",1,"account-one"),second=q.enqueue(fixture("B","supplement"),"supplement",1,"account-one");
+            UploadRecord one=q.load(first);one.folderId="earliest-folder";one.folderParentId="root";q.save(one);UploadRecord two=q.load(second);two.folderId="old-separate-folder";two.folderParentId="root";q.save(two);
+            q.getWritableDatabase().execSQL("DROP TABLE assignment_folders");q.getWritableDatabase().setVersion(1);
+        }
+        try(CaptureQueue q=queue()){assertEquals("earliest-folder",q.assignmentFolder("account-one","assignment-one").id);assertEquals(2,q.all().size());assertEquals("old-separate-folder",q.all().get(1).folderId);for(UploadRecord row:q.all())assertTrue(new File(row.localPath).exists());}
+    }
+
 }

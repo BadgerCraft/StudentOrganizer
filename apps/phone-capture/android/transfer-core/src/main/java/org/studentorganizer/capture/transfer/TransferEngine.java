@@ -82,16 +82,22 @@ public final class TransferEngine {
     /** Folder IDs are committed before creation; retries never search or choose by name. */
     private void ensureFolder(UploadRecord r) throws IOException {
         guard(r); String root=drive.rootId();
-        if (blank(r.folderId)) {
-            guard(r); r.folderId=drive.generateId(); r.folderParentId=root;
-            if (blank(r.folderId)) throw new IOException("No folder ID returned");
-            store.save(r);
+        QueueStore.AssignmentFolder folder=store.assignmentFolder(r.accountId,r.assignmentId);
+        if(folder==null){
+            guard(r);String candidate=blank(r.folderId)?drive.generateId():r.folderId;
+            if(blank(candidate))throw new IOException("No folder ID returned");
+            folder=store.reserveAssignmentFolder(r.accountId,r.assignmentId,new QueueStore.AssignmentFolder(candidate,blank(r.folderId)?root:r.folderParentId,r.assignmentName));
+        }
+        if(folder==null||blank(folder.id)||blank(folder.parentId)||blank(folder.name))throw new Unsafe("Assignment folder reservation is incomplete");
+        if(!blank(r.folderId)&&(!Objects.equals(r.folderId,folder.id)||!Objects.equals(r.folderParentId,folder.parentId)))throw new Unsafe("Existing package uses a different folder; original retained for review");
+        if(!Objects.equals(r.folderId,folder.id)||!Objects.equals(r.folderParentId,folder.parentId)){
+            r.folderId=folder.id;r.folderParentId=folder.parentId;store.save(r);
         }
         if (!Objects.equals(r.folderParentId,root)) throw new Unsafe("Destination is no longer in My Drive root");
         guard(r);
         if (drive.metadata(r.folderId)==null) {
             guard(r);
-            try { drive.createFolder(r.folderId,r.assignmentName); }
+            try { drive.createFolder(r.folderId,folder.name); }
             catch (DriveGateway.Failure failure) { if(failure.status!=409)throw failure; }
         }
         checkFolder(r);

@@ -7,7 +7,7 @@ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH??'
 const context=await browser.newContext({viewport:{width:390,height:844},acceptDownloads:true});
 const page=await context.newPage(),errors=[],external=[];
 page.on('pageerror',e=>errors.push(String(e)));context.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('blob:'))external.push(r.url());});
-page.on('dialog',d=>void d.accept());
+let acceptDialogs=true;page.on('dialog',d=>void (acceptDialogs?d.accept():d.dismiss()));
 const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);
 const click=async s=>{await page.click(s);await settle();};
 try {
@@ -31,6 +31,20 @@ try {
  await click('#done');assert.equal(await page.locator('#export').isEnabled(),true);
  const download=page.waitForEvent('download');await click('#export');const downloaded=await download;await downloaded.saveAs('/tmp/capture-phone-e2e.zip');const zip=new Uint8Array(await readFile(await downloaded.path()));const contents=unzipSync(zip);const manifest=JSON.parse(strFromU8(contents['manifest.json']));
  assert.equal(manifest.submissions.length,2);assert.notEqual(manifest.submissions[0].id,manifest.submissions[1].id);assert.equal(manifest.submissions[0].pages.length,2);assert.equal(manifest.submissions[0].pages[1].edits.rotation,90);assert.equal(manifest.submissions[0].pages[1].edits.crop.x,.1);
- const completedId=await page.inputValue('#archive');await click('#new');await page.fill('#assignment','Fictional next assignment');await click('#name');await page.selectOption('#archive',completedId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.equal(await page.locator('#done').isDisabled(),true);
- assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS mobile repeated/interrupted flow: edits, duplicate labels, quota retry, restart, freeze/export and retained assignments; no external requests.');
+ const completedId=await page.inputValue('#archive');const countBefore=await page.locator('#archive option').count();
+ acceptDialogs=false;await click('#late-work');acceptDialogs=true;assert.equal(await page.inputValue('#archive'),completedId);assert.equal(await page.locator('#archive option').count(),countBefore);
+ await page.evaluate(()=>{const add=IDBObjectStore.prototype.add;IDBObjectStore.prototype.add=function(...args){IDBObjectStore.prototype.add=add;throw new DOMException('Fictional late-work quota failure','QuotaExceededError');};});
+ await click('#late-work');assert.match(await page.locator('#status').innerText(),/Not completed/);assert.equal(await page.inputValue('#archive'),completedId);
+ await click('#late-work');const lateId=await page.inputValue('#archive');assert.notEqual(lateId,completedId);assert.equal(await page.locator('#groups article').count(),0);assert.equal(await page.locator('#export').isDisabled(),true);assert.equal(await page.locator('#assignment').isDisabled(),true);
+ await page.reload();await settle();assert.equal(await page.inputValue('#archive'),lateId);
+ await page.selectOption('#archive',completedId);await settle();await click('#late-work');assert.equal(await page.inputValue('#archive'),lateId);
+ await page.setInputFiles('#files',files.slice(0,1));await settle();await click('#preview');await page.fill('#label','Fictional same name');await click('#save-group');
+ await page.setInputFiles('#files',files.slice(1,2));await settle();await click('#preview');await page.fill('#label','Fictional late new student');await click('#save-group');await click('#done');
+ const lateDownload=page.waitForEvent('download');await click('#export');const lateFile=await lateDownload;await lateFile.saveAs('/tmp/capture-phone-latework-e2e.zip');const lateZip=new Uint8Array(await readFile(await lateFile.path()));const lateManifest=JSON.parse(strFromU8(unzipSync(lateZip)['manifest.json']));
+ assert.equal(lateManifest.assignmentId,manifest.assignmentId);assert.notEqual(lateManifest.packageId,manifest.packageId);assert.equal(lateManifest.submissions.length,2);assert.equal(lateManifest.submissions[0].pages.length,1);assert.equal(lateManifest.submissions[1].pages.length,1);assert.equal(lateManifest.submissions[1].label,'Fictional late new student');assert.notEqual(lateManifest.submissions[0].id,lateManifest.submissions[1].id);assert.ok(!manifest.submissions.some(g=>g.id===lateManifest.submissions[0].id));assert.ok(!manifest.submissions.flatMap(g=>g.pages).some(p=>p.id===lateManifest.submissions[0].pages[0].id));
+ await page.selectOption('#archive',completedId);await settle();const originalDownload=page.waitForEvent('download');await click('#export');assert.deepEqual(new Uint8Array(await readFile(await (await originalDownload).path())),zip);
+ await click('#delete');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.match(await page.locator('#assignment-history').innerText(),/earlier local package was deleted/);
+ await click('#late-work');const nextLateId=await page.inputValue('#archive');assert.notEqual(nextLateId,lateId);assert.equal(await page.locator('#groups article').count(),0);
+ await click('#new');await page.fill('#assignment','Fictional next assignment');await click('#name');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.equal(await page.locator('#done').isDisabled(),true);
+ assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS mobile repeated/interrupted flow: edits, duplicate labels, quota retry, restart, freeze/export and retained assignments; late-work cancel/quota retry/restart, immutable original ZIP, supplemental export and deletion isolation; no external requests.');
 } finally {await browser.close();}

@@ -1,10 +1,12 @@
+import { MARKING_LIMITS } from '../marking/types';
+import { MarkingService } from '../marking/markingService';
 import { assertCaptureBackupCapacity, CAPTURE_BACKUP_MAX_BYTES } from './backupCapacity';
 import type { OntarioTeacherDB } from '../db/database';
 import { AUTH_TABLES, assertClassSectionWriteAccess } from '../services/authHelper';
 import { captureLocalWriteActor, guardLocalWriteIdentity, type LocalWriteActor } from '../services/localWriteIdentity';
 import { captureSha256, validateCaptureManifest, type ParsedCapturePackage } from '../../shared/capturePackage';
 import { inspectMarkingImage, validateMarkingImageBytes } from '../marking/importImages';
-import type { CaptureAttachment, CaptureAttachmentPage, CaptureImportReceipt } from './types';
+import type { CaptureAttachment, CaptureAttachmentPage, CaptureImportReceipt, CaptureAppendTarget } from './types';
 
 export function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -12,7 +14,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 export function base64ToBytes(base64: string): Uint8Array {
-  if (typeof base64 !== 'string' || base64.length > 28_000_000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw new Error('Invalid capture page bytes.');
+  if (typeof base64 !== 'string' || base64.length > 28_000_000 || (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64))) throw new Error('Invalid capture page bytes.');
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
   if (bytesToBase64(bytes) !== base64) throw new Error('Invalid capture page encoding.');
   return bytes;
@@ -86,6 +88,33 @@ export class CaptureAttachmentService {
       check(); return attachment;
     });
   }
+  async lifecycle(assessmentId: string, actor: LocalWriteActor) {
+    const captured = captureLocalWriteActor(actor);
+    return this.db.transaction('r', this.db.tables, async () => {
+      const check = await guardLocalWriteIdentity(this.db, captured); await this.scope(assessmentId, captured);
+      const sources: { id: string; label: string; classEnrollmentId: string; rootAttachmentId?: string; markingAttemptId?: string; pageCount: number }[] = [];
+      await this.db.captureAttachments.where('assessmentId').equals(assessmentId).each(a => { if (a.createdBy === captured.userId) sources.push({ id: a.id, label: a.label, classEnrollmentId: a.classEnrollmentId, rootAttachmentId: a.rootAttachmentId, markingAttemptId: a.markingAttemptId, pageCount: a.pages.length }); });
+      const attempts: { id: string; classEnrollmentId: string | null; version: number; archivedAt?: string | null; pageCount: number }[] = [];
+      await this.db.markingAttempts.where('assessmentId').equals(assessmentId).each(a => { if (a.createdBy === captured.userId && a.deletedAt === null) attempts.push({ id: a.id, classEnrollmentId: a.classEnrollmentId, version: a.version, archivedAt: a.archivedAt, pageCount: a.imagePages?.length ?? 0 }); });
+      const sessions = await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray();
+      const commits = await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray();
+      const rubrics = await this.db.markingRubrics.where('assessmentId').equals(assessmentId).filter(r => r.createdBy === captured.userId && r.deletedAt === null && r.confirmed).toArray();
+      const targets = attempts.map(a => ({ id: a.id, enrollmentId: a.classEnrollmentId, version: a.version, pageCount: a.pageCount, blocked: !!a.archivedAt || commits.some(c => c.attemptId === a.id) || sessions.some(s => s.attemptId === a.id && (s.status !== 'draft' || s.deletedAt !== null || s.commitId)), sessionVersions: Object.fromEntries(sessions.filter(s => s.attemptId === a.id).map(s => [s.id, s.version])) }));
+      const roots = sources.filter(a => !a.rootAttachmentId || a.rootAttachmentId === a.id).map(root => ({ id: root.id, label: root.label, enrollmentId: root.classEnrollmentId, markingAttemptId: root.markingAttemptId, pageCount: sources.filter(s => s.id === root.id || s.rootAttachmentId === root.id).reduce((n, s) => n + s.pageCount, 0) }));
+      check(); return { roots, targets, rubrics };
+    });
+  }
+  async groupedAttachment(assessmentId: string, rootId: string, actor: LocalWriteActor) {
+    const captured = captureLocalWriteActor(actor);
+    return this.db.transaction('r', this.tables(), async () => {
+      const check = await guardLocalWriteIdentity(this.db, captured); await this.scope(assessmentId, captured);
+      const root = await this.db.captureAttachments.get(rootId);
+      if (!root || root.createdBy !== captured.userId || root.assessmentId !== assessmentId) throw new Error('Capture submission unavailable.');
+      const sources = await this.db.captureAttachments.where('assessmentId').equals(assessmentId).filter(a => a.createdBy === captured.userId && (a.id === root.id || a.rootAttachmentId === root.id)).toArray();
+      sources.sort((a, b) => (a.rootSequence ?? 0) - (b.rootSequence ?? 0));
+      check(); return { ...root, pages: sources.flatMap(s => s.pages) };
+    });
+  }
   async reconcile(assessmentId: string, input: ParsedCapturePackage, actor: LocalWriteActor): Promise<CaptureImportReceipt[]> {
     const captured = captureLocalWriteActor(actor);
     const pkg = structuredClone(input);
@@ -101,7 +130,7 @@ export class CaptureAttachmentService {
     captureLocalWriteActor(captured);
     return matches;
   }
-  async confirm(assessmentId: string, input: ParsedCapturePackage, submissionId: string, enrollmentId: string, actor: LocalWriteActor): Promise<CaptureImportReceipt> {
+  async confirm(assessmentId: string, input: ParsedCapturePackage, submissionId: string, enrollmentId: string, actor: LocalWriteActor, append?: CaptureAppendTarget): Promise<CaptureImportReceipt> {
     const captured = captureLocalWriteActor(actor);
     // Snapshot mutable caller data before awaiting hashes; no TOCTOU from UI edits.
     const pkg: ParsedCapturePackage = { manifest: structuredClone(input.manifest), submissions: structuredClone(input.submissions.filter(s => s.id === submissionId)) };
@@ -118,14 +147,33 @@ export class CaptureAttachmentService {
         if (previous.contentHash !== contentHash) throw new Error('This package and page-set ID already has different content. It cannot be overwritten.');
         if (previous.classEnrollmentId !== enrollmentId || previous.studentId !== student.id) throw new Error('This page set was already matched to a different student.');
         if (!await this.db.captureAttachments.get(previous.attachmentId)) throw new Error('The saved attachment is missing; restore a complete backup.');
+        const existing = await this.db.captureAttachments.get(previous.attachmentId);
+        if ((existing?.rootAttachmentId ?? existing?.id) !== (append?.rootAttachmentId ?? existing?.id)) throw new Error('This page set was already saved with a different append destination.');
         check(); return previous;
       }
       const createdAt = new Date().toISOString();
       const common = { createdBy: captured.userId, assessmentId, classSectionId: assessment.classSectionId, classEnrollmentId: enrollmentId, studentId: student.id, packageId: pkg.manifest.packageId, submissionId, contentHash, createdAt };
       const attachment: CaptureAttachment = { ...common, id: crypto.randomUUID(), label: expected.label, manifest: pkg.manifest, pages };
       const receipt: CaptureImportReceipt = { ...common, id: crypto.randomUUID(), attachmentId: attachment.id };
+      if (append) {
+        const period = await this.db.reportingPeriods.get(assessment.reportingPeriodId);
+        if (assessment.isLocked || !period || period.isClosed || period.deletedAt !== null) throw new Error('Locked assignments or closed reporting periods cannot receive late pages.');
+        const root = await this.db.captureAttachments.get(append.rootAttachmentId);
+        if (!root || (root.rootAttachmentId && root.rootAttachmentId !== root.id) || root.createdBy !== captured.userId || root.assessmentId !== assessmentId || root.classEnrollmentId !== enrollmentId) throw new Error('Choose the original saved submission for this exact student and assignment.');
+        const grouped = await this.db.captureAttachments.where('assessmentId').equals(assessmentId).filter(a => a.id === root.id || a.rootAttachmentId === root.id).toArray();
+        const aggregate = [...grouped.flatMap(s => s.pages), ...attachment.pages];
+        if (new Set(aggregate.map(p => p.metadata.id)).size !== aggregate.length) throw new Error('Late pages reuse an original page ID already in this submission. Export a new page set.');
+        if (aggregate.length > MARKING_LIMITS.imagePages || aggregate.reduce((n, p) => n + p.metadata.byteLength, 0) > MARKING_LIMITS.imageBatchBytes) throw new Error('A grouped submission supports at most 10 pages and 32 MiB of original images. Nothing from this append was saved.');
+        attachment.rootAttachmentId = root.id; attachment.rootSequence = grouped.length;
+        if (root.markingAttemptId) {
+          attachment.markingAttemptId = root.markingAttemptId;
+
+        }
+        await this.db.captureAttachments.update(root.id, { rootAttachmentId: root.id, rootSequence: 0 });
+      }
       await this.db.captureAttachments.add(attachment);
       await this.db.captureImportReceipts.add(receipt);
+      if (append && attachment.markingAttemptId) await new MarkingService(this.db).appendCaptureSource(append.rootAttachmentId, attachment.id, append.expectedAttemptVersion!, append.sessionVersions ?? {}, { userId: captured.userId, deviceId: captured.deviceId, epoch: captured.identityEpoch! });
       await assertCaptureBackupCapacity(this.db, this.backupCapacityBytes);
       check();
       return receipt;

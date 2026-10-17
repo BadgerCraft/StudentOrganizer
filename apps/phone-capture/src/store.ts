@@ -2,16 +2,16 @@ import Dexie, { type Table } from 'dexie';
 import { capturePagePath, captureSha256, encodeCapturePackage, type CaptureEdits, type CaptureManifest } from '../../../shared/capturePackage';
 export interface Page { id: string; label: string; originalName: string; mime: 'image/jpeg'|'image/png'; bytes: Uint8Array; edits: CaptureEdits; }
 export interface Group { id: string; label: string; pages: Page[]; }
-export interface Batch { id: string; captureId: string; assignmentId: string; classId: string; assignment: string; pages: Page[]; groups: Group[]; removed: Page[]; draftGroupId: string; editingGroupId?: string; draftLabel: string; stage: 'capture'|'preview'; completed: boolean; revision: number; }
+export interface Batch { id: string; captureId: string; assignmentId: string; parentBatchId?: string; classId: string; assignment: string; pages: Page[]; groups: Group[]; removed: Page[]; draftGroupId: string; editingGroupId?: string; draftLabel: string; stage: 'capture'|'preview'; completed: boolean; revision: number; }
 export class CaptureDB extends Dexie {
   batches!: Table<Batch, string>;
   constructor(name = 'studentorganizer-phone-capture-v1') { super(name); this.version(1).stores({ batches: 'id' }); }
 }
-export type BatchSummary = Pick<Batch, 'id' | 'assignment' | 'completed'>;
+export type BatchSummary = Pick<Batch, 'id' | 'assignmentId' | 'assignment' | 'completed' | 'parentBatchId'>;
 /** Cursor through retained assignments: never hold every archive's photos in a list. */
 export async function listBatchSummaries(db: CaptureDB): Promise<BatchSummary[]> {
   const summaries: BatchSummary[] = [];
-  await db.batches.each(batch => { summaries.push({ id: batch.id, assignment: batch.assignment, completed: batch.completed === true }); });
+  await db.batches.each(batch => { summaries.push({ id: batch.id, assignmentId: batch.assignmentId ?? batch.captureId, assignment: batch.assignment, completed: batch.completed === true, ...(batch.parentBatchId ? { parentBatchId: batch.parentBatchId } : {}) }); });
   return summaries;
 }
 /** Check the saved revision before native deletion or the IndexedDB mutation. */
@@ -36,7 +36,28 @@ export async function save(db: CaptureDB, batch: Batch): Promise<Batch> {
     const previous = await db.batches.get(batch.id);
     if ((previous?.revision ?? 0) !== batch.revision) throw new Error('This batch changed in another tab. Reload before editing.');
     if (previous?.completed) throw new Error('Completed assignments are frozen.');
+    if (previous && (previous.captureId !== batch.captureId || (previous.assignmentId ?? previous.captureId) !== batch.assignmentId || previous.parentBatchId !== batch.parentBatchId))
+      throw new Error('Saved assignment and package identities cannot change.');
+    if (previous?.parentBatchId && previous.assignment !== batch.assignment) throw new Error('Late work keeps the original assignment name.');
     const next = { ...batch, revision: batch.revision + 1 }; await db.batches.put(next); return next;
+  });
+}
+/** A completed package remains immutable. Concurrent/repeated requests reuse its
+ * assignment's open supplement, with new storage/package and student identities. */
+export async function openLateWork(db: CaptureDB, expected: Batch): Promise<Batch> {
+  return db.transaction('rw', db.batches, async () => {
+    const raw = await db.batches.get(expected.id);
+    if (!raw || raw.captureId !== expected.captureId || raw.revision !== expected.revision)
+      throw new Error('This batch changed in another tab. Reload before adding late work.');
+    const source = recoverBatch(raw);
+    if (!source.completed) throw new Error('Complete this package before adding late work.');
+    const summaries = await listBatchSummaries(db);
+    const existing = summaries.find(row => row.assignmentId === source.assignmentId && !!row.parentBatchId && !row.completed);
+    if (existing) return recoverBatch((await db.batches.get(existing.id))!);
+    const supplemental: Batch = { ...emptyBatch(), assignmentId: source.assignmentId,
+      assignment: source.assignment, classId: source.classId, parentBatchId: source.id, revision: 1 };
+    await db.batches.add(supplemental);
+    return supplemental;
   });
 }
 export async function readPhoto(file: File): Promise<Page> {

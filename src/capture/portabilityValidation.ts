@@ -1,3 +1,4 @@
+import { MARKING_LIMITS } from '../marking/types';
 import { validateCaptureManifest, captureSha256 } from '../../shared/capturePackage';
 import { base64ToBytes, captureContentHash } from './attachmentService';
 import { inspectMarkingImage, validateMarkingImageBytes } from '../marking/importImages';
@@ -42,6 +43,53 @@ export function validateCaptureBackup(tables: Tables): void {
     const key = JSON.stringify([r.createdBy, r.assessmentId, r.packageId, r.submissionId]);
     if (keys.has(key) || receiptsByAttachment.has(r.attachmentId)) fail();
     keys.add(key); receiptsByAttachment.add(r.attachmentId);
+  }
+  const grouped = new Map<string, CaptureAttachment[]>();
+  for (const a of tables.captureAttachments as CaptureAttachment[]) {
+    if (a.rootAttachmentId === undefined) {
+      if (a.markingAttemptId !== undefined || a.rootSequence !== undefined) fail();
+    } else {
+      const root = ref('captureAttachments', a.rootAttachmentId) as CaptureAttachment;
+      if (root.rootAttachmentId !== root.id || root.rootSequence !== 0 || !Number.isSafeInteger(a.rootSequence) || a.rootSequence! < 0) fail();
+      for (const field of ['assessmentId', 'classSectionId', 'classEnrollmentId', 'studentId', 'createdBy', 'markingAttemptId'] as const) if (a[field] !== root[field]) fail();
+      grouped.set(root.id, [...(grouped.get(root.id) ?? []), a]);
+    }
+    if (a.markingAttemptId) {
+      const attempt = ref('markingAttempts', a.markingAttemptId);
+      for (const field of ['assessmentId', 'classSectionId', 'classEnrollmentId', 'createdBy'] as const) if (a[field] !== attempt[field]) fail();
+      if (!attempt.captureSources?.some((source: any) => source.attachmentId === a.id)) fail();
+    }
+  }
+  for (const sources of grouped.values()) {
+    const pages = sources.flatMap(s => s.pages);
+    if (new Set(pages.map(p => p.metadata.id)).size !== pages.length) fail();
+    if (pages.length > MARKING_LIMITS.imagePages || pages.reduce((n, p) => n + p.metadata.byteLength, 0) > MARKING_LIMITS.imageBatchBytes) fail();
+    const orders = sources.map(s => s.rootSequence!).sort((a, b) => a - b);
+    if (orders.some((order, index) => order !== index)) fail();
+  }
+  for (const attempt of tables.markingAttempts) if (attempt.captureSources !== undefined) {
+    if (!Array.isArray(attempt.captureSources) || !attempt.captureSources.length) fail();
+    const seenSources = new Set<string>(), seenPages = new Set<string>();
+    let rootId: string | undefined;
+    let previousIndex = -1;
+    for (const binding of attempt.captureSources) {
+      const source = ref('captureAttachments', binding.attachmentId) as CaptureAttachment;
+      if (seenSources.has(source.id) || source.markingAttemptId !== attempt.id || !source.rootAttachmentId || (rootId && rootId !== source.rootAttachmentId) || !Array.isArray(binding.pageIds) || binding.pageIds.length !== source.pages.length) fail();
+      rootId = source.rootAttachmentId; seenSources.add(source.id);
+      if (source.rootSequence !== seenSources.size - 1) fail();
+      for (let index = 0; index < binding.pageIds.length; index++) {
+        const id = binding.pageIds[index];
+        if (typeof id !== 'string' || !id || seenPages.has(id)) fail(); seenPages.add(id);
+        // Explicit archive removes marking originals; provenance remains historical
+        // while independently retained capture originals keep their own receipts.
+        if (attempt.archivedAt && !attempt.keepStudentWork) continue;
+        const pageIndex = attempt.imagePages?.findIndex((page: any) => page.id === id) ?? -1;
+        const page = attempt.imagePages?.[pageIndex], original = source.pages[index];
+        if (pageIndex !== previousIndex + 1 || !page || page.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
+        previousIndex = pageIndex;
+      }
+    }
+    if (!(attempt.archivedAt && !attempt.keepStudentWork) && seenPages.size !== attempt.imagePages?.length) fail();
   }
   if (receiptsByAttachment.size !== tables.captureAttachments.length) fail();
 }

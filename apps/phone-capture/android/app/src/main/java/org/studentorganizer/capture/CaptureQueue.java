@@ -19,10 +19,29 @@ final class CaptureQueue extends SQLiteOpenHelper implements QueueStore {
     interface DirectorySync { void sync(File directory) throws Exception; }
     private final DirectorySync directorySync;
     CaptureQueue(Context context) { this(context, directory -> {java.io.FileDescriptor fd=android.system.Os.open(directory.getAbsolutePath(),android.system.OsConstants.O_RDONLY,0);try {android.system.Os.fsync(fd);}finally{android.system.Os.close(fd);}}); }
-    CaptureQueue(Context context,DirectorySync directorySync) { super(context, "capture-transfer.db", null, 1); this.directorySync=directorySync; directory = new File(context.getFilesDir(), "capture-queue"); if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot open local queue"); }
+    CaptureQueue(Context context,DirectorySync directorySync) { super(context, "capture-transfer.db", null, 2); this.directorySync=directorySync; directory = new File(context.getFilesDir(), "capture-queue"); if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot open local queue"); }
     @Override public void onConfigure(SQLiteDatabase db) { db.execSQL("PRAGMA synchronous=FULL"); }
-    public void onCreate(SQLiteDatabase db) { db.execSQL("CREATE TABLE queue(id TEXT PRIMARY KEY, capture TEXT NOT NULL, revision INTEGER NOT NULL, digest TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(capture,revision))"); }
-    public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) { throw new IllegalStateException("No migration defined"); }
+    public void onCreate(SQLiteDatabase db) { db.execSQL("CREATE TABLE queue(id TEXT PRIMARY KEY, capture TEXT NOT NULL, revision INTEGER NOT NULL, digest TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(capture,revision))"); createFolders(db); }
+    private void createFolders(SQLiteDatabase db){db.execSQL("CREATE TABLE assignment_folders(account TEXT NOT NULL, assignment TEXT NOT NULL, folder TEXT NOT NULL, parent TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(account,assignment))");}
+    public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
+        if(oldVersion!=1||newVersion!=2)throw new IllegalStateException("No migration defined");
+        createFolders(db);
+        // Preserve the earliest recorded destination without modifying existing uploads or files.
+        try(Cursor rows=db.rawQuery("SELECT record FROM queue ORDER BY rowid",null)){while(rows.moveToNext()){
+            UploadRecord r=decode(rows.getString(0));if(r.accountId==null||r.assignmentId==null||r.folderId==null||r.folderParentId==null||r.assignmentName==null)continue;
+            db.insertWithOnConflict("assignment_folders",null,folderValues(r.accountId,r.assignmentId,new AssignmentFolder(r.folderId,r.folderParentId,r.assignmentName)),SQLiteDatabase.CONFLICT_IGNORE);
+        }}
+    }
+    private static ContentValues folderValues(String account,String assignment,AssignmentFolder folder){ContentValues v=new ContentValues();v.put("account",account);v.put("assignment",assignment);v.put("folder",folder.id);v.put("parent",folder.parentId);v.put("name",folder.name);return v;}
+    private AssignmentFolder readFolder(SQLiteDatabase db,String account,String assignment){try(Cursor rows=db.rawQuery("SELECT folder,parent,name FROM assignment_folders WHERE account=? AND assignment=?",new String[]{account,assignment})){return rows.moveToFirst()?new AssignmentFolder(rows.getString(0),rows.getString(1),rows.getString(2)):null;}}
+    public AssignmentFolder assignmentFolder(String account,String assignment)throws IOException{try{return readFolder(getReadableDatabase(),account,assignment);}catch(RuntimeException e){throw new IOException("Cannot read assignment destination",e);}}
+    public AssignmentFolder reserveAssignmentFolder(String account,String assignment,AssignmentFolder proposed)throws IOException{
+        if(account==null||account.isEmpty()||assignment==null||!assignment.matches(ID)||proposed==null||proposed.id==null||!proposed.id.matches("[A-Za-z0-9_-]+")||proposed.parentId==null||!proposed.parentId.matches("[A-Za-z0-9_-]+")||proposed.name==null||!label(proposed.name))throw new IOException("Invalid folder reservation");
+        try{SQLiteDatabase db=getWritableDatabase();AssignmentFolder winner;db.beginTransaction();try{
+            db.insertWithOnConflict("assignment_folders",null,folderValues(account,assignment,proposed),SQLiteDatabase.CONFLICT_IGNORE);
+            winner=readFolder(db,account,assignment);if(winner==null)throw new IOException("Folder reservation was not saved");db.setTransactionSuccessful();
+        }finally{db.endTransaction();}return winner;}catch(RuntimeException e){throw new IOException("Cannot persist assignment destination",e);}
+    }
     static String digest(byte[] bytes, String algorithm) throws Exception { byte[] result=MessageDigest.getInstance(algorithm).digest(bytes); StringBuilder out=new StringBuilder(); for(byte b:result) out.append(String.format(Locale.ROOT,"%02x",b&255)); return out.toString(); }
     static final String ID="[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}";
     static void fields(JSONObject object,String... names) throws IOException {
