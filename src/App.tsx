@@ -7,6 +7,7 @@ import { BugReportModal } from './components/BugReportModal';
 import { DashboardView } from './components/DashboardView';
 import { SeatingChartView } from './components/SeatingChartView';
 import { MarkingWorkspace } from './components/MarkingWorkspace';
+import { CaptureMatchingWorkspace } from './capture/CaptureMatchingWorkspace';
 import { MarkbookView } from './components/MarkbookView';
 import { ParticipationDock } from './components/ParticipationDock';
 import { StudentProfileModal } from './components/StudentProfileModal';
@@ -66,12 +67,13 @@ export function App() {
   const switchingFromTeacherIdRef = useRef<UUID | null>(null);
   const isSelectionCommittedRef = useRef<boolean>(false);
   const [isTeacherSelectorOpen, setIsTeacherSelectorOpen] = useState(false);
+  const [captureTarget, setCaptureTarget] = useState<string | null>(null);
   const [markingTarget, setMarkingTarget] = useState<{assessmentId:string; enrollmentId?:string} | null>(null);
   useEffect(() => {
     const workspace = document.getElementById('app-workspace');
-    workspace?.toggleAttribute('inert', !!markingTarget || isTeacherSelectorOpen);
+    workspace?.toggleAttribute('inert', !!markingTarget || !!captureTarget || isTeacherSelectorOpen);
     return () => workspace?.removeAttribute('inert');
-  }, [markingTarget, isTeacherSelectorOpen]);
+  }, [markingTarget, captureTarget, isTeacherSelectorOpen]);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
@@ -135,6 +137,7 @@ export function App() {
   const handleStartSwitchTeacher = () => {
     if (!confirmParticipationDiscard()) return;
     setMarkingTarget(null);
+    setCaptureTarget(null);
     // Clear old identity immediately to prevent pending/stale forms from submitting under old teacher ID
     const prevTeacherId = appIdentity?.userId || currentUser?.id || null;
     switchingFromTeacherIdRef.current = prevTeacherId;
@@ -451,7 +454,7 @@ export function App() {
       <div
         id="app-workspace"
         className={`flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
-        aria-hidden={isTeacherSelectorOpen || markingTarget ? 'true' : undefined}
+        aria-hidden={isTeacherSelectorOpen || markingTarget || captureTarget ? 'true' : undefined}
       >
         {/* Persistent Navigation Header */}
         <Header
@@ -609,6 +612,7 @@ export function App() {
           <AssessmentHubView
             key={`${activeClassObj.section.id}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             onOpenMarking={assessmentId => setMarkingTarget({assessmentId})}
+            onUploadPictures={assessmentId => setCaptureTarget(assessmentId)}
             userId={appIdentity?.userId}
             classSection={activeClassObj.section}
             assessments={activeAssessments}
@@ -719,6 +723,10 @@ export function App() {
 
       {markingTarget && appIdentity && <div className="fixed inset-0 z-40 overflow-auto bg-slate-50" role="dialog" aria-modal="true" aria-label="Assessment marking">
         <MarkingWorkspace key={`${appIdentity.userId}:${markingTarget.assessmentId}`} assessmentId={markingTarget.assessmentId} initialEnrollmentId={markingTarget.enrollmentId} userId={appIdentity.userId} onClose={() => setMarkingTarget(null)} onReturnToMarkbook={() => { setMarkingTarget(null); handleViewChange('markbook'); }} onSwitchTeacher={handleStartSwitchTeacher} onRefresh={() => {}} />
+      </div>}
+
+      {captureTarget && appIdentity && <div className="fixed inset-0 z-40 overflow-auto bg-slate-50" role="dialog" aria-modal="true" aria-label="Match picture assignment">
+        <CaptureMatchingWorkspace key={`${appIdentity.userId}:${captureTarget}`} assessmentId={captureTarget} userId={appIdentity.userId} onClose={() => setCaptureTarget(null)} onSwitchTeacher={handleStartSwitchTeacher} />
       </div>}
 
       {/* Teacher Selector Modal */}

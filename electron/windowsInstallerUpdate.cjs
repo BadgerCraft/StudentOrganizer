@@ -7,13 +7,13 @@ const { execFile } = require('node:child_process');
 const { spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const { isNewer, version } = require('./manualUpdater.cjs');
-const TABLES = Object.freeze(['organizations', 'users', 'organizationMemberships', 'classSectionStaff', 'devices', 'userPreferences', 'academicYears', 'terms', 'reportingPeriods', 'courses', 'classSections', 'units', 'classSessions', 'students', 'classEnrollments', 'attendanceRecords', 'seatingLayouts', 'seatPositions', 'markScaleFamilies', 'markScaleVersions', 'markScaleEntries', 'gradingPolicies', 'gradeOverrides', 'gradeSnapshots', 'assessments', 'assessmentCategories', 'studentAssessments', 'categoryResults', 'participationEventTypes', 'participationEvents', 'participationDailySummaries', 'studentNotes', 'auditEntries', 'syncMutations', 'syncCursors', 'markingRubrics', 'markingAttempts', 'markingSessions', 'markingCommits']);
+const TABLES = Object.freeze(['organizations', 'users', 'organizationMemberships', 'classSectionStaff', 'devices', 'userPreferences', 'academicYears', 'terms', 'reportingPeriods', 'courses', 'classSections', 'units', 'classSessions', 'students', 'classEnrollments', 'attendanceRecords', 'seatingLayouts', 'seatPositions', 'markScaleFamilies', 'markScaleVersions', 'markScaleEntries', 'gradingPolicies', 'gradeOverrides', 'gradeSnapshots', 'assessments', 'assessmentCategories', 'studentAssessments', 'categoryResults', 'participationEventTypes', 'participationEvents', 'participationDailySummaries', 'studentNotes', 'auditEntries', 'syncMutations', 'syncCursors', 'markingRubrics', 'markingAttempts', 'markingSessions', 'markingCommits', 'captureAttachments', 'captureImportReceipts']);
 const MAX_BACKUP = 256 * 1024 * 1024;
 function validateBackup(json) {
   if (typeof json !== 'string' || Buffer.byteLength(json) > MAX_BACKUP) throw new Error('A complete local backup is required (maximum 256 MB).');
   let data;
   try { data = JSON.parse(json); } catch { throw new Error('The local backup is not valid JSON.'); }
-  if (!data || data.schemaVersion !== 4 || data.version !== 2 || !Number.isFinite(Date.parse(data.exportedAt)) ||
+  if (!data || data.schemaVersion !== 5 || data.version !== 2 || !Number.isFinite(Date.parse(data.exportedAt)) ||
       !data.tables || Array.isArray(data.tables) || Object.keys(data.tables).length !== TABLES.length) throw new Error('The local backup must include the complete current database.');
   for (const name of TABLES) {
     if (!Array.isArray(data.tables[name])) throw new Error('The local backup is missing a database table.');

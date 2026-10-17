@@ -20,14 +20,14 @@ public final class TransferEngine {
         if (r == null) throw new IOException("Missing queue item");
         if (r.state == State.COMPLETE) return r.state;
         try {
-            if (blank(r.localPath) || blank(r.accountId) || blank(r.folderId) || blank(r.folderParentId) || blank(r.name)
+            if (blank(r.localPath) || blank(r.accountId) || blank(r.assignmentId) || blank(r.assignmentName) || blank(r.name)
                 || r.size<=0 || r.md5==null || !r.md5.matches("[A-Fa-f0-9]{32}") || r.sha256==null || !r.sha256.matches("[A-Fa-f0-9]{64}"))
                 throw new Unsafe("Queue snapshot is incomplete; original retained");
             guard(r);
             if (!Objects.equals(r.accountId, drive.identity())) return finish(r,State.BLOCKED,"Google account changed; reconnect the original account");
             guard(r);
-            if (!Objects.equals(r.folderParentId, drive.rootId())) return finish(r,State.BLOCKED,"Destination is no longer in My Drive root");
             verifyLocal(r);
+            ensureFolder(r);
             checkFolder(r);
             if (r.fileId == null || r.fileId.isEmpty()) {
                 guard(r); r.fileId=drive.generateId();
@@ -79,9 +79,26 @@ public final class TransferEngine {
         DriveGateway.Permission p=m.permissions.get(0);
         return !p.deleted && "user".equals(p.type) && "owner".equals(p.role) && Objects.equals(accountId,p.id);
     }
+    /** Folder IDs are committed before creation; retries never search or choose by name. */
+    private void ensureFolder(UploadRecord r) throws IOException {
+        guard(r); String root=drive.rootId();
+        if (blank(r.folderId)) {
+            guard(r); r.folderId=drive.generateId(); r.folderParentId=root;
+            if (blank(r.folderId)) throw new IOException("No folder ID returned");
+            store.save(r);
+        }
+        if (!Objects.equals(r.folderParentId,root)) throw new Unsafe("Destination is no longer in My Drive root");
+        guard(r);
+        if (drive.metadata(r.folderId)==null) {
+            guard(r);
+            try { drive.createFolder(r.folderId,r.assignmentName); }
+            catch (DriveGateway.Failure failure) { if(failure.status!=409)throw failure; }
+        }
+        checkFolder(r);
+    }
     private void checkFolder(UploadRecord r) throws IOException {
         guard(r); DriveGateway.Metadata f=drive.metadata(r.folderId);
-        if (!privateOwned(f,r.accountId) || !"application/vnd.google-apps.folder".equals(f.mimeType)
+        if (!privateOwned(f,r.accountId) || !Objects.equals(f.id,r.folderId) || !"application/vnd.google-apps.folder".equals(f.mimeType)
             || f.parents==null || f.parents.size()!=1 || !f.parents.contains(r.folderParentId))
             throw new Unsafe("Destination privacy or location changed; transfer paused");
     }

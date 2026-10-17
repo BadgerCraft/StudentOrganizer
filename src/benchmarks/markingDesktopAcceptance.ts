@@ -252,7 +252,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   const backupPath = path.join(artifactsDir, 'markinator-backup.json');
   await download(() => page.getByTestId('create-backup-btn').click(), backupPath);
   const backup = JSON.parse(await fs.readFile(backupPath, 'utf8'));
-  assert.equal(backup.schemaVersion, 4);
+  assert.equal(backup.schemaVersion, 5);
   for (const [table, rows] of Object.entries(snapshots)) {
     const ids = new Set(rows.map(row => row.id));
     assert.deepEqual(backup.tables[table].filter((row: any) => ids.has(row.id)).sort((a: any, b: any) => a.id.localeCompare(b.id)), rows, `Full backup must preserve ${table}`);

@@ -1,3 +1,4 @@
+import type { CaptureAttachment, CaptureImportReceipt } from '../capture/types';
 import Dexie, { type Table } from 'dexie';
 import type { MarkingRubric, MarkingAttempt, MarkingSession, MarkingCommit } from '../marking/types';
 import type {
@@ -85,6 +86,9 @@ export class OntarioTeacherDB extends Dexie {
   markingAttempts!: Table<MarkingAttempt, string>;
   markingSessions!: Table<MarkingSession, string>;
   markingCommits!: Table<MarkingCommit, string>;
+
+  captureAttachments!: Table<CaptureAttachment, string>;
+  captureImportReceipts!: Table<CaptureImportReceipt, string>;
 
   constructor(databaseName = 'OntarioTeacherAssessmentDB') {
     super(databaseName);
@@ -373,6 +377,10 @@ export class OntarioTeacherDB extends Dexie {
       markingAttempts: 'id, assessmentId, classSectionId, classEnrollmentId, rubricId, previousAttemptId, createdBy, deletedAt',
       markingSessions: 'id, assessmentId, attemptId, rubricId, createdBy, status, &[attemptId+createdBy+revision], deletedAt',
       markingCommits: 'id, assessmentId, &sessionId, attemptId, studentAssessmentId, createdBy, deletedAt'
+    });
+    this.version(5).stores({
+      captureAttachments: 'id, assessmentId, createdBy, classEnrollmentId',
+      captureImportReceipts: 'id, assessmentId, attachmentId, &[createdBy+assessmentId+packageId+submissionId]'
     });
   }
 }

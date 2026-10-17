@@ -333,7 +333,7 @@ async function runLegacyBootstrap() {
     const backupPath = path.join(evidenceDir, 'legacy-complete-backup.json');
     await download(running.app, () => running!.page.getByTestId('create-backup-btn').click(), backupPath);
     const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
-    assert.equal(backup.schemaVersion, 4);
+    assert.equal(backup.schemaVersion, 5);
     assert.deepEqual(Object.keys(backup.tables).sort(), Object.keys(before).sort());
     for (const [table, rows] of Object.entries(before)) {
       assert.deepEqual(backup.tables[table].sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))), rows, `Actual legacy full backup must preserve ${table}`);
@@ -522,7 +522,7 @@ async function runInstallRecovery() {
     assert.ok(backups.length, 'The verified safety backup must survive the post-launch installer failure');
     safetyBackup = path.join(backupDirectory, backups.at(-1)!);
     const backup = JSON.parse(fs.readFileSync(safetyBackup, 'utf8'));
-    assert.equal(backup.schemaVersion, 4);
+    assert.equal(backup.schemaVersion, 5);
     for (const [table, rows] of Object.entries(before)) {
       assert.deepEqual((backup.tables[table] || []).sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))), rows,
         `Safety backup must preserve ${table} before the failed replacement`);

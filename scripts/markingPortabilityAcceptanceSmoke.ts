@@ -214,7 +214,7 @@ try {
   const backupDownload = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   const downloadedBackup = await backupDownload; await downloadedBackup.saveAs(`${artifacts}-backup.json`);
   const backup = JSON.parse(await readFile(`${artifacts}-backup.json`, 'utf8'));
-  assert.equal(backup.schemaVersion, 4); assert.equal(backup.tables.markingSessions.length, 2);
+  assert.equal(backup.schemaVersion, 5); assert.equal(backup.tables.markingSessions.length, 2);
   assert.equal(Buffer.from(backup.tables.markingAttempts[0].documents[0].original.base64, 'base64').toString('utf8'), originalText);
 
   const restoredContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true }); await guard(restoredContext);
