@@ -55,6 +55,20 @@ final class CaptureQueue extends SQLiteOpenHelper implements QueueStore {
     }
     public synchronized UploadRecord load(String id) {try(Cursor c=getReadableDatabase().rawQuery("SELECT record FROM queue WHERE id=?",new String[]{id})){if(!c.moveToFirst()) throw new IllegalArgumentException("Unknown queue item");return decode(c.getString(0));}}
     public synchronized void save(UploadRecord r) {ContentValues values=new ContentValues();values.put("record",encode(r).toString());if(getWritableDatabase().update("queue",values,"id=?",new String[]{r.queueId})!=1) throw new IllegalStateException("Queue item missing");}
+    /** Reload under the database write lock; never write a UI snapshot over worker IDs. */
+    void retryForAccount(String account){
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
+        try(Cursor rows=db.rawQuery("SELECT record FROM queue ORDER BY rowid",null)){
+            while(rows.moveToNext()){
+                UploadRecord current=decode(rows.getString(0));
+                if(current.state==State.COMPLETE||!account.equals(current.accountId))continue;
+                current.state=State.QUEUED;
+                ContentValues values=new ContentValues();values.put("record",encode(current).toString());
+                if(db.update("queue",values,"id=?",new String[]{current.queueId})!=1)throw new IllegalStateException("Queue item missing");
+            }
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
     List<UploadRecord> all(){List<UploadRecord> records=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT record FROM queue ORDER BY rowid",null)){while(c.moveToNext())records.add(decode(c.getString(0)));}return records;}
     private static JSONObject encode(UploadRecord r) {try{JSONObject j=new JSONObject();for(var field:UploadRecord.class.getFields()) {Object value=field.get(r); if(value!=null)j.put(field.getName(),value instanceof Enum?value.toString():value);}return j;}catch(Exception e){throw new IllegalStateException(e);}}
     private static UploadRecord decode(String text){try{JSONObject j=new JSONObject(text);UploadRecord r=new UploadRecord();for(var field:UploadRecord.class.getFields()){if(!j.has(field.getName()))continue;if(field.getType()==String.class)field.set(r,j.getString(field.getName()));else if(field.getType()==long.class)field.setLong(r,j.getLong(field.getName()));else if(field.getType()==State.class)field.set(r,State.valueOf(j.getString(field.getName())));}return r;}catch(Exception e){throw new IllegalStateException("Invalid queue metadata",e);}}
