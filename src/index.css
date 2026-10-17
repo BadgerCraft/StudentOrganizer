@@ -65,3 +65,15 @@ button, select, summary, [role="button"] {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
 }
+
+/* Keep the viewed work stable while feedback is edited in its own column. */
+.marking-session-layout { display: grid; gap: 1rem; align-items: start; }
+.marking-work-pane, .marking-review-pane { min-width: 0; }
+.image-markup-layout { padding: .75rem; }
+@media (min-width: 1024px) {
+  .marking-session-layout { grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr); }
+  .marking-work-pane, .marking-review-pane { max-height: 76vh; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+}
+
+.marking-session-no-work { grid-template-columns: minmax(0, 1fr); }
+.marking-session-no-work .marking-work-pane { display: none; }

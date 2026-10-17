@@ -116,23 +116,6 @@ try {
     assessments: await records(page, 'studentAssessments'), results: await records(page, 'categoryResults'), commits: await records(page, 'markingCommits')
   };
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
-  await wizard(page).getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
-  await wizard(page).getByRole('button', { name: 'Continue', exact: true }).click();
-  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles({ name: 'Fictional failed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Unsupported fictional input') });
-  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
-  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
-  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
-  await wizard(page).getByRole('radio', { name: 'Paste text', exact: true }).check();
-  let failedOnlyPrompt = '';
-  page.once('dialog', async dialog => { failedOnlyPrompt = dialog.message(); await dialog.dismiss(); });
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
-  assert.match(failedOnlyPrompt, /discard unsaved/);
-  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
-  await page.getByTestId(`open-marking-${assessment.id}`).click();
-  console.log('PASS: failed-only import survives source change and canceled departure; leaving requires explicit discard.');
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
 
   // Build every matrix cell manually. A duplicate column rename must reject the
@@ -188,6 +171,26 @@ try {
   ]);
   console.log('PASS: manually entered complete 2×4 rubric matrix; duplicate achievement label and malformed pasted rubric rejected without descriptor loss; corrected custom labels persist.');
 
+  // The unified entry requires a confirmed rubric before mounting student-work intake.
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await wizard(page).getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
+  await wizard(page).getByRole('button', { name: 'Continue', exact: true }).click();
+  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles({ name: 'Fictional failed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Unsupported fictional input') });
+  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
+  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
+  await wizard(page).getByRole('radio', { name: 'Paste text', exact: true }).check();
+  let failedOnlyPrompt = '';
+  page.once('dialog', async dialog => { failedOnlyPrompt = dialog.message(); await dialog.dismiss(); });
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  assert.match(failedOnlyPrompt, /discard unsaved/);
+  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await page.getByTestId(`open-marking-${assessment.id}`).click();
+  console.log('PASS: failed-only import survives source change and canceled departure; leaving requires explicit discard.');
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+
   const firstFile = txt('Fictional essay.txt', 'Essay passage. Fictional reasoning follows.');
   const secondFile = txt('Fictional notes.txt', 'Notes passage. Fictional planning follows.');
   await addDocumentFiles(page, [firstFile, secondFile]);
@@ -217,6 +220,10 @@ try {
     await selectPassage(page, 0, 13);
     await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
     if (index === 0) {
+      // A single mapped criterion exposes earlier independent evidence only once recorded.
+      // Save and edit this same annotation so both passage and retained-evidence banks are exercised.
+      await page.getByTestId('marking-comment-save').click();
+      await page.getByRole('button', { name: 'Edit feedback', exact: true }).click();
       const textBank = page.locator('section[aria-label="Comment bank"]').first();
       await textBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
       await textBank.getByLabel('Or paste one comment per line', { exact: true }).fill('Original bank draft.');
@@ -229,6 +236,7 @@ try {
       assert.equal(await textBank.getByLabel('Bank comment 1', { exact: true }).inputValue(), 'Revised bank draft.');
       await textBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).click();
       const criterion = page.getByTestId(`marking-criterion-${rubric.criteria[0].id}`);
+      await criterion.locator('summary').filter({ hasText: /^Previous criterion evidence/ }).click();
       await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
       const rubricBank = criterion.locator('section[aria-label="Comment bank"]');
       // The rubric picker is already mounted with the original bank snapshot.
@@ -246,6 +254,7 @@ try {
       await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // close the stale open chooser
       await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // reopening reloads the saved bank
       await textBank.getByRole('button', { name: 'Added by rubric composer.', exact: true }).waitFor();
+      await criterion.locator('summary').filter({ hasText: /^Previous criterion evidence/ }).click();
       await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
       const delayedBank = criterion.locator('section[aria-label="Comment bank"]');
       await delayedBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
@@ -316,7 +325,7 @@ try {
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.level), [levels[1], levels[2]]);
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.text), expectedPassageFeedback, 'saved passage annotations retain both teacher-written and chosen bank feedback');
 
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await addDocumentFiles(page, txt('Fictional revised essay.txt', 'Revised fictional argument, with new reasoning.'));
   await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
   const relationship = wizard(page).getByRole('combobox', { name: /^Submission relationship/ });
@@ -346,7 +355,7 @@ try {
 
   // File-read failure is a browser-file boundary injection. It creates no records
   // and retains the real parser for the good, malformed and unsupported files.
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await page.evaluate(() => {
     const original = File.prototype.arrayBuffer;
     (window as any).restoreMarkingFileRead = () => { File.prototype.arrayBuffer = original; };
@@ -422,7 +431,7 @@ try {
   // Fail the second import's audit write inside its real transaction, after its
   // attempt write. It must roll back while the first import remains committed;
   // retry must create the failed attempt and audit exactly once.
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await addDocumentFiles(page, [
     txt('Fictional retry-first.txt', 'First successful fictional batch item.'),
     txt('Fictional retry-second.txt', 'Second fictional batch item fails once.')
@@ -465,7 +474,7 @@ try {
     assert.equal(importAudits(retriedAudits, filename).length, 1);
   }
   assert.deepEqual(retried.find(row => row.id === grouped.id), grouped);
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await addDocumentFiles(page, txt('Fictional retry-first.txt', 'First successful fictional batch item.'));
   await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
   await confirmImport(page);

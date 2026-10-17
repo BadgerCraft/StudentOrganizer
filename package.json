@@ -34,6 +34,7 @@
     "test:marking:pdf": "tsx scripts/annotatedReportSmoke.ts",
     "test:marking:archive": "tsx scripts/markingArchiveSmoke.ts",
     "test:classroom": "node --import tsx scripts/teacherProfilesSmoke.ts && node --import tsx scripts/classroomUseSmoke.ts && node --import tsx scripts/classroomEvidencePopupSmoke.ts",
+    "test:marking:unified": "node --import tsx scripts/unifiedMarkingSmoke.ts",
     "test:capture:desktop": "node --import tsx scripts/captureDesktopSmoke.ts",
     "test:capture:capacity": "node --import tsx scripts/captureCapacitySmoke.ts",
     "test:capture:late-work": "node --import tsx scripts/captureLateWorkSmoke.ts",

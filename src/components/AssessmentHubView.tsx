@@ -32,7 +32,6 @@ interface AssessmentHubViewProps {
   students: Student[];
   userId?: UUID;
   onOpenMarking?: (assessmentId: string) => void;
-  onUploadPictures?: (assessmentId: string) => void;
   onRefresh: () => void;
 }
 
@@ -45,8 +44,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
   students,
   userId,
   onRefresh,
-  onOpenMarking,
-  onUploadPictures
+  onOpenMarking
 }) => {
   const [actionError, setActionError] = useState<string | null>(null);
   const service = new ClassSettingsService(db);
@@ -237,8 +235,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
 
           return (
             <div key={a.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow transition flex flex-col justify-between">
-              <button type="button" disabled={!userId} onClick={() => onOpenMarking?.(a.id)} className="mb-3 text-blue-700 underline text-left" data-testid={`open-marking-${a.id}`}>Rubric &amp; marking</button>
-              <button type="button" disabled={!userId} onClick={() => onUploadPictures?.(a.id)} className="mb-3 text-blue-700 underline text-left" data-testid={`upload-pictures-${a.id}`}>Upload picture assignment</button>
+              <button type="button" disabled={!userId} onClick={() => onOpenMarking?.(a.id)} className="mb-3 text-blue-700 underline text-left" data-testid={`open-marking-${a.id}`}>Mark assignment</button>
               <div>
                 <div className="flex items-start justify-between">
                   <div>

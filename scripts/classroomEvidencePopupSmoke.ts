@@ -97,13 +97,16 @@ try {
   await reason.getByRole('button', { name: 'Edit comment', exact: true }).click();
   assert.equal(await page.getByTestId('marking-criterion-voice').count(), 0, 'unrelated criterion comments are hidden while composing');
   const editor = page.getByTestId('marking-criterion-feedback-reason');
-  assert.ok(await editor.evaluate(node => node === document.activeElement), 'comment editor receives keyboard focus');
+  assert.equal(await editor.evaluate(node => node === document.activeElement), false, 'opening a comment does not force focus and scroll the viewed work');
+  await editor.focus();
+  assert.ok(await editor.evaluate(node => node === document.activeElement), 'comment editor remains keyboard accessible');
   await editor.fill('Edited focused feedback');
   await page.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
   assert.match(await page.getByTestId('marking-criterion-voice').innerText(), /Unrelated recorded feedback/);
   assert.match(await reason.innerText(), /Edited focused feedback/);
   await reason.getByRole('button', { name: '4+(high)', exact: true }).click();
   assert.match(await reason.innerText(), /Selected level: 4\+\(high\)/);
+  await reason.locator('summary').filter({ hasText: /^Other rubric labels$/ }).click();
   await reason.getByTestId('marking-criterion-level-reason').selectOption('Legacy secure');
   const rubricState = JSON.parse(await page.locator('#criterion-state').innerText());
   assert.equal(rubricState[0].level, 'Legacy secure'); assert.equal(rubricState[1].level, '');

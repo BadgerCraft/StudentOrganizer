@@ -95,3 +95,17 @@ describe('guided work matching and local import recovery', () => {
     expect(groups[1].kind === 'pictures' && groups[1].pages.map(item => item.name)).toEqual(['c.png']);
   });
 });
+
+
+describe('class ZIP staging before explicit student matching', () => {
+  it('retains 40 separate source paths including equal essays, deduplicates re-adding that archive, and enforces per-student limits at review', async () => {
+    const incoming: EvidenceWork[] = await Promise.all(Array.from({ length: 40 }, async (_, i) => ({ kind: 'documents' as const, document: await createPastedDocument('Essay.docx', 'Same fictional response'), sourceKey: `archive-hash:Folder-${i}/Essay.docx`, sourceLabel: `Folder-${i}/Essay.docx` })));
+    const staged = mergeEvidenceWork([], incoming);
+    expect(staged.items).toHaveLength(40);
+    expect(mergeEvidenceWork(staged.items, incoming).items).toHaveLength(40);
+    const ids = incoming.map((_, i) => `student-${i}`);
+    const matches = Object.fromEntries(incoming.map((item, i) => [workId(item), ids[i]]));
+    expect(evidenceImportGroups(staged.items, ids, matches)).toHaveLength(40);
+    expect(() => evidenceImportGroups(staged.items, ['student-one'], Object.fromEntries(incoming.map(item => [workId(item), 'student-one'])))).toThrow();
+  });
+});

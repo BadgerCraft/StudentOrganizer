@@ -1,10 +1,30 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-## October 17 — physical-phone transfer recovery (active)
+## October 17 — marking usability publication
+
+Bounded usability and subsequently approved unified entry are implemented on `codex/classroom-marking-usability-20261017`; implementation `968a59e1dff934508fd2574d86a841757c935928` pushed/read back and [draft PR39](https://github.com/BadgerCraft/StudentOrganizer/pull/39) opened against verified main `b1ff8b5`. Desktop688/phone23 tests, builds, focus/pointer baseline reproduction, touch crop, unified intake/reopen and affected capture browser checks pass. Independent root source/visual review found no blocker. Fresh CI and installed-device acceptance remain pending; no merge/release. Broader app redesign stays deferred for the parent stock-ping reminder, which is not created by this implementation.
+
+
+**PR39 CI repair checkpoint:** Published repair head `dd8faceaac1539f06c6a72e1b21efe40dbb0ce97` passed Mac/shared run `39058450434`, Windows package/install-recovery jobs in `39058450441`, and capture run `39058450507` (root readback). Windows deliberate legacy-bootstrap job `117471158716` alone failed: pinned legacy source shares `marking-rubric-paste` with the current UI but has no paste disclosure. The bounded follow-up separates rubric-disclosure capability from guided import detection and waits for async rubric save. Both current and pinned `b9a8790` production builds now pass complete shared Chromium acceptance, actual backup restore and browser process restart; schema5/41 and schema4/39 expectations and all data assertions remain intact. Strict harness TypeScript/diff checks pass. Root review/publication and fresh legacy-bootstrap CI are next; actual repaired native execution remains unverified. Full evidence/limits are appended to the existing classroom work order. No production/schema/capture change.
+
+## October 17 — physical-phone transfer recovery (historical checkpoint)
 
 PR36 merged at `ea4380f6294932cd234b3f33c044c3174125056b`. Tyler completed private Google setup and owner-local signing; signing key/password remain exclusively with Tyler. Physical-phone feedback ("I tested the remote app did it work? There should probably be a confirm and home page") authorizes a bounded F-008-CAPTURE repair on `codex/capture-transfer-recovery-20261017`: diagnose retained-upload retry, distinguish local completion from verified Drive delivery, add safe Home/saved assignments, and correct system-bar overlap. Screenshot status is RETRY, not upload success. Preserve original packages, stable remote IDs and existing limited Drive grant; fictional automated fixtures only. No merge, release, account change or environment live upload. Review/test evidence is appended to the existing Android work order.
 
 Updated: October 17, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
+
+## October 17 — approved marking usability and unified entry
+
+Current batch: `codex/classroom-marking-usability-20261017` from freshly verified main `b1ff8b531d64d3b2746fabc1b3826fb678a1bb5e` (PR38 merged; QA288 delivered). Tyler requested side-by-side marking, touch crop, Save & Finish, removal of redundant saved-level display and criterion/category duplication. Tyler then approved the unified marking proposal: “But yes, make it so for your suggestion.” Implementation and routine verification/review preparation are authorized; this delegated checkpoint explicitly stops before commit/push for one independent root review. Main merge, release, real data, credentials, deletion and broad app redesign remain excluded.
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-MARK-UX | Implemented: independently scrolling desktop work-left/feedback-right; narrow stacked fallback; interrupted-stroke protection; one official category editor inside each directly mapped single-criterion card; prior independent evidence retained; multiple-criterion overall judgments stay deliberate. | Photo/mode/browser regression PASS; final desktop688/688 tests and build PASS, phone23/23 and build/browser PASS. Root complete-diff/visual review found no blocker; final unified-entry/capture checks PASS. CI repair locally verified, including pending intake preservation; root review/publication and fresh native CI next. No automatic averaging/conversion. |
+| F-008-CAPTURE-CROP | Implemented: visible touch/mouse corner crop handles, keyboard arrow alternative, retained original bytes and crop/rotation metadata; Save & Finish wording. | Final production phone browser mouse/touch/keyboard/reload/export checks PASS, including unchanged original bytes;23/23 tests and build PASS. Physical Android acceptance remains separate. |
+| TUV-MARK-ENTRY | Approved and implemented: one Mark assignment entry → mode → confirmed rubric/KTCA → saved phone ZIP sets, new phone ZIP, individual documents or DOCX ZIP → explicit matching → marking. Existing saved capture roots are discoverable without re-upload. Oral/rubric modes retained. | Unified-entry browser, desktop capture, late-work and large-photo regressions PASS; independent review found no blocker. Single-criterion feedback/reload and import receipt retry/reopen are verified. CI repair locally verified, including unified saved-phone retry/reopen; root review/publication and fresh native CI next. DOCX outer-ZIP compatibility limits are explicit. No filename-based student assignment. |
+| TUV-UI-REDESIGN | Deferred at Tyler's direction; reminder coordination belongs to the parent conversation. | Later broader redesign planning, outside this bounded batch; no redesign implementation or reminder success claimed here. |
+
+Details, measured evidence, limitations and pending walkthrough: [classroom work order](work-orders/CLASSROOM-USE-2026-10-15.md#october-17--marking-usability-and-unified-entry).
 
 ## October 17 — fresh capture integration recovery
 

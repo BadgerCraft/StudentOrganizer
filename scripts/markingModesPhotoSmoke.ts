@@ -156,7 +156,7 @@ try {
   await page.getByTestId('marking-rubric-preview').click();
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional modes rubric');
   await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
-  await page.getByLabel('Criterion 2 KTCA mapping').selectOption('C');
+  await page.getByLabel('Criterion 2 KTCA mapping').selectOption('T');
   await page.getByTestId('marking-rubric-confirm').check();
   await page.getByRole('button', { name: 'Save confirmed rubric version', exact: true }).click();
   const rubric = (await records(page, 'markingRubrics')).find(row => row.assessmentId === assessment.id); assert.ok(rubric);
@@ -231,11 +231,45 @@ try {
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
   await page.getByTestId('image-annotation-surface').waitFor({ state: 'visible' });
   passed('delayed real image decoder during page switch, rotation and crop hides stale pixels/surface and blocks pointer marks until exact preview is ready; raw original axes recover after reset.');
+  const workPane = page.getByTestId('marking-work-pane'), reviewPane = page.getByTestId('marking-review-pane');
+  const workBox = await workPane.boundingBox(), reviewBox = await reviewPane.boundingBox();
+  assert.ok(workBox && reviewBox && workBox.x + workBox.width <= reviewBox.x + 2, 'work left, feedback right');
+  await page.getByTestId('image-annotation-surface').scrollIntoViewIfNeeded();
+  const annotationBox = await page.getByTestId('image-annotation-surface').boundingBox(); assert.ok(annotationBox);
+  const position = await workPane.evaluate(el => el.scrollTop);
+  await page.mouse.move(annotationBox.x + annotationBox.width*.2, annotationBox.y + annotationBox.height*.2);
+  await page.mouse.down();
+  assert.equal(await page.getByLabel('Image comment text', {exact:true}).count(), 0, 'pen does not create or focus a comment editor');
+  await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.25);
+  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).focus();
+  await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.8);
+  await page.mouse.up(); await saved(page);
+  let interrupted = (await session(page, photo.id)).draft.imageFeedback[0].annotations.at(-1);
+  assert.ok(interrupted.points.every((p:any) => p.y < .35), 'focus interruption cannot draw a line down the page');
+  assert.equal(await workPane.evaluate(el => el.scrollTop), position, 'editing feedback keeps the image scroll position');
+  await page.getByRole('button', {name:'Undo last mark',exact:true}).click();
+  for (const interruption of ['scroll', 'blur', 'pointercancel', 'lostpointercapture']) {
+    const surface = page.getByTestId('image-annotation-surface'); await surface.scrollIntoViewIfNeeded();
+    const b = await surface.boundingBox(); assert.ok(b);
+    await page.mouse.move(b.x+b.width*.2,b.y+b.height*.2);await page.mouse.down();
+    await page.mouse.move(b.x+b.width*.25,b.y+b.height*.25);
+    await surface.evaluate((el,type) => {
+      if(type==='scroll') el.parentElement!.dispatchEvent(new Event('scroll', {bubbles:true}));
+      else if(type==='blur') window.dispatchEvent(new Event('blur'));
+      else el.dispatchEvent(new PointerEvent(type,{pointerId:1,bubbles:true}));
+    },interruption);
+    await page.mouse.move(b.x+b.width*.25,b.y+b.height*.85);await page.mouse.up();await saved(page);
+    interrupted=(await session(page, photo.id)).draft.imageFeedback[0].annotations.at(-1);
+    assert.ok(interrupted.points.every((p:any)=>p.y<.35), `${interruption} retains the partial stroke without extending it`);
+    await page.getByRole('button',{name:'Undo last mark',exact:true}).click();
+  }
+  passed('side-by-side independent work/feedback scrolling; pen never autofocuses a comment; focus/scroll/window blur/cancel/pointer loss retain partial strokes without downward lines.');
   await stroke(page, 'Pen', { x: .2, y: .2 }, { x: .7, y: .3 });
   await stroke(page, 'Highlight', { x: .2, y: .35 }, { x: .65, y: .35 });
   await stroke(page, 'Write a comment', { x: .4, y: .5 });
   await page.getByLabel('Image comment text', { exact: true }).fill('Fictional page comment before edit');
   await page.getByLabel('Image criterion', { exact: true }).selectOption(criterionId);
+  await page.getByTestId('marking-image-comments').getByText('Other rubric labels', {exact:true}).click();
   await page.getByLabel('Image level', { exact: true }).selectOption('Level 3');
   await page.getByLabel('Crop width', { exact: true }).fill('80');
   await page.getByLabel('Crop height', { exact: true }).fill('70');
@@ -246,6 +280,7 @@ try {
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
   await assertOriginalAxes(page, files[1].name);
   await stroke(page, 'Pen', { x: .15, y: .2 }, { x: .55, y: .5 });
+  await page.getByTestId(`marking-criterion-${criterionId}`).getByText('Other rubric labels', {exact:true}).click();
   await page.getByTestId(`marking-criterion-level-${criterionId}`).selectOption('Level 4');
   await editRubricComment(page, criterionId, 'Fictional photo rubric feedback');
   await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional photo draft');
@@ -298,6 +333,7 @@ try {
     // Distinct students keep finalization independent of another mode's baseline.
     const enrollmentId = enrollmentIds[mode === 'oral' ? 1 : 2];
     await page.getByTestId(`marking-mode-${mode}`).click();
+    await page.getByRole('button', {name:'Continue with confirmed rubric',exact:true}).click();
     await page.getByTestId('marking-mode-student').selectOption(enrollmentId);
     await page.getByTestId('marking-mode-create').click();
     await page.getByTestId('marking-rubric-evidence').waitFor();
@@ -316,6 +352,7 @@ try {
       await page.getByTestId('marking-oral-add-item').click();
       await page.getByLabel('Checklist item 2 label', { exact: true }).fill('Addresses the fictional audience');
     } else assert.equal(await page.getByTestId('marking-oral-evidence').count(), 0);
+    await page.getByTestId(`marking-criterion-${criterionId}`).getByText('Other rubric labels', {exact:true}).click();
     await page.getByTestId(`marking-criterion-level-${criterionId}`).selectOption(mode === 'oral' ? 'Level 3' : 'Level 2');
     await editRubricComment(page, criterionId, `Fictional ${mode} rubric feedback`);
     await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(`Fictional ${mode} overall draft`);
