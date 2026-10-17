@@ -50,3 +50,19 @@ Browser storage can be cleared/evicted; verify a local ZIP backup. Original EXIF
 See [existing work order and exact setup gates](../../docs/work-orders/ANDROID-PRIVATE-DRIVE-2026-10-16.md). `CAPTURE_DRIVE_SETUP_APPROVED` stays false by default. When separately configured, the user chooses their account and enables transfer, then deliberately queues a completed ZIP. The assignment-named private folder and file use persisted generated IDs, owner/permission checks and retry-safe checksums. No destination is selected by name alone. Process restart requires explicit re-enable; settings failures stop transfer. No automatic original purge. Less-friction desktop retrieval remains deferred in F-008-CAPTURE-SEAMLESS.
 
 Native camera/permissions/lifecycle/storage pressure, live OAuth, real Drive delivery and physical desktop acceptance are not established by mocked transport or headless browser checks. Use fictional data only; no release, installation or real-student use is authorized by this source pilot.
+
+### Completion and recovery
+
+Home lists retained drafts and completed packages. Home saves pending name/label edits;
+opening another package never completes or uploads the previous one. All done freezes
+and saves the package locally. The separate Drive delivery panel refers to that exact
+package revision: queued, uploading, paused, retry, and reconnect states do not mean
+it arrived. Only **Verified on Drive** means the worker verified the remote bytes and
+private destination for that revision (at the time it completed).
+
+If delivery needs retry, keep the existing package and export a local ZIP backup.
+In Private Drive settings, reconnect the original account only if requested, enable
+transfers for this app session, and choose Retry retained batches. Retrying keeps the
+reserved folder and file IDs. Do not clear app data, uninstall, or retake the work to
+recover a transfer. A same-key update preserves the local queue; device acceptance
+and live delivery must still be checked separately.

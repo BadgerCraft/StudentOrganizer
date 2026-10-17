@@ -19,6 +19,8 @@ public final class TransferEngine {
         UploadRecord r=store.load(queueId);
         if (r == null) throw new IOException("Missing queue item");
         if (r.state == State.COMPLETE) return r.state;
+        String phase="checking account";
+        boolean uploading=false;
         try {
             if (blank(r.localPath) || blank(r.accountId) || blank(r.assignmentId) || blank(r.assignmentName) || blank(r.name)
                 || r.size<=0 || r.md5==null || !r.md5.matches("[A-Fa-f0-9]{32}") || r.sha256==null || !r.sha256.matches("[A-Fa-f0-9]{64}"))
@@ -27,6 +29,7 @@ public final class TransferEngine {
             if (!Objects.equals(r.accountId, drive.identity())) return finish(r,State.BLOCKED,"Google account changed; reconnect the original account");
             guard(r);
             verifyLocal(r);
+            phase="checking assignment folder";
             ensureFolder(r);
             checkFolder(r);
             if (r.fileId == null || r.fileId.isEmpty()) {
@@ -35,25 +38,33 @@ public final class TransferEngine {
                 store.save(r); // Critical: no file create can occur before this durable save.
             }
             guard(r);
+            phase="checking saved file";
             DriveGateway.Metadata existing=drive.metadata(r.fileId);
-            if (existing != null) return verifyComplete(r,existing);
+            if (existing != null) {phase="verifying Drive copy";return verifyComplete(r,existing);}
             if (r.sessionUrl == null) {
+                phase="starting upload";
                 guard(r); r.sessionUrl=drive.begin(r); store.save(r);
             }
+            phase="checking assignment folder";
             checkFolder(r);
+            phase="uploading ZIP"; uploading=true;
             guard(r); drive.upload(r);
+            uploading=false; phase="verifying Drive copy";
             guard(r); return verifyComplete(r,drive.metadata(r.fileId));
         } catch (Stopped e) { return finish(r,State.PAUSED,"Transfer is off or account selection changed");
         } catch (Unsafe e) { return finish(r,State.BLOCKED,e.getMessage());
         } catch (DriveGateway.Failure e) {
-            if (e.status == 409) {
+            if (e.status == 409 && (uploading || "starting upload".equals(phase))) {
                 try { guard(r); return verifyComplete(r,drive.metadata(r.fileId)); }
                 catch (Stopped stopped) { return finish(r,State.PAUSED,"Transfer is off"); }
                 catch (Unsafe unsafe) { return finish(r,State.BLOCKED,unsafe.getMessage()); }
                 catch (IOException unavailable) { return finish(r,State.RETRY,"Could not verify existing upload; original retained"); }
             }
             if (e.status == 401) return finish(r,State.NEEDS_AUTH,"Reconnect Google in the app");
-            if (e.status == 404 || e.status == 410) { r.sessionUrl=null; return finish(r,State.RETRY,"Session expired; retry will use the same file ID"); }
+            if (e.status == 404 || e.status == 410) {
+                if(uploading){r.sessionUrl=null;return finish(r,State.RETRY,"Upload session expired. Retry retained batch; the same file ID will be reused.");}
+                return finish(r,State.BLOCKED,"Drive could not access the item while "+phase+" (HTTP "+e.status+"). Check the connected account and retry in settings; saved ZIP and IDs retained.");
+            }
             if (e.status == 429 || e.status >= 500 || (e.status == 403 && ("rateLimitExceeded".equals(e.reason) || "userRateLimitExceeded".equals(e.reason))))
                 return finish(r,State.RETRY,"Google temporarily unavailable; original retained");
             return finish(r,State.BLOCKED,"Google denied transfer; check permission or storage quota");
@@ -81,7 +92,7 @@ public final class TransferEngine {
     }
     /** Folder IDs are committed before creation; retries never search or choose by name. */
     private void ensureFolder(UploadRecord r) throws IOException {
-        guard(r); String root=drive.rootId();
+        guard(r); String root="root"; // API alias; do not require root metadata access under drive.file.
         QueueStore.AssignmentFolder folder=store.assignmentFolder(r.accountId,r.assignmentId);
         if(folder==null){
             guard(r);String candidate=blank(r.folderId)?drive.generateId():r.folderId;
@@ -93,7 +104,6 @@ public final class TransferEngine {
         if(!Objects.equals(r.folderId,folder.id)||!Objects.equals(r.folderParentId,folder.parentId)){
             r.folderId=folder.id;r.folderParentId=folder.parentId;store.save(r);
         }
-        if (!Objects.equals(r.folderParentId,root)) throw new Unsafe("Destination is no longer in My Drive root");
         guard(r);
         if (drive.metadata(r.folderId)==null) {
             guard(r);
@@ -105,7 +115,8 @@ public final class TransferEngine {
     private void checkFolder(UploadRecord r) throws IOException {
         guard(r); DriveGateway.Metadata f=drive.metadata(r.folderId);
         if (!privateOwned(f,r.accountId) || !Objects.equals(f.id,r.folderId) || !"application/vnd.google-apps.folder".equals(f.mimeType)
-            || f.parents==null || f.parents.size()!=1 || !f.parents.contains(r.folderParentId))
+            || f.parents==null || f.parents.size()!=1
+            || (!"root".equals(r.folderParentId) && !f.parents.contains(r.folderParentId)) || !drive.isRootChild(r.folderId))
             throw new Unsafe("Destination privacy or location changed; transfer paused");
     }
     private void verifyLocal(UploadRecord r) throws IOException {

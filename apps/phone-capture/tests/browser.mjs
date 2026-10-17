@@ -11,7 +11,7 @@ let acceptDialogs=true;page.on('dialog',d=>void (acceptDialogs?d.accept():d.dism
 const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);
 const click=async s=>{await page.click(s);await settle();};
 try {
- await page.goto(base);await settle();await page.fill('#assignment','Fictional leaf study');await click('#name');
+ await page.goto(base);await settle();assert.equal(await page.locator('#home-view').isVisible(),true);await click('#new');await page.fill('#assignment','Fictional leaf study');await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){IDBObjectStore.prototype.put=put;throw new DOMException('Fictional Home save failure','QuotaExceededError');};});await click('#home');assert.equal(await page.locator('#editor-view').isVisible(),true);assert.equal(await page.inputValue('#assignment'),'Fictional leaf study');assert.match(await page.locator('#status').innerText(),/Not completed/);await click('#home');await page.reload();await settle();assert.equal(await page.locator('#home-view').isVisible(),true);await page.locator('#home-list button').first().click();await settle();assert.equal(await page.inputValue('#assignment'),'Fictional leaf study');await click('#name');
  const pictures=await page.evaluate(()=>['red','blue'].map(color=>{const c=document.createElement('canvas');c.width=300;c.height=400;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,300,400);return c.toDataURL('image/png').split(',')[1];}));
  const files=pictures.map((p,i)=>({name:`fictional-${i}.png`,mimeType:'image/png',buffer:Buffer.from(p,'base64')}));
  await page.setInputFiles('#files',files);await settle();assert.equal(await page.locator('#pages article').count(),2);
@@ -21,7 +21,7 @@ try {
  await page.getByRole('button',{name:'Move down',exact:true}).first().click();await settle();await page.fill('#label','Fictional same name');
  // Failed transaction retains both pages and the label for retry.
  await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){IDBObjectStore.prototype.put=put;throw new DOMException('Fictional disk full','QuotaExceededError');};});
- await click('#save-group');assert.match(await page.locator('#status').innerText(),/Not completed/);assert.equal(await page.inputValue('#label'),'Fictional same name');await click('#save-group');
+ await click('#save-group');assert.match(await page.locator('#status').innerText(),/Not completed/);assert.equal(await page.inputValue('#label'),'Fictional same name');await click('#home');assert.equal(await page.locator('#home-view').isVisible(),true);await page.locator('#home-list button').first().click();await settle();assert.equal(await page.inputValue('#label'),'Fictional same name');assert.equal(await page.locator('#pages article').count(),2);await click('#save-group');
  assert.equal(await page.locator('#groups article').count(),1);assert.equal(await page.locator('#export').isDisabled(),true);
  await page.setInputFiles('#files',files.slice(0,1));await settle();await click('#preview');await page.fill('#label','Fictional same name');await click('#save-group');
  assert.equal(await page.locator('#groups article').count(),2);await page.reload();await settle();assert.equal(await page.locator('#groups article').count(),2);
@@ -46,5 +46,5 @@ try {
  await click('#delete');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.match(await page.locator('#assignment-history').innerText(),/earlier local package was deleted/);
  await click('#late-work');const nextLateId=await page.inputValue('#archive');assert.notEqual(nextLateId,lateId);assert.equal(await page.locator('#groups article').count(),0);
  await click('#new');await page.fill('#assignment','Fictional next assignment');await click('#name');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.equal(await page.locator('#done').isDisabled(),true);
- assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS mobile repeated/interrupted flow: edits, duplicate labels, quota retry, restart, freeze/export and retained assignments; late-work cancel/quota retry/restart, immutable original ZIP, supplemental export and deletion isolation; no external requests.');
+ assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS mobile repeated/interrupted flow: edits, duplicate labels, quota retry, restart, freeze/export and retained assignments; Home name/label recovery and failed navigation save, late-work cancel/quota retry/restart, immutable original ZIP, supplemental export and deletion isolation; no external requests.');
 } finally {await browser.close();}

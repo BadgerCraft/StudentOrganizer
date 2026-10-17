@@ -26,9 +26,14 @@ public class AssignmentFolderTransportTest {
         HttpDriveGateway.Response response(int status,String body){return new HttpDriveGateway.Response(status,body,null,null);}
         JsonObject metadata(String id,String mime,String parent){JsonObject json=new JsonObject();json.addProperty("id",id);json.addProperty("mimeType",mime);json.addProperty("trashed",false);json.addProperty("shared",shared);json.addProperty("ownedByMe",true);JsonArray p=new JsonArray();p.add(parent);json.add("parents",p);json.add("owners",JsonParser.parseString("[{\"permissionId\":\"owner\"}]"));return json;}
         public HttpDriveGateway.Response execute(String method,String url,Map<String,String> headers,byte[] body)throws IOException{
-            assertEquals("Bearer fictional-token",headers.get("Authorization"));assertFalse("No name-based folder search",url.contains("q="));URI uri=URI.create(url);String path=uri.getPath();
+            assertEquals("Bearer fictional-token",headers.get("Authorization"));assertFalse("No name-based folder search",java.net.URLDecoder.decode(url,"UTF-8").contains("name ="));URI uri=URI.create(url);String path=uri.getPath();
             if(path.endsWith("/about"))return response(200,"{\"user\":{\"permissionId\":\"owner\"}}");
-            if(path.endsWith("/files/root"))return response(200,"{\"id\":\"root\"}");
+            if(path.endsWith("/files/root"))throw new AssertionError("Root metadata must not be requested under drive.file");
+            if(method.equals("GET")&&path.equals("/drive/v3/files")){
+                assertTrue(java.net.URLDecoder.decode(url,"UTF-8").contains("'root' in parents"));
+                JsonArray children=new JsonArray();for(JsonObject file:remote.values())if(file.getAsJsonArray("parents").get(0).getAsString().equals("root")){JsonObject child=new JsonObject();child.add("id",file.get("id"));children.add(child);}
+                JsonObject result=new JsonObject();result.add("files",children);return response(200,result.toString());
+            }
             if(path.endsWith("/files/generateIds"))return response(200,"{\"ids\":[\"remote-"+(++generated)+"\"]}");
             if(path.endsWith("/permissions"))return response(200,"{\"permissions\":[{\"id\":\"owner\",\"type\":\"user\",\"role\":\"owner\"}]}");
             if(method.equals("POST")&&path.equals("/drive/v3/files")){

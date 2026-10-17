@@ -1,6 +1,7 @@
 /** Native-only transfer adapter. Tokens and networking never enter this renderer. */
 export interface TransferStatus { available: boolean; enabled: boolean; wifiOnly: boolean; summary: string; }
 export interface CaptureBridge {
+  getCaptureTransferStatus?(captureId:string,revision:number): string;
   deleteAssignment?(batchId:string,captureId:string): string;
   startCamera?(batchId:string,submissionId:string,remainingPages:number): string;
   getPendingCaptures?(batchId:string,submissionId:string): string;
@@ -24,7 +25,7 @@ export function transferStatus(bridge?: CaptureBridge): TransferStatus {
     const value = JSON.parse(bridge.getTransferStatus());
     if (typeof value.available !== 'boolean' || typeof value.enabled !== 'boolean' || typeof value.wifiOnly !== 'boolean' || typeof value.summary !== 'string') throw new Error('Invalid status');
     return value;
-  } catch { return { ...unavailable, summary: 'Transfer status unavailable. No upload queued; use local export or reopen Android settings.' }; }
+  } catch { return { ...unavailable, summary: 'Transfer status unavailable. Drive delivery is not confirmed; use local export or reopen Android settings.' }; }
 }
 export function zipBase64(bytes: Uint8Array): string {
   if (bytes.length > 34 * 1024 * 1024) throw new Error('Export exceeds the private transfer size limit.');
@@ -50,4 +51,18 @@ export async function transferZip(bridge: CaptureBridge, bytes: Uint8Array, batc
     }
     return acceptedReceipt(bridge.finishZip(begun.token,batch.captureId,batch.revision,mode));
   } catch(error) { bridge.cancelZip(begun.token); throw error; }
+}
+
+export type CaptureTransferState = 'NOT_QUEUED' | 'QUEUED' | 'UPLOADING' | 'RETRY' | 'NEEDS_AUTH' | 'BLOCKED' | 'PAUSED' | 'COMPLETE' | 'UNAVAILABLE';
+export interface CaptureTransferStatus { captureId: string; revision: number; state: CaptureTransferState; message: string; }
+/** A queue receipt or another package's summary never proves this package arrived. */
+export function captureTransferStatus(bridge: CaptureBridge | undefined, captureId: string, revision: number): CaptureTransferStatus {
+  const unavailable: CaptureTransferStatus = { captureId, revision, state: 'UNAVAILABLE', message: 'Drive delivery is not confirmed. Local export remains available.' };
+  if (!bridge?.getCaptureTransferStatus) return unavailable;
+  try {
+    const value = JSON.parse(bridge.getCaptureTransferStatus(captureId, revision));
+    const states: CaptureTransferState[] = ['NOT_QUEUED','QUEUED','UPLOADING','RETRY','NEEDS_AUTH','BLOCKED','PAUSED','COMPLETE','UNAVAILABLE'];
+    if (value.captureId !== captureId || value.revision !== revision || !states.includes(value.state) || typeof value.message !== 'string') return unavailable;
+    return { captureId, revision, state: value.state, message: value.message };
+  } catch { return unavailable; }
 }

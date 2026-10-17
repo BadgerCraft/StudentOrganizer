@@ -46,9 +46,26 @@ public class HttpDriveGatewayTest {
         for(String response:List.of("{}", "[]", "null", "{\"owners\":{}}", "{\"size\":\"nonsense\"}")) {
             HttpDriveGateway g=new HttpDriveGateway(()->"fixture",()->true,(m,u,h,b)->new HttpDriveGateway.Response(200,response,null,null));
             try{g.identity();fail();}catch(IOException expected){}
-            try{g.rootId();fail();}catch(IOException expected){}
+            try{g.isRootChild("fixture");fail();}catch(IOException expected){}
             try{g.generateId();fail();}catch(IOException expected){}
             try{g.metadata("fixture");fail();}catch(IOException expected){}
+        }
+    }
+    @Test public void rootMembershipUsesExactIdAndPaginatesWithoutReadingRootMetadata()throws Exception {
+        List<String> calls=new ArrayList<>();
+        HttpDriveGateway g=new HttpDriveGateway(()->"fixture",()->true,(m,u,h,b)->{
+            calls.add(u);assertFalse(u.contains("files/root"));assertEquals("GET",m);
+            String query=java.net.URLDecoder.decode(u,"UTF-8");assertTrue(query.contains("'root' in parents and trashed = false"));assertFalse(query.contains("name ="));
+            return new HttpDriveGateway.Response(200,calls.size()==1?"{\"files\":[],\"nextPageToken\":\"next\"}":"{\"files\":[{\"id\":\"reserved-folder\"}]}",null,null);
+        });
+        assertTrue(g.isRootChild("reserved-folder"));assertEquals(2,calls.size());assertTrue(calls.get(1).contains("pageToken=next"));
+    }
+    @Test public void rootMembershipNeverGuessesFromAnotherFolderOrIncompleteResults()throws Exception {
+        HttpDriveGateway absent=new HttpDriveGateway(()->"fixture",()->true,(m,u,h,b)->new HttpDriveGateway.Response(200,"{\"files\":[{\"id\":\"other-folder\"}]}",null,null));
+        assertFalse(absent.isRootChild("reserved-folder"));
+        for(String response:List.of("{\"files\":[{\"id\":\"reserved-folder\"}],\"incompleteSearch\":true}","{\"files\":[],\"nextPageToken\":\"repeat\"}","{\"files\":[{\"id\":{}}]}","{\"files\":[],\"incompleteSearch\":{}}","{}")){
+            HttpDriveGateway g=new HttpDriveGateway(()->"fixture",()->true,(m,u,h,b)->new HttpDriveGateway.Response(200,response,null,null));
+            assertThrows(IOException.class,()->g.isRootChild("reserved-folder"));
         }
     }
 }
