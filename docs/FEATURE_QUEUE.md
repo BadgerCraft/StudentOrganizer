@@ -1,5 +1,10 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 17 — Android 0.3 unsigned update preparation
+
+F-008-CAPTURE: parent verified PR39 merged at `223453eb191aa9479319f9f04b095a1d3776a42e` after Tyler's explicit merge approval and delegated the already approved unsigned phone update kit. Isolated `codex/capture-android-v03-20261017` changes Android versionCode to3/versionName `0.3-fictional-pilot` only; source Drive setup default remains false. Current touch crop and Save & Finish from PR39 are included. Fresh phone production build, default78 native tests and configured release assembly/lint PASS (0 errors/11 existing warnings). APK contents verify same package, production flags, version, byte-identical web assets, unsigned state and alignment. Existing origin/databases/schemas/storage paths and restricted Drive scope remain unchanged. Root review, version/documentation commit, draft PR and single owner-local signing ZIP delivery are next; version PR merge remains reserved. Signing/key access, installation, live camera/Drive tests and real data are excluded. Supporting evidence and exact artifact hash: existing Android work order below.
+
+
 ## October 17 — marking usability publication
 
 Bounded usability and subsequently approved unified entry are implemented on `codex/classroom-marking-usability-20261017`; implementation `968a59e1dff934508fd2574d86a841757c935928` pushed/read back and [draft PR39](https://github.com/BadgerCraft/StudentOrganizer/pull/39) opened against verified main `b1ff8b5`. Desktop688/phone23 tests, builds, focus/pointer baseline reproduction, touch crop, unified intake/reopen and affected capture browser checks pass. Independent root source/visual review found no blocker. Fresh CI and installed-device acceptance remain pending; no merge/release. Broader app redesign stays deferred for the parent stock-ping reminder, which is not created by this implementation.
