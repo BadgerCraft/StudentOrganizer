@@ -46,6 +46,8 @@ try {
   }
   console.log('Both photo groups saved.');
   const attachments = await rows('captureAttachments'), receipts = await rows('captureImportReceipts');
+  assert.equal(attachments.length, 2);
+  assert.equal(new Set(attachments.map(saved => saved.classEnrollmentId)).size, 2);
   const rubricId = await page.evaluate(async assessmentId => {
     const d = '/src/db/database.ts', m = '/src/marking/markingService.ts', i = '/src/services/identityService.ts';
     const { db } = await import(d), identity = await import(i), userId = identity.getActiveTeacherId(), device = await db.devices.where('userId').equals(userId).first();
@@ -58,8 +60,11 @@ try {
     await page.getByRole('status').filter({ hasText: 'associated with marking' }).waitFor(); await idle();
   }
   const attempts = await rows('markingAttempts'); assert.equal(attempts.length, 2);
+  const linked = await rows('captureAttachments');
   for (const saved of attachments) {
-    const attempt = attempts.find(a => a.classEnrollmentId === saved.classEnrollmentId); assert.ok(attempt);
+    const root = linked.find(row => row.id === saved.id); assert.ok(root?.markingAttemptId);
+    const attempt = attempts.find(a => a.id === root.markingAttemptId); assert.ok(attempt);
+    assert.equal(attempt.classEnrollmentId, saved.classEnrollmentId);
     assert.equal(attempt.imagePages[0].hash, hash); assert.equal(attempt.imagePages[0].base64, encoded);
   }
   await page.reload(); const teacher = page.locator('[data-testid^="select-teacher-"]').first(); if (await teacher.isVisible()) await teacher.click();
