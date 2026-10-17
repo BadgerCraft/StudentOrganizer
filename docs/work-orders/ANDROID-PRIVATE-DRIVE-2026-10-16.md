@@ -1,6 +1,6 @@
 # F-008-CAPTURE — Android direct private Drive transfer
 
-**Current checkpoint (October17):** the approved complete grouped phone-to-desktop pilot is the dependent continuation below. PR35 foundation was repaired/pushed as `be20de2`, remains draft/unmerged, and passed Windows/Mac/shared CI. The new improvement branch is `codex/capture-desktop-pilot-20261017`; current authority, tests, review repairs and reserved gates are in [the dependent pilot section](#october-17--complete-private-capture-to-desktop-pilot-dependent-improvement). Earlier scope/publication statements below are historical evidence, not a revocation of that approval.
+**Current checkpoint (October17):** the approved complete grouped phone-to-desktop pilot is the dependent continuation below. PR35 foundation was repaired/pushed as `be20de2`, passed Windows/Mac/shared CI, and was subsequently merged by the parent with explicit Tyler approval at `e84b982`. The new improvement branch is `codex/capture-desktop-pilot-20261017`; current authority, tests, review repairs and reserved gates are in [the dependent pilot section](#october-17--complete-private-capture-to-desktop-pilot-dependent-improvement). Earlier scope/publication statements below are historical evidence, not a revocation of that approval.
 
 ## Current authority and source
 
@@ -150,3 +150,8 @@ Verify-build verdict: PASS runs (reported suites/builds/browser/native checks); 
 ### Dependent draft publication
 
 Implementation commit `f83919c4de9e53df8a5e4a9bda6ed3ff1ae59aa4` was normally pushed and independently read back on `codex/capture-desktop-pilot-20261017`. [PR36](https://github.com/BadgerCraft/StudentOrganizer/pull/36) was created open/draft/unmerged with base `codex/phone-capture-20261016` at `be20de2`,49 changed files and one implementation commit. This documentation checkpoint records publication; final head/CI is read back and reported in the PR description after this push. No main merge/release/install/OAuth/upload occurred. Both drafts remain separate. Walkthrough is prepared for PR36 at the implementation revision; user review/answers remain pending.
+
+
+### Authorized foundation merge and main retarget
+
+Parent supplied fresh explicit approval evidence: Tyler said “merge” in answer to merging PR35 foundation only. Independently read GitHub PR35 closed/merged at `e84b9825e2151420b86148f976b2761bc4335ce7`, approved head `be20de24974f43034abd8ad8a4e18099d74c5b8a`; fresh main fetch matches. Main tree is byte-identical to the reconciled foundation tree (`git diff be20de2 FETCH_HEAD` empty), so no history rewrite or extra integration merge is needed. Retarget PR36 from the foundation branch to main; keep the improvement draft/unmerged. Earlier keep-PR35-draft statements above record the previous boundary, superseded only for PR35 by this approval. Release, installation, live Drive setup/uploads and PR36 merge remain unauthorized.
