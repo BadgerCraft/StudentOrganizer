@@ -82,7 +82,7 @@ describe('minimal marking archive and deliberate student-work retention', () => 
     const context = await service.getContext(ASSESSMENT, actor);
     expect(context.attempts).toEqual([]); expect(context.archivedAttempts).toEqual([archived]);
     expect(context.sessions).toHaveLength(2); expect(context.commits).toHaveLength(1);
-    for (const row of [...context.sessions, ...context.commits]) {
+    for (const row of [...context.sessions.filter(row => row.status === 'finalized'), ...context.commits]) {
       expect(row.draft.annotations).toEqual([]); expect(row.draft.pending).toBeNull(); expect(row.draft.imageFeedback).toBeUndefined();
       expect(row.draft.archivedFeedback).toEqual([expect.objectContaining({ text: 'Fictional passage comment.', criterionId: 'reason', level: '3' })]);
       expect(row.draft.overallFeedback).toBe(f.commit.draft.overallFeedback);
@@ -113,18 +113,73 @@ describe('minimal marking archive and deliberate student-work retention', () => 
     expect((await db.auditEntries.get(audit.id))?.diffJson).toBeNull();
     expect(await new PortabilityService(db).createFullBackupJSON()).not.toContain(SOURCE);
   });
-  it('preserves an in-progress edit of an existing comment once and restores its archive', async () => {
-    const f = await fixture();
+  it.each([[false, false], [false, true], [true, false], [true, true]])('discards unpublished edits at archive, including backup history (keep source %s, photo %s)', async (keep, photo) => {
+    const f = await fixture(photo);
     const session = await service.openSession(f.attempt.id, actor);
-    session.draft.pending = { ...session.draft.annotations[0], text: 'Fictional pending edited feedback.' };
+    if (photo) session.draft.imageFeedback![0].annotations[0].text = 'UNPUBLISHED_PHOTO_EDIT';
+    else session.draft.pending = { ...session.draft.annotations[0], text: 'Fictional pending edited feedback.' };
+    session.draft.overallFeedback = 'UNPUBLISHED_OVERALL';
+    session.draft.judgments[0].feedback = 'UNPUBLISHED_CATEGORY';
+    session.draft.rubricFeedback![0].feedback = 'UNPUBLISHED_CRITERION';
     const saved = await service.saveDraft(session.id, session.draft, session.version, actor);
-    await service.archiveAttempt(f.attempt.id, f.attempt.version, actor);
+    expect((await db.markingSessions.get(saved.id))?.draft).toEqual(saved.draft);
+    await service.archiveAttempt(f.attempt.id, f.attempt.version, actor, keep);
     const archivedSession = (await db.markingSessions.get(saved.id))!;
-    expect(archivedSession.draft.archivedFeedback).toHaveLength(1);
-    expect(archivedSession.draft.archivedFeedback![0].text).toBe('Fictional pending edited feedback.');
+    expect(archivedSession.draft.overallFeedback).toBe('');
+    expect(archivedSession.draft.pending).toBeNull();
+    expect(archivedSession.draft.annotations).toEqual([]);
+    expect(archivedSession.retainedCategoryJudgments).toEqual([]);
     const json = await new PortabilityService(db).createFullBackupJSON();
+    expect(json).not.toContain('UNPUBLISHED_');
+    expect(json).not.toContain('Fictional pending edited feedback.');
+    expect((await service.exportContext(f.commit.id, actor)).commit.draft.overallFeedback).toBe(f.commit.draft.overallFeedback);
     await new PortabilityService(db).restoreFromJSON(json);
     expect((await db.markingSessions.get(saved.id))?.draft).toEqual(archivedSession.draft);
+  });
+  it.each(['text', 'photo', 'oral'] as const)('discards draft-only %s work and restores a valid empty archive in both retention modes', async mode => {
+    const f = await fixture(mode === 'photo');
+    for (const keep of [false, true]) {
+      const attempt = mode === 'oral'
+        ? await service.createModeAttempt(ASSESSMENT, f.rubric.id, 'oral', f.enrollment.id, actor)
+        : mode === 'photo'
+          ? await service.importImageAttempt(ASSESSMENT, f.rubric.id, f.attempt.imagePages!, null, actor)
+          : await service.importAttempt(ASSESSMENT, f.rubric.id, (await parseMarkingFiles([new File([`Fictional source ${keep}`], 'draft.txt')])).documents, null, null, actor);
+      const matched = attempt.classEnrollmentId ? attempt : await service.matchAttempt(attempt.id, f.enrollment.id, attempt.version, actor);
+      const session = await service.openSession(matched.id, actor);
+      session.draft.overallFeedback = 'UNPUBLISHED_DRAFT_ONLY';
+      if (session.draft.oral) session.draft.oral = { notes: 'UNPUBLISHED_OBSERVATION', items: [{ id: 'item', label: 'UNPUBLISHED_ITEM', checked: true, note: 'UNPUBLISHED_NOTE' }] };
+      if (session.draft.imageFeedback) session.draft.imageFeedback[0].annotations = [{ id: 'draft-photo', kind: 'comment', points: [{ x: .5, y: .5 }], color: 'red', width: .01, text: 'UNPUBLISHED_PHOTO', criterionId: null, level: '' }];
+      const saved = await service.saveDraft(session.id, session.draft, session.version, actor);
+      expect((await db.markingSessions.get(saved.id))?.draft).toEqual(saved.draft);
+      const officialBefore = await db.categoryResults.toArray();
+      const archived = await service.archiveAttempt(matched.id, matched.version, actor, keep);
+      const afterFirst = await snapshot();
+      expect(await service.archiveAttempt(matched.id, matched.version, actor, keep)).toEqual(archived);
+      expect(await snapshot()).toEqual(afterFirst);
+      expect(await db.categoryResults.toArray()).toEqual(officialBefore);
+      const backup = await new PortabilityService(db).createFullBackupJSON();
+      expect(backup).not.toContain('UNPUBLISHED_');
+      await new PortabilityService(db).restoreFromJSON(backup);
+      expect((await db.markingSessions.get(saved.id))?.draft.overallFeedback).toBe('');
+    }
+  });
+  it.each([false, true])('retains published oral observations, discarding subsequent unpublished oral edits (keep %s)', async keep => {
+    const f = await fixture();
+    const attempt = await service.createModeAttempt(ASSESSMENT, f.rubric.id, 'oral', f.enrollment.id, actor);
+    const session = await service.openSession(attempt.id, actor);
+    session.draft.judgments = structuredClone(f.commit.draft.judgments);
+    session.draft.oral = { notes: 'Published oral observation', items: [{ id: 'item', label: 'Published skill', checked: true, note: 'Published note' }] };
+    const saved = await service.saveDraft(session.id, session.draft, session.version, actor);
+    const commit = await service.finalize(saved.id, saved.version, actor);
+    const revision = await service.openSession(attempt.id, actor);
+    revision.draft.oral!.notes = 'UNPUBLISHED_ORAL_REVISION';
+    revision.draft.oral!.items[0].note = 'UNPUBLISHED_ORAL_ITEM';
+    await service.saveDraft(revision.id, revision.draft, revision.version, actor);
+    await service.archiveAttempt(attempt.id, attempt.version, actor, keep);
+    const backup = await new PortabilityService(db).createFullBackupJSON();
+    expect(backup).not.toContain('UNPUBLISHED_');
+    await new PortabilityService(db).restoreFromJSON(backup);
+    expect((await service.exportContext(commit.id, actor)).commit.draft.oral).toEqual(commit.draft.oral);
   });
   it('stores the export retention choice without deleting work, and keeps originals and markup only when opted in', async () => {
     const f = await fixture(true);
@@ -136,6 +191,18 @@ describe('minimal marking archive and deliberate student-work retention', () => 
     const backup = await new PortabilityService(db).createFullBackupJSON(); expect(backup).toContain(PNG);
     await new PortabilityService(db).restoreFromJSON(backup);
     expect((await service.getContext(ASSESSMENT, actor)).archivedAttempts).toEqual([archived]);
+  });
+  it('leaves another active attempt and its unfinished audit history unchanged', async () => {
+    const f = await fixture();
+    const other = await service.createModeAttempt(ASSESSMENT, f.rubric.id, 'oral', f.enrollment.id, actor);
+    const draft = await service.openSession(other.id, actor);
+    draft.draft.overallFeedback = 'Fictional active draft to preserve';
+    const saved = await service.saveDraft(draft.id, draft.draft, draft.version, actor);
+    const history = await db.auditEntries.where('entityId').equals(saved.id).toArray();
+    await service.archiveAttempt(f.attempt.id, f.attempt.version, actor);
+    expect(await db.markingSessions.get(saved.id)).toEqual(saved);
+    expect(await db.auditEntries.where('entityId').equals(saved.id).toArray()).toEqual(history);
+    expect(await db.markingAttempts.get(other.id)).toEqual(other);
   });
   it.each(['audit failure', 'identity change'])('rolls back source redaction and all related history on %s', async boundary => {
     const f = await fixture(); const before = await snapshot();

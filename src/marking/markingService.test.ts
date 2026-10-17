@@ -501,7 +501,8 @@ describe('Assessment-linked marking integrity', () => {
     expect(stored?.archivedAt).toBeTruthy();
     expect(stored?.deletedAt).toBeNull();
     expect(stored?.documents).toEqual(attempt.documents);
-    expect((await db.markingSessions.get(session.id))?.draft).toEqual(session.draft);
+    expect((await db.markingSessions.get(session.id))?.draft.overallFeedback).toBe('');
+    expect((await db.markingSessions.get(session.id))?.draft.judgments.every(j => !j.assessed && !j.rawScore && !j.feedback)).toBe(true);
     await expect(service.saveDraft(session.id, session.draft, session.version, actor)).rejects.toThrow();
     await expect(service.finalize(session.id, session.version, actor)).rejects.toThrow();
     expect(await official()).toEqual(gradesBefore);

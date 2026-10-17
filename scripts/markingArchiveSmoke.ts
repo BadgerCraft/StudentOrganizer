@@ -81,7 +81,8 @@ try {
   const students = await importDocumentsForStudents(page, [
     { name: 'Fictional-remove.txt', mimeType: 'text/plain', buffer: Buffer.from(removedSource) },
     { name: 'Fictional-keep.txt', mimeType: 'text/plain', buffer: Buffer.from(retainedSource) },
-    { name: 'Fictional-history.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional former student submission.') }
+    { name: 'Fictional-history.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional former student submission.') },
+    { name: 'Fictional-draft-only.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional unfinished submission.') }
   ]);
   const first = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[0].value);
   const second = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[1].value);
@@ -117,7 +118,19 @@ try {
       await (await exportDownload).saveAs(`${artifacts}-retained-report.html`);
       assert.ok((await records(page, 'markingAttempts')).find(row => row.id === attempt.id).documents.length, 'export does not remove source');
     }
+    await page.getByRole('region', { name: 'Marking session', exact: true }).getByRole('button', { name: 'Reopen as draft revision', exact: true }).click();
+    await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_OVERALL');
+    await page.getByLabel('Category T feedback').fill('UNPUBLISHED_ARCHIVE_CATEGORY');
+    await selectText(page, 7);
+    await page.getByTestId('marking-feedback').fill('UNPUBLISHED_ARCHIVE_PENDING');
+    await page.getByRole('button', { name: 'Save now', exact: true }).click();
+    await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
+    const draftsBeforeCancel = await records(page, 'markingSessions');
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByTestId(`marking-archive-${attempt.id}`).click();
+    assert.deepEqual(await records(page, 'markingSessions'), draftsBeforeCancel, 'cancel preserves active unpublished draft');
     page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /Unpublished drafts and unfinished edits are discarded/);
       assert.match(dialog.message(), keep ? /keep its submitted work/ : /permanently remove/);
       await dialog.accept();
     });
@@ -130,7 +143,13 @@ try {
     assert.match(await archivedCard.innerText(), /T: 3\+/);
     assert.match(await archivedCard.innerText(), /Fictional teacher passage feedback retained/);
     assert.equal((await archivedCard.innerText()).split('Fictional teacher passage feedback retained after archive.').length - 1, 1, 'retained and redacted comments are not duplicated');
+    assert.doesNotMatch(await archivedCard.innerText(), /UNPUBLISHED_ARCHIVE/);
     assert.equal(await archivedCard.getByRole('textbox').count(), 0, 'archive is read-only');
+    const reportDownload = page.waitForEvent('download');
+    await archivedCard.getByRole('button', { name: /^Report / }).first().click();
+    const reportPath = `${artifacts}-${keep}-final-report.html`;
+    await (await reportDownload).saveAs(reportPath);
+    assert.doesNotMatch(await readFile(reportPath, 'utf8'), /UNPUBLISHED_ARCHIVE/);
     assert.equal(await page.getByTestId(`marking-session-open-${attempt.id}`).count(), 0);
     assert.deepEqual(await official(page, assessment.id), grades, 'archiving preserves official grades');
     const stored: any = (await records(page, 'markingAttempts')).find(row => row.id === attempt.id);
@@ -139,6 +158,21 @@ try {
     scenarios.push(`${keep ? 'Explicit retain' : 'Default removal'}: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation`);
     if (!keep) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   }
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+  const draftOnly = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[3].value);
+  await page.getByTestId(`marking-session-open-${draftOnly.id}`).click();
+  await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_DRAFT_ONLY');
+  await page.getByRole('button', { name: 'Save now', exact: true }).click();
+  await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
+  const draftOnlyOfficial = await official(page, assessment.id);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByTestId(`marking-archive-${draftOnly.id}`).click();
+  const draftOnlyCard = page.getByTestId(`marking-archived-${draftOnly.id}`);
+  await draftOnlyCard.waitFor();
+  assert.doesNotMatch(await draftOnlyCard.innerText(), /UNPUBLISHED_ARCHIVE/);
+  assert.equal(await draftOnlyCard.getByRole('button').count(), 0, 'draft-only archive has no finalized report');
+  assert.deepEqual(await official(page, assessment.id), draftOnlyOfficial);
+  scenarios.push('Draft-only archive discards unpublished content without creating official results or reports');
   // Leave a saved unfinished comment, then remove the student through the real roster UI.
   const historical = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[2].value);
   await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
@@ -165,6 +199,7 @@ try {
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   assert.equal(await page.getByTestId(`marking-session-open-${historical.id}`).count(), 0);
   for (let repeat = 0; repeat < 2; repeat++) {
+    await page.getByText('Historical records', { exact: true }).click();
     await page.getByRole('button', { name: 'Former students', exact: true }).click();
     const historyCard: Locator = page.getByTestId(`marking-historical-${historical.id}`);
     await historyCard.waitFor();
@@ -198,12 +233,35 @@ try {
   const download = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   await (await download).saveAs(`${artifacts}-backup.json`);
   const backupText = await readFile(`${artifacts}-backup.json`, 'utf8');
+  assert.doesNotMatch(backupText, /UNPUBLISHED_ARCHIVE/);
   assert.doesNotMatch(backupText, new RegExp(removedSource));
   assert.ok(!backupText.includes(Buffer.from(removedSource).toString('base64')), 'removed original bytes absent even from audit snapshots');
   assert.ok(backupText.includes(retainedSource), 'explicit exemplar original is retained');
   const backup = JSON.parse(backupText);
-  assert.equal(backup.tables.markingAttempts.filter((row: any) => row.assessmentId === assessment.id && row.archivedAt).length, 2);
+  assert.equal(backup.tables.markingAttempts.filter((row: any) => row.assessmentId === assessment.id && row.archivedAt).length, 3);
   scenarios.push('Actual downloaded backup contains no removed source text/base64; deliberately kept source remains');
+  const restored = await browser.newContext({ viewport: { width: 1440, height: 1100 }, acceptDownloads: true });
+  await restored.route('**/*', route => {
+    if (route.request().url().startsWith(origin + '/')) return route.continue();
+    external.push(route.request().url()); return route.abort();
+  });
+  const restoredPage = await restored.newPage();
+  restoredPage.on('pageerror', error => errors.push(error.message));
+  await restoredPage.goto(origin); await installFictionalClassroom(restoredPage);
+  await restoredPage.locator('[data-testid^="select-teacher-"]').first().click();
+  await restoredPage.getByTestId('nav-portability-btn').click();
+  await restoredPage.getByTestId('restore-file-input').setInputFiles(`${artifacts}-backup.json`);
+  await restoredPage.getByTestId('restore-confirm-dialog').waitFor();
+  assert.equal((await records(restoredPage, 'markingAttempts')).length, 0, 'restore preview does not write');
+  await restoredPage.getByTestId('confirm-restore-btn').click();
+  await restoredPage.getByText(/Database successfully restored/).waitFor();
+  for (const table of ['markingAttempts', 'markingSessions', 'markingCommits', 'categoryResults', 'studentAssessments']) {
+    const restoredRows = await records(restoredPage, table);
+    assert.deepEqual(restoredRows, await records(page, table), `${table} survives actual backup restore`);
+    assert.doesNotMatch(JSON.stringify(restoredRows), /UNPUBLISHED_ARCHIVE/);
+  }
+  await restored.close();
+  scenarios.push('Clean-profile backup preview and restore preserve final records without resurrecting discarded drafts');
   assert.deepEqual(errors, []); assert.deepEqual(external, []);
   await writeFile(`${artifacts}-results.json`, JSON.stringify({ status: 'pass', scenarios, browserErrors: errors, externalRequests: external, nativeDeviceVerified: false }, null, 2));
   console.log(`PASS: ${scenarios.join('; ')}.`);

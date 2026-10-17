@@ -5,7 +5,13 @@ import { sessionCategories } from '../validation';
 export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingAttempt; context: MarkingContext }) {
   const rubric = context.rubrics.find(row => row.id === attempt.rubricId);
   const criterion = (id: string | null) => rubric?.criteria.find(row => row.id === id)?.name ?? 'Feedback';
-  const revisions = context.sessions.filter(row => row.attemptId === attempt.id).sort((a, b) => a.revision - b.revision);
+  const revisions = context.sessions.filter(row => row.attemptId === attempt.id).flatMap(session => {
+    if (!attempt.archivedAt) return [session];
+    const commit = context.commits.find(row => row.id === session.commitId && row.sessionId === session.id && row.attemptId === attempt.id);
+    // Legacy backups may still carry draft sessions. Archive is committed-only,
+    // without destructively migrating any historical records on read.
+    return session.status === 'finalized' && commit ? [{ ...session, draft: commit.draft }] : [];
+  }).sort((a, b) => a.revision - b.revision);
   function feedback(session: MarkingSession) {
     const draft = session.draft;
     // A pending edit replaces its saved annotation, rather than appearing twice.
@@ -26,5 +32,5 @@ export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingA
       {session.retainedCategoryJudgments?.map((row, index) => <p key={index}>Retained {row.category.categoryCode}: {row.judgment.rawScore} · {row.judgment.feedback}</p>)}
     </>;
   }
-  return <><p>Rubric: {rubric?.title}</p>{!revisions.length && <p>No marking session was started for this submission.</p>}{revisions.map(session => <details key={session.id}><summary>Revision {session.revision} · {session.status} · {session.updatedAt}</summary>{feedback(session)}</details>)}</>;
+  return <><p>Rubric: {rubric?.title}</p>{!revisions.length && <p>{attempt.archivedAt ? 'No finalized feedback was published for this submission.' : 'No marking session was started for this submission.'}</p>}{revisions.map(session => <details key={session.id}><summary>Revision {session.revision} · {session.status} · {session.updatedAt}</summary>{feedback(session)}</details>)}</>;
 }

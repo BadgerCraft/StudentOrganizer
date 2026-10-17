@@ -386,11 +386,38 @@ try {
   assert.match(await wizard(page).innerText(), /3 work item\(s\) added/);
   assert.equal(await wizard(page).getByRole('button', { name: /Confirm student and review work|Continue to matching/ }).isDisabled(), true, 'other failures still require acknowledgment');
   await page.screenshot({ path: '/tmp/markinator-input-malformed.png', fullPage: true });
-  await wizard(page).getByRole('checkbox', { name: 'Continue with only the work successfully added; leave these files out.', exact: true }).check();
+  const replaceMalformed = wizard(page).getByLabel('Replace failed file: Fictional malformed.docx', { exact: true });
+  await replaceMalformed.setInputFiles([]);
+  assert.equal(await wizard(page).getByRole('button', { name: 'Retry Fictional malformed.docx', exact: true }).count(), 1, 'cancel keeps the original failed file');
+  await replaceMalformed.setInputFiles(txt('Fictional malformed.docx', 'still not a ZIP'));
+  await wizard(page).getByRole('alert').filter({ hasText: 'Replacement was not added' }).waitFor();
+  assert.equal(await wizard(page).getByRole('button', { name: 'Retry Fictional malformed.docx', exact: true }).count(), 1, 'invalid replacement retains original Retry');
+  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
+  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles(txt('Fictional pending selection.txt', 'Newer selection must remain unconsumed.'));
+  await replaceMalformed.setInputFiles(txt('Fictional valid remainder.txt', 'Valid fictional remainder for mixed parsing.'));
+  await replaceMalformed.waitFor({ state: 'detached' });
+  assert.match(await wizard(page).getByRole('list', { name: 'Files to add' }).innerText(), /Fictional pending selection.txt/, 'replacement cannot consume the separate pending selection');
+  assert.match(await wizard(page).innerText(), /3 work item\(s\) already added/, 'replacement with already-added content does not duplicate it');
+  // Two synchronous change events simulate a repeated chooser completion while
+  // parsing is pending. Only one replacement may be added.
+  await wizard(page).getByLabel('Replace failed file: Fictional unsupported.pdf', { exact: true }).evaluate((input: HTMLInputElement) => {
+    const transfer = new DataTransfer(); transfer.items.add(new File(['Corrected fictional content.'], 'Fictional corrected.txt', { type: 'text/plain' }));
+    input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await wizard(page).getByRole('button', { name: 'Retry Fictional unsupported.pdf', exact: true }).waitFor({ state: 'detached' });
+  assert.match(await wizard(page).innerText(), /4 work item\(s\) already added/, 'double completion adds one corrected work item');
+  await wizard(page).getByLabel('Replace failed file: Fictional bad-encoding.txt', { exact: true }).setInputFiles(txt('Fictional bad-encoding.txt', 'Corrected valid UTF-8 fictional text.'));
+  await wizard(page).getByText('These files were not added', { exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await wizard(page).getByRole('checkbox', { name: 'Continue with only the work successfully added; leave these files out.', exact: true }).count(), 0, 'successful explicit replacements need no original-failure acknowledgment');
+  assert.match(await wizard(page).getByRole('list', { name: 'Files to add' }).innerText(), /Fictional pending selection.txt/);
+  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await wizard(page).getByRole('heading', { name: 'Who does this work belong to?', exact: true }).waitFor();
+  assert.match(await wizard(page).innerText(), /6 work item\(s\) added/);
   await selectOneStudent(page, studentLabels[enrollmentIds[1]]);
   await confirmImport(page);
   await waitForCount(page, 'markingAttempts', 3);
-  console.log('PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; valid remainder alone imports after roster confirmation.');
+  console.log('PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; cancelled/failed replacements keep original Retry; same-name replacement, duplicate completion and newer selection preservation pass without a redundant failure acknowledgment.');
 
   // Fail the second import's audit write inside its real transaction, after its
   // attempt write. It must roll back while the first import remains committed;

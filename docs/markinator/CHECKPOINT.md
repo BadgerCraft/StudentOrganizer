@@ -1,3 +1,9 @@
+# Current PR34 recovery and refinements — October 17, 2026
+
+Current authority supersedes local-only statements below: Tyler approved recovery from verified `0982c71b409969bd0e4319a27e764313e7ccb504`, refinement implementation/testing/review, commit and safe fast-forward push to existing `codex/reliability-20261017` / draft PR34. Local recovery branch is `codex/pr34-refinements-recovery`; existing work preserved. Explicit failed-file replacement, secondary former-student read-only history, and finalized-only Archive are implemented and independently source-reviewed. Final local verification PASS: 603 tests, build/typechecks, repeated/interrupted import and Archive/export/restore flows, and four authority scenarios. Publication/exact-head CI pending; see [current work order](../work-orders/CLASSROOM-USE-2026-10-15.md#october-17--pr34-product-refinements) and [queue](../FEATURE_QUEUE.md). No PR35 changes, merge, release, deployment, OAuth, real data or bulk legacy-record purge. Native Windows/Mac acceptance remains separate.
+
+---
+
 # Current reliability batch — October 17, 2026
 
 Fresh workspace execution succeeded. Current fetched and independently read-back main is `753ac300f0b0e08059539a18de42a01e939764b3` (merged PR33), superseding older PR32/33 pending-merge checkpoints below. Local branch `codex/reliability-20261017` starts there. Tyler approved C13, C15, TUV-UX-001/002, C12 and C18 with “Make it so.” Implementation, focused verification, independent review and local commits are authorized; no push, merge, release, installer update, OAuth changes, scanner changes or real student data. Existing historical records and marks, explicit teacher authorization and backup compatibility must be preserved.

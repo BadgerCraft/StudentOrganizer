@@ -12,10 +12,8 @@ export function archiveDraft(draft: MarkingDraft): MarkingDraft {
     do { id = `${kind}:${sequence++}`; } while (ids.has(id));
     ids.add(id); return id;
   };
-  // A pending edit can refer to an already saved comment. Preserve the edited
-  // version once, rather than producing an invalid duplicate archive ID.
+  // Only finalized annotations belong in an archive; pending edits are discarded.
   const textAnnotations = new Map(draft.annotations.map(annotation => [annotation.id, annotation]));
-  if (draft.pending) textAnnotations.set(draft.pending.id, draft.pending);
   for (const annotation of textAnnotations.values()) {
     comments.push({ id: feedbackId('text'), criterionId: annotation.criterionId, level: annotation.level, text: annotation.text });
   }
@@ -36,4 +34,15 @@ export function archiveSnapshot(json: string | null, entityName: string, archive
   if (entityName === 'markingAttempts') return JSON.stringify({ ...value, documents: [], imagePages: [], archivedAt, keepStudentWork: false });
   if (!value.draft) throw new Error('A retained marking draft snapshot is invalid. Archive was cancelled without changes.');
   return JSON.stringify({ ...value, draft: archiveDraft(value.draft) });
+}
+
+/** Empty schema-compatible shell for an unfinished session at the archive boundary. */
+export function discardUnfinishedDraft(draft: MarkingDraft, keepStudentWork: boolean): MarkingDraft {
+  return {
+    annotations: [], pending: null, overallFeedback: '',
+    judgments: draft.judgments.map(j => ({ ...j, assessed: false, rawScore: '', feedback: '' })),
+    ...(draft.rubricFeedback ? { rubricFeedback: draft.rubricFeedback.map(row => ({ criterionId: row.criterionId, level: '', feedback: '' })) } : {}),
+    ...(draft.oral ? { oral: { items: [], notes: '' } } : {}),
+    ...(keepStudentWork && draft.imageFeedback ? { imageFeedback: draft.imageFeedback.map(page => ({ pageId: page.pageId, rotation: 0, crop: { x: 0, y: 0, width: 1, height: 1 }, annotations: [] })) } : {}),
+  };
 }

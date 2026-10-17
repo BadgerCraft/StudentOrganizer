@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ReadOnlyMarkingHistory } from './ReadOnlyMarkingHistory';
-import type { MarkingAttempt, MarkingContext, MarkingDraft, MarkingSession } from '../types';
+import type { MarkingAttempt, MarkingCommit, MarkingContext, MarkingDraft, MarkingSession } from '../types';
 import { archiveDraft } from '../archive';
 
 const draft: MarkingDraft = {
@@ -13,13 +13,27 @@ const draft: MarkingDraft = {
     { id: 'unfinished-photo', kind: 'comment', points: [{ x: .4, y: .4 }], color: 'red', width: .01, text: '', criterionId: null, level: '' }
   ] }]
 };
-function render(value: MarkingDraft) {
-  const attempt = { id: 'attempt', rubricId: 'rubric', documents: [{ id: 'doc', name: 'fictional.txt' }], imagePages: [{ id: 'photo', name: 'fictional.png' }] } as MarkingAttempt;
-  const session = { id: 'session', attemptId: 'attempt', revision: 2, status: 'draft', updatedAt: '2026-10-17', categorySnapshot: [], draft: value } as unknown as MarkingSession;
-  const context = { rubrics: [{ id: 'rubric', title: 'Fictional rubric', criteria: [{ id: 'reason', name: 'Reasoning' }] }], sessions: [session] } as MarkingContext;
+function render(value: MarkingDraft, archived = false, published?: MarkingDraft) {
+  const attempt = { id: 'attempt', archivedAt: archived ? '2026-10-17' : null, rubricId: 'rubric', documents: [{ id: 'doc', name: 'fictional.txt' }], imagePages: [{ id: 'photo', name: 'fictional.png' }] } as MarkingAttempt;
+  const session = { id: 'session', attemptId: 'attempt', revision: 2, status: published ? 'finalized' : 'draft', commitId: published ? 'commit' : null, updatedAt: '2026-10-17', categorySnapshot: [], draft: value } as unknown as MarkingSession;
+  const context = { rubrics: [{ id: 'rubric', title: 'Fictional rubric', criteria: [{ id: 'reason', name: 'Reasoning' }] }], sessions: [session], commits: published ? [{ id: 'commit', sessionId: session.id, attemptId: attempt.id, draft: published } as MarkingCommit] : [] } as unknown as MarkingContext;
   return renderToStaticMarkup(<ReadOnlyMarkingHistory attempt={attempt} context={context} />);
 }
 describe('read-only retained revision feedback', () => {
+  it('renders a legacy finalized archive exclusively from its commit, never newer session edits', () => {
+    const html = render(draft, true, { annotations: [], pending: null, judgments: [], overallFeedback: 'Published committed feedback' });
+    expect(html).toContain('Published committed feedback');
+    expect(html).not.toContain('Fictional overall feedback');
+    expect(html).not.toContain('Unfinished replacement');
+    expect(html).not.toContain('Fictional photo feedback');
+  });
+  it('does not render unfinished legacy archived sessions or hidden draft sections', () => {
+    const html = render(draft, true);
+    expect(html).toContain('No finalized feedback was published');
+    expect(html).not.toContain('Unfinished replacement');
+    expect(html).not.toContain('Fictional overall feedback');
+    expect(html).not.toContain('<details');
+  });
   it('shows text edits, photo feedback and unfinished work without duplicate saved comments or edit controls', () => {
     const html = render(draft);
     expect(html).toContain('Unfinished replacement'); expect(html).not.toContain('Old saved text');
@@ -29,8 +43,8 @@ describe('read-only retained revision feedback', () => {
   });
   it('renders redacted archived feedback once with no source quote or original inline comments', () => {
     const html = render(archiveDraft(draft));
-    expect(html.split('Unfinished replacement')).toHaveLength(2);
+    expect(html).not.toContain('Unfinished replacement');
     expect(html.split('Fictional photo feedback')).toHaveLength(2);
-    expect(html).not.toContain('<blockquote'); expect(html).not.toContain('Old saved text');
+    expect(html).not.toContain('<blockquote'); expect(html).toContain('Old saved text');
   });
 });

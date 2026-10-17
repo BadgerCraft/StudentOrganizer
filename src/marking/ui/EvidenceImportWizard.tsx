@@ -40,7 +40,7 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
   const [matches, setMatches] = useState<Record<string, string>>({});
   const [previous, setPrevious] = useState<Record<string, string>>({});
   const [itemChoice, setItemChoice] = useState(''), [studentChoice, setStudentChoice] = useState('');
-  const [readErrors, setReadErrors] = useState<{ name: string; message: string; file: File; source: 'documents' | 'pictures' }[]>([]);
+  const [readErrors, setReadErrors] = useState<{ id: string; name: string; message: string; file: File; source: 'documents' | 'pictures' }[]>([]);
   const [acceptPartial, setAcceptPartial] = useState(false);
   const [notice, setNotice] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [savedCount, setSavedCount] = useState(0);
@@ -68,12 +68,12 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
     groups = evidenceImportGroups(items, selected, matches, previous);
   } catch (e) { reviewError = e instanceof Error ? e.message : 'Review work and student matches.'; }
 
-  async function addWork(retry?: typeof readErrors[number]) {
-    if (locked.current || inactive || !source) return;
+  async function addWork(retry?: typeof readErrors[number], replacement?: File) {
+    if (locked.current || inactive || !source || (retry && !readErrors.includes(retry))) return;
     locked.current = true; onBusyChange?.(true); setBusy(true); setError(''); setNotice('');
     try {
       validateTeacher();
-      const inputSource = retry?.source ?? source, inputFiles = retry ? [retry.file] : files;
+      const inputSource = retry?.source ?? source, inputFiles = replacement ? [replacement] : retry ? [retry.file] : files;
       let incoming: EvidenceWork[] = [], errors: { name: string; message: string; file: File }[] = [];
       if (inputSource === 'paste') incoming = [{ kind: 'documents', document: await createPastedDocument(name.trim(), paste) }];
       else if (inputSource === 'documents') {
@@ -85,21 +85,28 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
       }
       validateTeacher();
       if (!alive.current) return;
+      // Replacement intent belongs to this exact failed row, never its filename.
+      // A rejected corrected file leaves the original File available for Retry.
+      if (replacement && (errors.length || !incoming.length)) {
+        setError(`Replacement was not added. ${errors.map(row => row.message).join(' ') || 'Choose valid work.'} The original failure is kept.`);
+        return;
+      }
       const merged = mergeEvidenceWork(items, incoming);
       setItems(merged.items);
       // A retry replaces errors only for the files explicitly retried; other failures remain visible.
       // File object identity is deliberate: names (and metadata) can match different work.
       // Retry uses the retained original File, including after a transient read failure.
-      setReadErrors(current => [...current.filter(row => inputSource === 'paste' || !inputFiles.includes(row.file)),
-        ...errors.map(row => ({ ...row, source: inputSource as 'documents' | 'pictures' }))]);
+      setReadErrors(current => [...current.filter(row => replacement ? row !== retry : inputSource === 'paste' || !inputFiles.includes(row.file)),
+        ...errors.map(row => ({ ...row, id: crypto.randomUUID(), source: inputSource as 'documents' | 'pictures' }))]);
       setAcceptPartial(false);
       setNotice(merged.skipped.length ? `Already added; no extra copies: ${merged.skipped.join(', ')}.` : '');
-      if (merged.items.length && (incoming.length || merged.skipped.length)) {
+      // Replacement must leave the separate Add work selection untouched.
+      if (!replacement && merged.items.length && (incoming.length || merged.skipped.length)) {
         if (retry) {
           // Retrying an older failure must not consume a newer, unadded file selection.
           setFiles(current => current.filter(file => file !== retry.file));
         } else { setFiles([]); setStep('students'); }
-      } else if (!errors.length) setError('Choose work to add.');
+      } else if (!incoming.length && !errors.length) setError('Choose work to add.');
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Unable to add work. Your earlier work is preserved.'); }
     finally { locked.current = false; onBusyChange?.(false); if (alive.current) setBusy(false); }
   }
@@ -153,7 +160,7 @@ function EvidenceImportSteps({ context, rubricId, validateTeacher, disabled = fa
     <p className="text-sm text-slate-600">{({ source: '1 · Choose source', add: '2 · Add work', students: '3 · Select students', match: '4 · Match work to students', review: '5 · Review and start marking' })[step]}</p>
     {error && <p role="alert" className="text-red-800 whitespace-pre-wrap">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map((row, index) => <li key={`${row.name}:${index}`}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button></li>)}</ul><p>Retry the original file above. To use a corrected file, go Back and add it, then explicitly continue without the failed original. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
+    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
     {step === 'source' && <>
       <h3 className="font-bold text-lg">Where is the student work?</h3>
       <div className="grid gap-3 sm:grid-cols-3">{(['documents', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures') !== (items[0].kind === 'pictures'))} onChange={() => { setSource(value); setFiles([]); setError(''); }} />{value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
