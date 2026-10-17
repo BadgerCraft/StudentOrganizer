@@ -14,15 +14,17 @@ export interface ImageMarkupProps {
   onChange: (next: MarkingPageFeedback[]) => void;
   rubric: MarkingRubric;
   disabled: boolean;
+  readOnly?: boolean;
   /** Reorders retained pages only; the original fields and bytes are never changed. */
   onReorder?: (pageIds: string[]) => void;
   actor?: MarkingActor;
   onComposerDirtyChange?: (dirty: boolean) => void;
+  onFeedbackActiveChange?: (active: boolean) => void;
 }
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, onReorder, actor, onComposerDirtyChange }: ImageMarkupProps) {
+export function ImageMarkup({ commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange }: ImageMarkupProps) {
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
   const pages = feedback.map(item => originalPages.find(page => page.id === item.pageId)).filter((page): page is MarkingImagePage => Boolean(page));
   for (const page of originalPages) if (!pages.some(item => item.id === page.id)) pages.push(page);
@@ -30,13 +32,34 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   const [tool, setTool] = useState<MarkingVisualAnnotation['kind']>('pen');
   const [color, setColor] = useState<MarkingVisualAnnotation['color']>('red');
   const [selected, setSelected] = useState<string | null>(null);
+  // Feedback still autosaves; retain the opening values so Cancel restores an existing mark.
+  const [feedbackStart, setFeedbackStart] = useState<{ text: string; criterionId: string | null; level: string; isNew: boolean } | null>(null);
+  const [feedbackNotice, setFeedbackNotice] = useState('');
+  useEffect(() => { onFeedbackActiveChange?.(Boolean(selected) && !readOnly); return () => onFeedbackActiveChange?.(false); }, [selected, readOnly, onFeedbackActiveChange]);
   const [bankDirty, setBankDirty] = useState(false);
   const allowLeavingComment = () => {
+    if (selected) { setFeedbackNotice('Save or cancel feedback for the current mark first. Your work is retained.'); return false; }
     if (bankDirty && !window.confirm('Discard the unsaved comment bank import? Your recorded comment will be kept.')) return false;
     if (bankDirty) onComposerDirtyChange?.(false);
     setBankDirty(false); return true;
   };
-  const selectMark = (id: string | null) => { if (id !== selected && allowLeavingComment()) setSelected(id); };
+  const selectMark = (id: string | null) => {
+    if (id === selected || !allowLeavingComment()) return;
+    const annotation = current?.annotations.find(item => item.id === id);
+    setFeedbackStart(annotation ? { text: annotation.text, criterionId: annotation.criterionId, level: annotation.level, isNew: false } : null);
+    setSelected(id); setFeedbackNotice('');
+  };
+  function finishFeedback(save: boolean) {
+    if (!selected || !feedbackStart) return;
+    if (readOnly) { setSelected(null); setFeedbackStart(null); return; }
+    if (disabled) return;
+    if (bankDirty && !window.confirm('Discard the unsaved comment bank import review?')) return;
+    endStroke();
+    if (!save && !feedbackStart.isNew) change(item => ({ ...item, annotations: item.annotations.map(annotation => annotation.id === selected ? { ...annotation, text: feedbackStart.text, criterionId: feedbackStart.criterionId, level: feedbackStart.level } : annotation) }));
+    else if (!save && feedbackStart.isNew) change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) }));
+    setSelected(null); setFeedbackStart(null); setBankDirty(false); onComposerDirtyChange?.(false);
+    setFeedbackNotice(save ? 'Feedback saved. Ready for the next mark.' : 'Feedback cancelled. Saved feedback is unchanged.');
+  }
   const changeVisiblePage = (id: string) => { if (allowLeavingComment()) setPageId(id); };
   const [renderError, setRenderError] = useState('');
   const [previewKey, setPreviewKey] = useState('');
@@ -53,9 +76,12 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   const renderKey = page && current ? JSON.stringify([page.id, page.hash, page.mime, page.width, page.height, current.rotation, current.crop]) : '';
   const previewReady = Boolean(renderKey) && previewKey === renderKey;
 
-  function endStroke() {
+  function endStroke(selectFeedback = true) {
     const active = stroke.current;
     stroke.current = null;
+    // Mount feedback only once drawing ends: its independent pane can scroll as it changes height.
+    // Opening it during pointer capture would interrupt the stroke through the scroll safeguard.
+    if (active && selectFeedback) { setSelected(active.id); setFeedbackNotice(''); }
     if (active && svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
   }
   useEffect(() => {
@@ -66,7 +92,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     document.addEventListener('scroll', interrupt, true);
     document.addEventListener('visibilitychange', interrupt);
     return () => {
-      endStroke();
+      endStroke(false);
       window.removeEventListener('blur', interrupt);
       document.removeEventListener('focusin', interrupt);
       document.removeEventListener('scroll', interrupt, true);
@@ -148,9 +174,10 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     event.preventDefault();
     if (!allowLeavingComment()) return;
     const id = crypto.randomUUID();
-    const annotation: MarkingVisualAnnotation = { id, kind: tool, points: [point], color: tool === 'highlight' ? 'yellow' : color, width: tool === 'highlight' ? 0.018 : 0.004, text: '', criterionId: null, level: '' };
+    const annotation: MarkingVisualAnnotation = { id, kind: tool, points: [point], color: tool === 'highlight' ? 'yellow' : color, width: tool === 'highlight' ? 0.018 : 0.004, text: '', criterionId: rubric.criteria[0]?.id ?? null, level: '' };
     change(item => ({ ...item, annotations: [...item.annotations, annotation] }));
-    if (tool === 'comment') setSelected(id);
+    setFeedbackStart({ text: '', criterionId: annotation.criterionId, level: '', isNew: true });
+    if (tool === 'comment') { setSelected(id); setFeedbackNotice(''); }
     if (tool !== 'comment') {
       stroke.current = { id, pageId: page.id, pointerId: event.pointerId, renderKey };
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -178,6 +205,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     change(item => ({ ...item, annotations: item.annotations.map(annotation => annotation.id === selected ? { ...annotation, ...changes } : annotation) }));
   }
   function cropValue(key: keyof MarkingPageFeedback['crop'], value: string) {
+    if (!allowLeavingComment()) return;
     const number = Number(value) / 100;
     if (!Number.isFinite(number)) return;
     change(item => {
@@ -188,13 +216,14 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   }
   function reorder(offset: number) {
     const ids = pages.map(item => item.id), destination = pageIndex + offset;
+    if (!allowLeavingComment()) return;
     if (disabled || destination < 0 || destination >= ids.length) return;
     [ids[pageIndex], ids[destination]] = [ids[destination], ids[pageIndex]];
     if (onReorder) onReorder(ids);
   }
 
   if (!page || !current) return <p className="text-sm text-gray-600">Import local page images to add visual feedback.</p>;
-  return <section aria-label="Image markup" data-testid="image-markup" className="image-markup-layout rounded border border-gray-300 bg-gray-50 p-3">
+  return <section aria-label="Image markup" data-testid="image-markup" style={{ overflowAnchor: 'none' }} className="image-markup-layout rounded border border-gray-300 bg-gray-50 p-3">
     <div className="image-work-pane space-y-3" data-testid="marking-image-work">
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className={buttonClass} disabled={pageIndex === 0} onClick={() => changeVisiblePage(pages[pageIndex - 1].id)}>Previous page</button>
@@ -204,22 +233,22 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     </div>
     <p className="text-xs text-gray-600">Original image retained. Crop, rotation and feedback are saved separately. Cropped-out marks remain saved.</p>
     <div className="flex flex-wrap items-center gap-2" aria-label="Image tools">
-      {(['pen', 'highlight', 'comment'] as const).map(value => <button key={value} type="button" className={buttonClass} aria-pressed={tool === value} disabled={disabled} onClick={() => { if (value === 'comment' && selectedAnnotation) { if (!allowLeavingComment()) return; setSelected(null); } setTool(value); }}>{value === 'pen' ? 'Pen' : value === 'highlight' ? 'Highlight' : 'Write a comment'}</button>)}
+      {(['pen', 'highlight', 'comment'] as const).map(value => <button key={value} type="button" className={buttonClass} aria-pressed={tool === value} disabled={disabled} onClick={() => setTool(value)}>{value === 'pen' ? 'Pen' : value === 'highlight' ? 'Highlight' : 'Write a comment'}</button>)}
       <label className="text-sm">Ink <select aria-label="Ink color" className="rounded border p-2" disabled={disabled || tool === 'highlight'} value={color} onChange={event => setColor(event.target.value as typeof color)}><option value="red">Red</option><option value="blue">Blue</option><option value="yellow">Yellow</option></select></label>
       <button type="button" className={buttonClass} disabled={disabled || !current.annotations.length} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, annotations: item.annotations.slice(0, -1) })); setSelected(null); }}>Undo last mark</button>
-      <button type="button" className={buttonClass} disabled={disabled} onClick={() => change(item => ({ ...item, rotation: ((item.rotation + 90) % 360) as MarkingPageFeedback['rotation'] }))}>Rotate clockwise</button>
+      <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, rotation: ((item.rotation + 90) % 360) as MarkingPageFeedback['rotation'] })); }}>Rotate clockwise</button>
       <span className="text-sm">Rotation {current.rotation}°</span>
     </div>
     {tool === 'comment' && <p role="status" className="text-sm font-medium">Click the page where you want to place your comment, then write it below.</p>}
     <fieldset disabled={disabled} className="flex flex-wrap items-center gap-2"><legend className="text-sm">Crop original page (%)</legend>
       {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-sm">{key === 'x' ? 'Left' : key === 'y' ? 'Top' : key === 'width' ? 'Width' : 'Height'} <input aria-label={`Crop ${key}`} className="w-20 rounded border p-2" type="number" min={key === 'width' || key === 'height' ? 1 : 0} max="100" step="1" value={Math.round(current.crop[key] * 10000) / 100} onChange={event => cropValue(key, event.target.value)} /></label>)}
-      <button type="button" className={buttonClass} onClick={() => change(item => ({ ...item, crop: { x: 0, y: 0, width: 1, height: 1 } }))}>Reset crop</button>
+      <button type="button" className={buttonClass} onClick={() => { if (allowLeavingComment()) change(item => ({ ...item, crop: { x: 0, y: 0, width: 1, height: 1 } })); }}>Reset crop</button>
     </fieldset>
     {renderError && <p role="alert" className="text-red-700">{renderError}</p>}
     <div className="relative mx-auto w-full overflow-hidden rounded border bg-white" style={{ maxWidth: 900, aspectRatio: `${size.width} / ${size.height}` }}>
       <canvas ref={canvasRef} aria-label={`Original image preview: ${page.name}`} className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden' }} />
       {!previewReady && !renderError && <p role="status" className="absolute inset-0 flex items-center justify-center text-sm text-gray-600">Loading original image…</p>}
-      <svg ref={svgRef} aria-label="Page annotation surface" data-testid="image-annotation-surface" className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden', touchAction: disabled ? 'auto' : 'none', cursor: disabled ? 'default' : 'crosshair' }} viewBox={`0 0 ${size.width} ${size.height}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={() => { stroke.current = null; }}>
+      <svg ref={svgRef} aria-label="Page annotation surface" data-testid="image-annotation-surface" className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden', touchAction: disabled ? 'auto' : 'none', cursor: disabled ? 'default' : 'crosshair' }} viewBox={`0 0 ${size.width} ${size.height}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={() => endStroke()}>
         {current.annotations.map(annotation => {
           const points = annotation.points.map(point => { const p = originalToDisplay(point, current); return { x: p.x * size.width, y: p.y * size.height }; });
           const first = points[0]; if (!first) return null;
@@ -237,6 +266,8 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   function renderComments() {
     if (!current) return null;
     const content = <div className="image-comment-pane space-y-3" data-testid="marking-image-comments">
+    {feedbackNotice && <p role="status" className="text-sm font-semibold">{feedbackNotice}</p>}
+    {selectedAnnotation && <p className="text-sm">Finish this mark with Save feedback or Cancel feedback before marking again. New marks start with the first rubric criterion; change it below if needed.</p>}
     {current.annotations.length >= MARKING_LIMITS.visualAnnotations && <p role="status">This page has reached its 500-mark limit. Delete a mark to add another.</p>}
     {!selectedAnnotation && <p className="text-sm">Choose Write a comment and click the page, or select a saved mark. Your page stays in place while you write.</p>}
     {!selectedAnnotation && <div className="flex flex-wrap items-center gap-2"><label className="text-sm">Saved marks <select aria-label="Select saved mark" value={selected ?? ''} className="rounded border p-2" onChange={event => selectMark(event.target.value || null)}><option value="">Select a mark</option>{current.annotations.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.kind}{item.text ? `: ${item.text.slice(0, 40)}` : ''}</option>)}</select></label>
@@ -256,10 +287,10 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
       {rubric.levels.some(level => !CLASSROOM_LEVEL_LABELS.includes(level)) && <details className="text-sm"><summary>Other rubric labels</summary><select aria-label="Image level" className="rounded border p-2" disabled={disabled || !selectedAnnotation.criterionId} value={CLASSROOM_LEVEL_LABELS.includes(selectedAnnotation.level) ? '' : selectedAnnotation.level} onChange={event => { if (event.target.value) editAnnotation({ level: event.target.value }); }}><option value="">Choose a saved rubric label</option>{rubric.levels.filter(level => !CLASSROOM_LEVEL_LABELS.includes(level)).map(level => <option key={level} value={level}>{level}</option>)}</select></details>}
       {selectedAnnotation.level && <button type="button" className={buttonClass} disabled={disabled} onClick={() => editAnnotation({ level: '' })}>Clear evidence level</button>}
       <div className="flex gap-2">
-        <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) })); setSelected(null); }}>Delete selected mark</button>
+        <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (bankDirty && !window.confirm('Discard the unsaved comment bank import review?')) return; endStroke(); change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) })); setSelected(null); setFeedbackStart(null); setBankDirty(false); onComposerDirtyChange?.(false); }}>Delete selected mark</button>
       </div>
     </fieldset>}
-    {selectedAnnotation && <button type="button" className={`${buttonClass} font-semibold`} onClick={() => selectMark(null)}>Done — review image</button>}
+    {selectedAnnotation && <div className="flex gap-2"><button type="button" className={`${buttonClass} font-semibold`} disabled={disabled} onClick={() => finishFeedback(true)}>Save feedback</button><button type="button" className={buttonClass} disabled={disabled && !readOnly} onClick={() => finishFeedback(false)}>{readOnly ? 'Close feedback' : 'Cancel feedback'}</button></div>}
     </div>;
     return commentContainer ? createPortal(content, commentContainer) : content;
   }

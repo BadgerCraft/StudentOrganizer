@@ -220,6 +220,54 @@ try {
     await selectPassage(page, 0, 13);
     await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
     if (index === 0) {
+      await page.getByRole('button',{name:'Save now',exact:true}).click();
+      await page.getByTestId('marking-save-status').filter({hasText:'Saved locally'}).waitFor();
+      const pendingBefore=(await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending;
+      assert.equal(pendingBefore.text,expectedPassageFeedback[index],'text pending feedback autosaves');
+      await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(), pendingBefore.text, 'dismissed Back keeps exact unfinished feedback');
+      page.once('dialog', dialog => dialog.accept());
+      await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+      await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
+      assert.deepEqual((await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending,pendingBefore,'confirmed Back preserves exact pending draft');
+      await page.getByTestId(`open-marking-${assessment.id}`).click();
+      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      await page.getByTestId('marking-feedback').waitFor();
+      // Force a real draft flush failure, then retry the same departure without changing feedback.
+      await page.evaluate(async () => {
+        const modulePath = '/src/marking/markingService.ts';
+        const { MarkingService } = await import(modulePath);
+        const original = MarkingService.prototype.saveDraft;
+        (window as any).restoreDepartureSave = () => { MarkingService.prototype.saveDraft = original; };
+        MarkingService.prototype.saveDraft = async () => { throw new Error('Fictional departure save failure'); };
+      });
+      await page.getByTestId('marking-feedback').fill(pendingBefore.text + ' retry');
+      page.once('dialog', dialog => dialog.accept());
+      await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+      await page.getByRole('alert').filter({hasText:'Fictional departure save failure'}).waitFor();
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(),pendingBefore.text+' retry','failed flush keeps workspace open with exact edit');
+      await page.evaluate(() => (window as any).restoreDepartureSave());
+      page.once('dialog', dialog => dialog.accept());
+      await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+      await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
+      assert.deepEqual((await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending,{...pendingBefore,text:pendingBefore.text+' retry'},'retry saves pending without committing annotation');
+      await page.getByTestId(`open-marking-${assessment.id}`).click();
+      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      await page.getByTestId('marking-feedback').fill(pendingBefore.text);
+      await documentSelect.selectOption(grouped.documents[1].id);
+      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      assert.equal(await documentSelect.inputValue(),document.id,'unfinished text prevents document switch');
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(),expectedPassageFeedback[index],'Back and submission changes retain unfinished text');
+      await selectPassage(page,14,20);
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(),expectedPassageFeedback[index],'another highlight cannot replace unfinished text');
+      page.once('dialog',dialog=>dialog.accept());
+      await page.getByRole('button',{name:'Cancel comment',exact:true}).click();
+      assert.equal(await page.getByTestId('marking-feedback').count(),0,'cancel finishes new text feedback');
+      await selectPassage(page,0,13);
+      await page.getByTestId('marking-feedback').fill(expectedPassageFeedback[index]);
+      console.log('PASS: pending text autosave, Back/document/submission/selection guards and cancel/reselect preserve exact feedback');
+    }
+    if (index === 0) {
       // A single mapped criterion exposes earlier independent evidence only once recorded.
       // Save and edit this same annotation so both passage and retained-evidence banks are exercised.
       await page.getByTestId('marking-comment-save').click();

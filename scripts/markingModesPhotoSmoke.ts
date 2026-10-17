@@ -96,6 +96,8 @@ async function editRubricComment(page: Page, criterionId: string, text: string) 
   await page.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
 }
 async function stroke(page: Page, tool: 'Pen' | 'Highlight' | 'Write a comment', start: { x: number; y: number }, end?: { x: number; y: number }) {
+  const finish = page.getByRole('button', { name: 'Save feedback', exact: true });
+  if (await finish.count()) await finish.click();
   await page.getByTestId('image-markup').getByRole('button', { name: tool, exact: true }).click();
   const surface = page.getByTestId('image-annotation-surface'); await surface.waitFor({ state: 'visible' }); await surface.scrollIntoViewIfNeeded();
   const box = await surface.boundingBox(); assert.ok(box);
@@ -239,14 +241,19 @@ try {
   const position = await workPane.evaluate(el => el.scrollTop);
   await page.mouse.move(annotationBox.x + annotationBox.width*.2, annotationBox.y + annotationBox.height*.2);
   await page.mouse.down();
-  assert.equal(await page.getByLabel('Image comment text', {exact:true}).count(), 0, 'pen does not create or focus a comment editor');
+  assert.equal(await page.getByLabel('Image comment text', {exact:true}).count(), 0, 'feedback opens after drawing ends so its pane cannot interrupt pointer capture');
   await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.25);
   await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).focus();
   await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.8);
-  await page.mouse.up(); await saved(page);
+  await page.mouse.up();
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).count(),1,'interrupted retained stroke selects its exact feedback');
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).evaluate(el=>el===document.activeElement),false,'feedback never steals focus');
+  await saved(page);
   let interrupted = (await session(page, photo.id)).draft.imageFeedback[0].annotations.at(-1);
+  assert.ok(interrupted.points.length >= 2, 'first stroke records movement before deliberate focus interruption');
   assert.ok(interrupted.points.every((p:any) => p.y < .35), 'focus interruption cannot draw a line down the page');
   assert.equal(await workPane.evaluate(el => el.scrollTop), position, 'editing feedback keeps the image scroll position');
+  await page.getByRole('button', {name:'Save feedback',exact:true}).click();
   await page.getByRole('button', {name:'Undo last mark',exact:true}).click();
   for (const interruption of ['scroll', 'blur', 'pointercancel', 'lostpointercapture']) {
     const surface = page.getByTestId('image-annotation-surface'); await surface.scrollIntoViewIfNeeded();
@@ -261,9 +268,11 @@ try {
     await page.mouse.move(b.x+b.width*.25,b.y+b.height*.85);await page.mouse.up();await saved(page);
     interrupted=(await session(page, photo.id)).draft.imageFeedback[0].annotations.at(-1);
     assert.ok(interrupted.points.every((p:any)=>p.y<.35), `${interruption} retains the partial stroke without extending it`);
+    assert.equal(await page.getByLabel('Image comment text',{exact:true}).count(),1,`${interruption} selects its retained partial mark for feedback`);
+    await page.getByRole('button',{name:'Save feedback',exact:true}).click();
     await page.getByRole('button',{name:'Undo last mark',exact:true}).click();
   }
-  passed('side-by-side independent work/feedback scrolling; pen never autofocuses a comment; focus/scroll/window blur/cancel/pointer loss retain partial strokes without downward lines.');
+  passed('side-by-side independent work/feedback scrolling; pen selects feedback without autofocus; focus/scroll/window blur/cancel/pointer loss retain partial strokes without downward lines.');
   await stroke(page, 'Pen', { x: .2, y: .2 }, { x: .7, y: .3 });
   await stroke(page, 'Highlight', { x: .2, y: .35 }, { x: .65, y: .35 });
   await stroke(page, 'Write a comment', { x: .4, y: .5 });
@@ -271,6 +280,48 @@ try {
   await page.getByLabel('Image criterion', { exact: true }).selectOption(criterionId);
   await page.getByTestId('marking-image-comments').getByText('Other rubric labels', {exact:true}).click();
   await page.getByLabel('Image level', { exact: true }).selectOption('Level 3');
+  await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await page.getByRole('button',{name:'Next page',exact:true}).click();
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),'Fictional page comment before edit','page switch cannot interrupt active feedback');
+  await saved(page);
+  const pendingPhoto=(await session(page,photo.id)).draft.imageFeedback[0].annotations[2];
+  assert.equal(pendingPhoto.text,'Fictional page comment before edit','active typed feedback autosaves before confirmation');
+  assert.equal(pendingPhoto.level,'Level 3');
+  const photoBeforeDeparture = (await session(page,photo.id)).draft;
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
+  await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
+  assert.deepEqual((await session(page,photo.id)).draft,photoBeforeDeparture,'confirmed Back retains exact photo draft');
+  await page.getByTestId(`open-marking-${assessment.id}`).click();
+  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await page.getByLabel('Select saved mark',{exact:true}).selectOption(pendingPhoto.id);
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('dialog',{name:'Assessment marking',exact:true}).getByRole('button',{name:'Switch teacher',exact:true}).click();
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),pendingPhoto.text,'dismissed teacher switch retains exact photo feedback');
+  let switchMessage = '';
+  page.once('dialog', async dialog => { switchMessage = dialog.message(); await dialog.accept(); });
+  await page.getByRole('dialog',{name:'Assessment marking',exact:true}).getByRole('button',{name:'Switch teacher',exact:true}).click();
+  assert.equal(switchMessage,'Keep unfinished feedback saved as a draft and switch teacher?');
+  await page.getByTestId(`select-teacher-${otherTeacherId}`).click();
+  assert.deepEqual((await session(page,photo.id)).draft,photoBeforeDeparture,'switching teachers preserves original owner draft');
+  await page.getByTestId('header-teacher-btn').click();
+  await page.getByTestId(`select-teacher-${actorId}`).click();
+  await page.getByRole('button',{name:'Assessments',exact:true}).click();
+  await page.getByTestId(`open-marking-${assessment.id}`).click();
+  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await page.getByLabel('Select saved mark',{exact:true}).selectOption(pendingPhoto.id);
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),pendingPhoto.text,'original teacher recovers unfinished photo feedback');
+  passed('explicit Back/teacher confirmation saves exact photo draft; dismiss retains active editor; another teacher cannot rewrite the owner draft.');
+  const acceptReload = (dialog: import('playwright').Dialog) => dialog.accept();
+  page.on('dialog',acceptReload);
+  await reopen(page,assessment.id,photo.id);
+  page.off('dialog',acceptReload);
+  await page.getByLabel('Select saved mark',{exact:true}).selectOption(pendingPhoto.id);
+  assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),pendingPhoto.text,'reload recovers autosaved active feedback');
+  assert.equal(await page.getByLabel('Image criterion',{exact:true}).inputValue(),criterionId);
+  assert.match(await page.getByTestId('marking-image-comments').innerText(),/Selected level: Level 3/);
+  await page.getByRole('button',{name:'Save feedback',exact:true}).click();
   await page.getByLabel('Crop width', { exact: true }).fill('80');
   await page.getByLabel('Crop height', { exact: true }).fill('70');
   await page.getByLabel('Crop x', { exact: true }).fill('10');
@@ -280,6 +331,7 @@ try {
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
   await assertOriginalAxes(page, files[1].name);
   await stroke(page, 'Pen', { x: .15, y: .2 }, { x: .55, y: .5 });
+  await page.getByRole('button',{name:'Save feedback',exact:true}).click();
   await page.getByTestId(`marking-criterion-${criterionId}`).getByText('Other rubric labels', {exact:true}).click();
   await page.getByTestId(`marking-criterion-level-${criterionId}`).selectOption('Level 4');
   await editRubricComment(page, criterionId, 'Fictional photo rubric feedback');
@@ -293,8 +345,8 @@ try {
   assert.equal(transformed.rotation, 90); assert.deepEqual(transformed.crop, { x: .1, y: .2, width: .8, height: .7 });
   assert.deepEqual(transformed.annotations.map((row: any) => row.kind), ['pen', 'highlight', 'comment']);
   assert.ok(transformed.annotations[0].points.length >= 2);
-  assert.ok(Math.abs(transformed.annotations[0].points[0].x - .2) < .01 && Math.abs(transformed.annotations[0].points[0].y - .2) < .01, 'pen anchor remains in original pixels after crop/rotation');
-  assert.ok(Math.abs(transformed.annotations[2].points[0].x - .4) < .01 && Math.abs(transformed.annotations[2].points[0].y - .5) < .01, 'comment anchor remains in original pixels after crop/rotation');
+  assert.ok(Math.abs(transformed.annotations[0].points[0].x - .2) < .01 && Math.abs(transformed.annotations[0].points[0].y - .2) < .01, `pen anchor remains in original pixels after crop/rotation: ${JSON.stringify(transformed.annotations[0].points[0])}`);
+  assert.ok(Math.abs(transformed.annotations[2].points[0].x - .4) < .01 && Math.abs(transformed.annotations[2].points[0].y - .5) < .01, `comment anchor remains in original pixels after crop/rotation: ${JSON.stringify(transformed.annotations[2].points[0])}`);
   assert.equal(photoSaved.draft.imageFeedback[0].annotations.length, 1);
   assert.deepEqual(await official(page, assessment.id), baseline);
   await page.screenshot({ path: `${artifacts}-photo-markup.png`, fullPage: true });
@@ -305,6 +357,7 @@ try {
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
   await page.getByLabel('Select saved mark', { exact: true }).selectOption(transformed.annotations[2].id);
   await page.getByLabel('Image comment text', { exact: true }).fill('Fictional edited photo comment');
+  await page.getByRole('button',{name:'Save feedback',exact:true}).click();
   await saved(page);
   assert.equal((await session(page, photo.id)).draft.imageFeedback[1].annotations[2].text, 'Fictional edited photo comment');
   assert.deepEqual((await records(page, 'markingAttempts')).find(row => row.id === photo.id), photo);
@@ -519,6 +572,7 @@ try {
   await restored.getByRole('button', { name: 'Next page', exact: true }).click();
   await restored.getByLabel('Select saved mark', { exact: true }).selectOption(transformed.annotations[2].id);
   assert.equal(await restored.getByLabel('Image comment text', { exact: true }).inputValue(), 'Fictional edited photo comment');
+  await restored.getByRole('button',{name:'Save feedback',exact:true}).click();
   await restored.getByRole('button', { name: 'Next page', exact: true }).click(); await assertOriginalAxes(restored, files[2].name);
   await restored.getByRole('button', { name: 'Next page', exact: true }).click(); await assertOriginalAxes(restored, files[3].name);
   for (const { attempt, saved: stored } of nonwritten) {

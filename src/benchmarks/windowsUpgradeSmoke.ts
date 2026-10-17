@@ -10,7 +10,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
-import { runMarkingDesktopAcceptance, verifyAfterRestart, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
+import { runMarkingDesktopAcceptance, verifyAfterRestart, leaveMarkingWithDraft, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
 
 // This deliberately uses the real installed application's normal profile. The
 // guard below limits it to a disposable Windows runner containing fictional QA
@@ -382,7 +382,7 @@ async function runLegacyBootstrap() {
     assert.notDeepEqual(changed.markingSessions, before.markingSessions, 'B must contain a later saved edit before recovery');
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
-    await running.page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+    await leaveMarkingWithDraft(running.page);
     await running.page.getByTestId('nav-portability-btn').click();
     await running.page.getByTestId('restore-file-input').setInputFiles(backupPath);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();
@@ -564,7 +564,7 @@ async function runInstallRecovery() {
     assert.notDeepEqual(changed.markingSessions, before.markingSessions);
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
-    await running.page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+    await leaveMarkingWithDraft(running.page);
     await running.page.getByTestId('nav-portability-btn').click();
     await running.page.getByTestId('restore-file-input').setInputFiles(safetyBackup);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();

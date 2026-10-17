@@ -1,4 +1,5 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
+import { leaveMarkingWithDraft } from '../src/benchmarks/markingDesktopAcceptance';
 import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -181,7 +182,7 @@ try {
   await page.getByTestId('marking-feedback').fill('Fictional unfinished former-student feedback.');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await leaveMarkingWithDraft(page);
   await page.getByTestId('nav-seating-btn').click();
   const enrollment = (await records(page, 'classEnrollments')).find(row => row.id === students[2].value);
   const student = (await records(page, 'students')).find(row => row.id === enrollment.studentId);

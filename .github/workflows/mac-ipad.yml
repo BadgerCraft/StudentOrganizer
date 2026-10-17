@@ -143,6 +143,8 @@ jobs:
           name: shared-browser-evidence-${{ github.run_number }}
           path: |
             screenshots/**
+            /tmp/annotation-feedback-results.json
+            /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json
             /tmp/markinator-modes-photo-*.png
             /tmp/annotated-report-smoke*
