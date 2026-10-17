@@ -114,13 +114,13 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   const beforeOfficial = await snapshot(page, assessment.id);
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
-  // A retained old package is the upgrade baseline. Keep its original controls intact.
-  // The rubric gate intentionally leaves the import wizard unmounted until saved.
-  // Detect the modern rubric itself so retained legacy upgrade fixtures still use their controls.
-  const guided = await page.getByTestId('marking-rubric-paste').count() > 0;
+  // Both UI generations have marking-rubric-paste. Only the newer rubric collapses
+  // its paste controls; the import wizard is gated until the rubric is saved.
+  const rubricDisclosure = page.locator('summary').filter({ hasText: /^Paste rubric text or table$/ });
+  const collapsibleRubric = await rubricDisclosure.count() > 0;
   const rubricText = 'Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning';
-  if (guided) {
-    await page.locator('summary').filter({ hasText: /^Paste rubric text or table$/ }).click();
+  if (collapsibleRubric) {
+    await rubricDisclosure.click();
     await page.getByTestId('marking-rubric-paste').fill(rubricText);
     await page.getByTestId('marking-rubric-preview').click();
     await page.getByLabel('Rubric title', { exact: true }).fill('Fictional packaged descriptor rubric');
@@ -136,6 +136,13 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
     await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
   }
 
+  // Import/category controls are a separate capability from rubric presentation.
+  // Saving is async: wait for the actual next controls before choosing a path.
+  await eventually(page, async () =>
+    await page.getByTestId('evidence-import-wizard').count() > 0
+      || await page.getByTestId('marking-files').count() > 0 ? true : undefined,
+  'Saved rubric did not open guided or legacy import controls');
+  const guided = await page.getByTestId('evidence-import-wizard').count() > 0;
   const text = 'Echo phrase. Middle words. Echo phrase. End. <img src="https://fictional.invalid/essay">';
   const docx = Buffer.from(zipSync({
     '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
