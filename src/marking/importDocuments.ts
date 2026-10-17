@@ -177,11 +177,11 @@ export async function createPastedDocument(name: string, text: string): Promise<
   return { id: crypto.randomUUID(), name, text: normalized, hash: await sha256(encoder.encode(normalized)), original: null };
 }
 
-export async function parseMarkingFiles(files: File[]): Promise<{ documents: MarkingDocument[]; errors: { name: string; message: string }[] }> {
+export async function parseMarkingFiles(files: File[]): Promise<{ documents: MarkingDocument[]; errors: { name: string; message: string; file: File }[] }> {
   const documents: MarkingDocument[] = [];
-  const errors: { name: string; message: string }[] = [];
+  const errors: { name: string; message: string; file: File }[] = [];
   if (files.length > MARKING_LIMITS.batchFiles || files.reduce((sum, file) => sum + file.size, 0) > MARKING_LIMITS.batchBytes) {
-    return { documents, errors: files.map(file => ({ name: file.name, message: 'Import at most 10 files and 10 MB in one batch.' })) };
+    return { documents, errors: files.map(file => ({ file, name: file.name, message: 'Import at most 10 files and 10 MB in one batch.' })) };
   }
   for (const file of files) {
     try {
@@ -199,7 +199,7 @@ export async function parseMarkingFiles(files: File[]): Promise<{ documents: Mar
       document.original = { name: file.name, mime: extension === 'txt' ? 'text/plain' : DOCX_MIME, base64: base64(bytes), size: bytes.length, hash: await sha256(bytes) };
       documents.push(document);
     } catch (error) {
-      errors.push({ name: file.name, message: error instanceof Error ? error.message : 'Unable to read this file.' });
+      errors.push({ file, name: file.name, message: error instanceof Error ? error.message : 'Unable to read this file.' });
     }
   }
   return { documents, errors };

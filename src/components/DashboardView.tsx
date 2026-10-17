@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Plus,
@@ -15,7 +15,8 @@ import { DEFAULT_CHICLET_DISPLAY, formatChicletTitle } from '../types/schema';
 import { db } from '../db/database';
 import { ModalDialog } from './ModalDialog';
 import { ClassDomainService } from '../services/classService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
+import { saveClassCardDisplay } from '../services/displayPreferencesService';
 import { AuthorizationError } from '../services/authHelper';
 
 interface DashboardViewProps {
@@ -38,7 +39,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenClass,
   onRefresh
 }) => {
-  const userPref = useLiveQuery(() => db.userPreferences.toCollection().first());
+  const queriedPreference = useLiveQuery(async () => userId ? { userId, preference: await db.userPreferences.where('userId').equals(userId).first() } : undefined, [userId]);
+  // A live query can retain its previous value while the next teacher loads.
+  const preferencesLoaded = !!userId && queriedPreference?.userId === userId;
+  const userPref = preferencesLoaded ? queriedPreference?.preference : undefined;
+  const displaySettingsEpoch = useRef(getIdentityEpoch());
+  const [displayError, setDisplayError] = useState<string | null>(null);
+  const [savingDisplay, setSavingDisplay] = useState(false);
+  useEffect(() => subscribeIdentityChange(() => {
+    setShowDisplaySettingsModal(false);
+    setIsDisplaySettingsDirty(false);
+    setDisplayError(null);
+  }), []);
+  useEffect(() => { setShowDisplaySettingsModal(false); setIsDisplaySettingsDirty(false); }, [userId]);
 
   const displaySettings: ChicletDisplaySettings = {
     ...DEFAULT_CHICLET_DISPLAY,
@@ -49,16 +62,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showDisplaySettingsModal, setShowDisplaySettingsModal] = useState(false);
   const [tempDisplaySettings, setTempDisplaySettings] = useState<ChicletDisplaySettings>(DEFAULT_CHICLET_DISPLAY);
   const [isDisplaySettingsDirty, setIsDisplaySettingsDirty] = useState(false);
-
-  useEffect(() => {
-    if (showDisplaySettingsModal) {
-      setTempDisplaySettings({
-        ...DEFAULT_CHICLET_DISPLAY,
-        ...(userPref?.chicletDisplay || {})
-      });
-      setIsDisplaySettingsDirty(false);
-    }
-  }, [showDisplaySettingsModal, userPref]);
 
   // Create Class Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -86,42 +89,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleSaveDisplaySettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString();
-
-    if (userPref) {
-      await db.userPreferences.update(userPref.id, {
-        chicletDisplay: {
-          ...DEFAULT_CHICLET_DISPLAY,
-          ...(userPref.chicletDisplay || {}),
-          ...tempDisplaySettings
-        },
-        updatedAt: now
-      });
-    } else {
-      const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
-        throw new AuthorizationError('Acting teacher has changed.');
-      }
-      await db.userPreferences.add({
-        id: crypto.randomUUID(),
-        userId: currentIdentity.userId,
-        theme: 'light',
-        lastOpenedClassSectionId: null,
-        markbookDensity: 'comfortable',
-        seatingShowPhotos: true,
-        chicletDisplay: {
-          ...DEFAULT_CHICLET_DISPLAY,
-          ...tempDisplaySettings
-        },
-        createdAt: now,
-        updatedAt: now,
-        version: 1
-      });
-    }
-
-    setIsDisplaySettingsDirty(false);
-    setShowDisplaySettingsModal(false);
-    onRefresh();
+    if (savingDisplay) return;
+    setSavingDisplay(true);
+    setDisplayError(null);
+    try {
+      await saveClassCardDisplay(db, userId, tempDisplaySettings, displaySettingsEpoch.current);
+      setIsDisplaySettingsDirty(false);
+      setShowDisplaySettingsModal(false);
+      onRefresh();
+    } catch (error) {
+      setDisplayError(error instanceof Error ? error.message : 'Could not save display settings. Try again.');
+    } finally { setSavingDisplay(false); }
   };
 
   const handleCreateClass = async (e: React.FormEvent) => {
@@ -193,7 +171,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             type="button"
             data-testid="card-display-settings-btn"
-            onClick={() => setShowDisplaySettingsModal(true)}
+            disabled={!preferencesLoaded || !userId || getActiveTeacherId() !== userId}
+            onClick={() => {
+              displaySettingsEpoch.current = getIdentityEpoch();
+              setTempDisplaySettings({ ...DEFAULT_CHICLET_DISPLAY, ...(userPref?.chicletDisplay || {}) });
+              setIsDisplaySettingsDirty(false);
+              setDisplayError(null);
+              setShowDisplaySettingsModal(true);
+            }}
             className="inline-flex items-center space-x-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition active:scale-95"
           >
             <Sliders className="w-4 h-4 text-slate-500" />
@@ -353,6 +338,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       >
         {({ requestDismiss }) => (
           <form onSubmit={handleSaveDisplaySettings} className="space-y-5">
+            {displayError && <p role="alert" className="text-red-700">{displayError}</p>}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Primary Title Format
@@ -491,6 +477,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="submit"
                 data-testid="save-card-display-btn"
+                disabled={savingDisplay || !userId}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition active:scale-95"
               >
                 Save Preferences

@@ -33,6 +33,18 @@ async function page(value = PNG): Promise<MarkingImagePage> {
 }
 
 describe('local retained image bytes', () => {
+  it('retains image error identity for retries even when filenames and bytes match', async () => {
+    const failed = file(), other = file();
+    const read = vi.spyOn(failed, 'arrayBuffer').mockRejectedValue(new Error('Temporary read failure'));
+    const first = await parseMarkingImages([failed, other]);
+    expect(first.pages).toHaveLength(1);
+    expect(first.errors).toHaveLength(1);
+    expect(first.errors[0].file).toBe(failed);
+    read.mockRestore();
+    const retry = await parseMarkingImages([first.errors[0].file]);
+    expect(retry.errors).toEqual([]);
+    expect(retry.pages[0].hash).toBe(first.pages[0].hash);
+  });
   it('imports all supported formats while preserving exact original bytes and dimensions', async () => {
     const result = await parseMarkingImages([file(), file(JPEG, 'page.jpg', 'image/jpeg'), file(WEBP, 'page.webp', 'image/webp')]);
     expect(result.errors).toEqual([]);

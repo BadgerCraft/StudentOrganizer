@@ -116,6 +116,23 @@ try {
     assessments: await records(page, 'studentAssessments'), results: await records(page, 'categoryResults'), commits: await records(page, 'markingCommits')
   };
   await page.getByTestId(`open-marking-${assessment.id}`).click();
+  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await wizard(page).getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
+  await wizard(page).getByRole('button', { name: 'Continue', exact: true }).click();
+  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles({ name: 'Fictional failed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Unsupported fictional input') });
+  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
+  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
+  await wizard(page).getByRole('radio', { name: 'Paste text', exact: true }).check();
+  let failedOnlyPrompt = '';
+  page.once('dialog', async dialog => { failedOnlyPrompt = dialog.message(); await dialog.dismiss(); });
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  assert.match(failedOnlyPrompt, /discard unsaved/);
+  await wizard(page).getByRole('button', { name: 'Retry Fictional failed.pdf', exact: true }).waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await page.getByTestId(`open-marking-${assessment.id}`).click();
+  console.log('PASS: failed-only import survives source change and canceled departure; leaving requires explicit discard.');
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
 
   // Build every matrix cell manually. A duplicate column rename must reject the
@@ -270,6 +287,23 @@ try {
       console.log('PASS: edited comment-bank source invalidates stale review; concurrent composers preserve newer bank additions; delayed import requires discard and cannot recreate a phantom guard; selecting bank feedback appends to existing passage text; primary button colors contrast.');
     }
 
+    if (index === 0) {
+      const bank = page.locator('section[aria-label="Comment bank"]').first();
+      await bank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
+      await bank.getByLabel('Or paste one comment per line', { exact: true }).fill('Keep unfinished fictional bank review.');
+      await bank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
+      await bank.getByLabel('Bank comment 1', { exact: true }).fill('Edited unfinished fictional bank review.');
+      for (const action of ['save', 'cancel', 'save']) {
+        let prompt = '';
+        page.once('dialog', async dialog => { prompt = dialog.message(); await dialog.dismiss(); });
+        await (action === 'save' ? page.getByTestId('marking-comment-save') : page.getByRole('button', { name: 'Cancel comment', exact: true })).click();
+        assert.match(prompt, /comment.bank import review/);
+        assert.equal(await bank.getByLabel('Bank comment 1', { exact: true }).inputValue(), 'Edited unfinished fictional bank review.');
+        assert.equal(await page.getByTestId('marking-feedback').inputValue(), expectedPassageFeedback[index]);
+      }
+      page.once('dialog', async dialog => { assert.match(dialog.message(), /comment.bank import review/); await dialog.accept(); });
+      console.log('PASS: repeated Save/Cancel interruption retains edited passage bank review and feedback; explicit discard permits save.');
+    }
     await page.getByRole('combobox', { name: /^Evidence level \(optional\)/ }).selectOption(levels[index + 1]);
     await page.getByTestId('marking-comment-save').click();
   }
@@ -316,8 +350,9 @@ try {
   await page.evaluate(() => {
     const original = File.prototype.arrayBuffer;
     (window as any).restoreMarkingFileRead = () => { File.prototype.arrayBuffer = original; };
+    let failedOriginal: File | undefined;
     File.prototype.arrayBuffer = function () {
-      if (this.name === 'Fictional unreadable.txt') return Promise.reject(new DOMException('Fictional file read failure', 'NotReadableError'));
+      if (this.name === 'Fictional unreadable.txt' && (!failedOriginal || failedOriginal === this)) { failedOriginal = this; return Promise.reject(new DOMException('Fictional file read failure', 'NotReadableError')); }
       return original.call(this);
     };
   });
@@ -326,21 +361,63 @@ try {
     { name: 'Fictional malformed.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from('not a ZIP archive') },
     { name: 'Fictional unsupported.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-fictional') },
     { name: 'Fictional bad-encoding.txt', mimeType: 'text/plain', buffer: Buffer.from([0xc3, 0x28]) },
-    txt('Fictional unreadable.txt', 'Browser file read deliberately fails.')
+    txt('Fictional unreadable.txt', 'Browser file read deliberately fails.'),
+    txt('Fictional unreadable.txt', 'Another file with different contents.')
   ]);
   await wizard(page).getByText('These files were not added', { exact: true }).waitFor();
   const importErrors = await wizard(page).innerText();
   for (const filename of ['Fictional malformed.docx', 'Fictional unsupported.pdf', 'Fictional bad-encoding.txt', 'Fictional unreadable.txt']) assert.ok(importErrors.includes(filename));
   assert.match(importErrors, /valid UTF-8/); assert.match(importErrors, /PDF, HTML and remote links are not supported/);
-  assert.match(await wizard(page).innerText(), /1 work item\(s\) added/);
+  assert.match(await wizard(page).innerText(), /2 work item\(s\) added/);
+  const retry = wizard(page).getByRole('button', { name: 'Retry Fictional unreadable.txt', exact: true });
+  await retry.click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="evidence-import-wizard"]')?.getAttribute('aria-busy') === 'false');
+  assert.equal(await retry.count(), 1, 'repeat failure keeps exactly one original-file warning');
+  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
+  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles(txt('Fictional unreadable.txt', 'Another file with different contents.'));
+  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await wizard(page).getByRole('heading', { name: 'Who does this work belong to?', exact: true }).waitFor();
+  assert.equal(await retry.count(), 1, 'successful distinct same-name file cannot clear failed-original warning');
+  assert.match(await wizard(page).innerText(), /2 work item\(s\) added/);
   assert.equal((await records(page, 'markingAttempts')).length, 2, 'file preview cannot persist partial data');
   await page.evaluate(() => { (window as any).restoreMarkingFileRead(); delete (window as any).restoreMarkingFileRead; });
+  await retry.click();
+  await retry.waitFor({ state: 'detached' });
+  assert.match(await wizard(page).innerText(), /3 work item\(s\) added/);
+  assert.equal(await wizard(page).getByRole('button', { name: /Confirm student and review work|Continue to matching/ }).isDisabled(), true, 'other failures still require acknowledgment');
   await page.screenshot({ path: '/tmp/markinator-input-malformed.png', fullPage: true });
-  await wizard(page).getByRole('checkbox', { name: 'Continue with only the work successfully added; leave these files out.', exact: true }).check();
+  const replaceMalformed = wizard(page).getByLabel('Replace failed file: Fictional malformed.docx', { exact: true });
+  await replaceMalformed.setInputFiles([]);
+  assert.equal(await wizard(page).getByRole('button', { name: 'Retry Fictional malformed.docx', exact: true }).count(), 1, 'cancel keeps the original failed file');
+  await replaceMalformed.setInputFiles(txt('Fictional malformed.docx', 'still not a ZIP'));
+  await wizard(page).getByRole('alert').filter({ hasText: 'Replacement was not added' }).waitFor();
+  assert.equal(await wizard(page).getByRole('button', { name: 'Retry Fictional malformed.docx', exact: true }).count(), 1, 'invalid replacement retains original Retry');
+  await wizard(page).getByRole('button', { name: 'Back', exact: true }).click();
+  await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles(txt('Fictional pending selection.txt', 'Newer selection must remain unconsumed.'));
+  await replaceMalformed.setInputFiles(txt('Fictional valid remainder.txt', 'Valid fictional remainder for mixed parsing.'));
+  await replaceMalformed.waitFor({ state: 'detached' });
+  assert.match(await wizard(page).getByRole('list', { name: 'Files to add' }).innerText(), /Fictional pending selection.txt/, 'replacement cannot consume the separate pending selection');
+  assert.match(await wizard(page).innerText(), /3 work item\(s\) already added/, 'replacement with already-added content does not duplicate it');
+  // Two synchronous change events simulate a repeated chooser completion while
+  // parsing is pending. Only one replacement may be added.
+  await wizard(page).getByLabel('Replace failed file: Fictional unsupported.pdf', { exact: true }).evaluate((input: HTMLInputElement) => {
+    const transfer = new DataTransfer(); transfer.items.add(new File(['Corrected fictional content.'], 'Fictional corrected.txt', { type: 'text/plain' }));
+    input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await wizard(page).getByRole('button', { name: 'Retry Fictional unsupported.pdf', exact: true }).waitFor({ state: 'detached' });
+  assert.match(await wizard(page).innerText(), /4 work item\(s\) already added/, 'double completion adds one corrected work item');
+  await wizard(page).getByLabel('Replace failed file: Fictional bad-encoding.txt', { exact: true }).setInputFiles(txt('Fictional bad-encoding.txt', 'Corrected valid UTF-8 fictional text.'));
+  await wizard(page).getByText('These files were not added', { exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await wizard(page).getByRole('checkbox', { name: 'Continue with only the work successfully added; leave these files out.', exact: true }).count(), 0, 'successful explicit replacements need no original-failure acknowledgment');
+  assert.match(await wizard(page).getByRole('list', { name: 'Files to add' }).innerText(), /Fictional pending selection.txt/);
+  await wizard(page).getByRole('button', { name: 'Add work and select students', exact: true }).click();
+  await wizard(page).getByRole('heading', { name: 'Who does this work belong to?', exact: true }).waitFor();
+  assert.match(await wizard(page).innerText(), /6 work item\(s\) added/);
   await selectOneStudent(page, studentLabels[enrollmentIds[1]]);
   await confirmImport(page);
   await waitForCount(page, 'markingAttempts', 3);
-  console.log('PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; valid remainder alone imports after roster confirmation.');
+  console.log('PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; cancelled/failed replacements keep original Retry; same-name replacement, duplicate completion and newer selection preservation pass without a redundant failure acknowledgment.');
 
   // Fail the second import's audit write inside its real transaction, after its
   // attempt write. It must roll back while the first import remains committed;
