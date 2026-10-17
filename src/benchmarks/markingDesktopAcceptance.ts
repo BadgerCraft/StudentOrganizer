@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { zipSync, strToU8 } from 'fflate';
-import type { Page, Request } from 'playwright';
+import type { Dialog, Page, Request } from 'playwright';
 
 /** The caller owns launch/profile isolation and the platform's real download destination. */
 export type MarkingDownload = (trigger: () => Promise<void>, destination: string) => Promise<void>;
@@ -256,7 +256,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.deepEqual(snapshots.studentAssessments, finalized.studentAssessments);
   assert.deepEqual(snapshots.categoryResults, finalized.categoryResults);
   await page.screenshot({ path: path.join(artifactsDir, 'markinator-pending.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await leaveMarkingWithDraft(page);
   await page.getByTestId('nav-portability-btn').click();
   const backupPath = path.join(artifactsDir, 'markinator-backup.json');
   await download(() => page.getByTestId('create-backup-btn').click(), backupPath);
@@ -284,7 +284,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
     return rows.some(row => row.draft.pending?.text === 'Fictional post-backup change to discard') ? true : undefined;
   }, 'Post-backup fictional edit not persisted');
   const changed = await snapshot(page, assessment.id);
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await leaveMarkingWithDraft(page);
   await page.getByTestId('nav-portability-btn').click();
   await page.getByTestId('restore-file-input').setInputFiles(backupPath);
   await page.getByTestId('restore-confirm-dialog').waitFor();
@@ -294,6 +294,22 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.deepEqual(await snapshot(page, assessment.id), snapshots, 'Confirmed actual backup restore must recover marking originals, pending revision and official records');
   return { assessmentId: assessment.id, assessmentTitle, firstAttemptId: first.id, secondAttemptId: second.id, pendingFeedback, reportPath, backupPath, snapshots,
     checks: ['visible rubric/import/finalization UI', 'TXT and DOCX original bytes and hashes', 'draft leaves official marks unchanged', 'finalized KTCA/feedback', 'real inert HTML report download', 'real full backup with marking records', 'saved pending revision', 'actual full backup preview and confirmed restore replaces later edit'] };
+}
+
+/** New builds require an explicit draft-preserving departure; pinned legacy builds do not. */
+async function leaveMarkingWithDraft(page: Page) {
+  const expectsConfirmation = await page.getByTestId('marking-back').count() > 0;
+  const messages: string[] = [];
+  const handleDialog = async (dialog: Dialog) => {
+    messages.push(dialog.message());
+    if (dialog.message() === 'Keep unfinished feedback saved as a draft and leave marking?') await dialog.accept();
+    else await dialog.dismiss();
+  };
+  page.on('dialog', handleDialog);
+  try { await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click(); }
+  finally { page.off('dialog', handleDialog); }
+  assert.deepEqual(messages, expectsConfirmation ? ['Keep unfinished feedback saved as a draft and leave marking?'] : [], 'Only the explicit preserve-draft departure may be accepted');
+  await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
 }
 
 /** Caller must relaunch the same disposable profile and reopen its Assessment Hub first. */
@@ -309,7 +325,7 @@ async function verifyRestart(page: Page, evidence: MarkingDesktopEvidence): Prom
   assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), 'Fictional pending desktop revision');
   assert.ok(await page.getByTestId('marking-document').locator('mark').count() > 0, 'Saved annotation must render after restart');
   await page.screenshot({ path: path.join(path.dirname(evidence.backupPath), 'markinator-restarted.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await leaveMarkingWithDraft(page);
   evidence.checks.push('actual process restart and visible pending/annotation recovery');
 }
 

@@ -62,10 +62,13 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     if (imageFeedbackActive.current || draftRef.current?.pending) { setError('Save or cancel feedback for the current mark first. Your work is retained.'); return false; }
     return true;
   }
+  function confirmWorkspaceDeparture(destination: 'leave marking' | 'switch teacher' | 'switch submission' = 'leave marking') {
+    return !(imageFeedbackActive.current || draftRef.current?.pending) || confirm(`Keep unfinished feedback saved as a draft and ${destination}?`);
+  }
   const imageComposerDirty = useCallback((dirty: boolean) => trackComposer('image', dirty), [trackComposer]);
   const importDirtyChanged = useCallback((dirty: boolean) => { importDirty.current = dirty; }, []);
-  function confirmComposerDeparture() {
-    if (!allowFeedbackDeparture()) return false;
+  function confirmComposerDeparture(switchSubmission = false) {
+    if (!(switchSubmission ? confirmWorkspaceDeparture('switch submission') : allowFeedbackDeparture())) return false;
     if (composerDirty.current && !confirm('Discard the unfinished comment-bank import review? Comments already added to student work are saved.')) return false;
     if (composerDirty.current) setComposerRevision(value => value + 1);
     composerSources.current.clear(); composerDirty.current = false; return true;
@@ -146,7 +149,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     validActor(); setCategoryReview(review); setConflictReview(false); setPreviewFinal(false);
   }
   async function open(attempt: MarkingAttempt, reopen = false) {
-    if (!confirmComposerDeparture()) return;
+    if (!confirmComposerDeparture(sessionRef.current?.attemptId !== attempt.id)) return;
     await action(async () => {
       const fresh = await service.getContext(assessmentId, validActor());
       const history = fresh.sessions.filter(s => s.attemptId === attempt.id).sort((a,b) => b.revision-a.revision);
@@ -264,7 +267,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
         </fieldset>;
   };
   return <div className="max-w-7xl mx-auto p-4 space-y-4 text-slate-900">
-    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button className={button} disabled={busy || importBusy} onClick={() => { if (!allowFeedbackDeparture()) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Leave marking and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onClose(); }); }}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy || importBusy} onClick={() => { if (!allowFeedbackDeparture()) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Switch teacher and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onSwitchTeacher(); }); }}>Switch teacher</button>}</div></header>
+    <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button data-testid="marking-back" className={button} disabled={busy || importBusy} onClick={() => { if (!confirmWorkspaceDeparture()) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Leave marking and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onClose(); }); }}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy || importBusy} onClick={() => { if (!confirmWorkspaceDeparture('switch teacher')) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Switch teacher and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onSwitchTeacher(); }); }}>Switch teacher</button>}</div></header>
     {error && <div role="alert" className="bg-red-50 border border-red-200 p-3 whitespace-pre-wrap">{error}<button className={`${button} ml-3`} onClick={() => void action(async () => {})}>Retry save</button></div>}
     {exportStatus && <p role="status">{exportStatus}</p>}
     <fieldset disabled={busy} className="space-y-4">

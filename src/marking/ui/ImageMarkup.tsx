@@ -81,7 +81,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     stroke.current = null;
     // Mount feedback only once drawing ends: its independent pane can scroll as it changes height.
     // Opening it during pointer capture would interrupt the stroke through the scroll safeguard.
-    if (active && selectFeedback) setSelected(active.id);
+    if (active && selectFeedback) { setSelected(active.id); setFeedbackNotice(''); }
     if (active && svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
   }
   useEffect(() => {
@@ -177,8 +177,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     const annotation: MarkingVisualAnnotation = { id, kind: tool, points: [point], color: tool === 'highlight' ? 'yellow' : color, width: tool === 'highlight' ? 0.018 : 0.004, text: '', criterionId: rubric.criteria[0]?.id ?? null, level: '' };
     change(item => ({ ...item, annotations: [...item.annotations, annotation] }));
     setFeedbackStart({ text: '', criterionId: annotation.criterionId, level: '', isNew: true });
-    if (tool === 'comment') setSelected(id);
-    setFeedbackNotice('');
+    if (tool === 'comment') { setSelected(id); setFeedbackNotice(''); }
     if (tool !== 'comment') {
       stroke.current = { id, pageId: page.id, pointerId: event.pointerId, renderKey };
       event.currentTarget.setPointerCapture(event.pointerId);
