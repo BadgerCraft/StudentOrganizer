@@ -27,6 +27,13 @@ try {
   const zip = await encodeCapturePackage(manifest,files);
   async function openMatching() { await page.getByRole('button',{name:'Assessments',exact:true}).click(); await page.locator('[data-testid^="upload-pictures-"]').first().click(); await page.getByTestId('capture-zip').waitFor(); await page.waitForFunction(()=>!document.querySelector<HTMLInputElement>('[data-testid="capture-zip"]')?.disabled); }
   const upload = async (buffer: Uint8Array = zip, name = 'fictional.zip') => { await page.waitForFunction(()=>!document.querySelector<HTMLInputElement>('[data-testid="capture-zip"]')?.disabled); await page.getByTestId('capture-zip').setInputFiles({name,mimeType:'application/zip',buffer:Buffer.from(buffer)}); };
+  // Busy also disables buttons. Only the receipt-backed saved label plus idle UI
+  // proves confirmation/reconciliation finished; database assertions follow it.
+  const waitMatched = async (id: string) => {
+    await page.getByTestId(`capture-set-${id}`).getByText(/^Saved to /).waitFor();
+    await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('[data-testid="capture-zip"]')?.disabled === false);
+    assert.equal(await page.getByTestId(`capture-set-${id}`).isDisabled(),true);
+  };
   await openMatching();
   await upload(new Uint8Array([1,2,3]),'wrong.txt'); await page.getByRole('alert').filter({hasText:'Choose a completed'}).waitFor();
   await upload(new Uint8Array([1,2,3])); await page.getByRole('alert').filter({hasText:'ZIP'}).waitFor();
@@ -40,17 +47,17 @@ try {
   await page.evaluate(()=> { const original=IDBObjectStore.prototype.add; IDBObjectStore.prototype.add=function(value:any,key?:IDBValidKey) { if(this.name==='captureImportReceipts'){ IDBObjectStore.prototype.add=original; throw new DOMException('Fictional full disk','QuotaExceededError'); } return key===undefined?original.call(this,value):original.call(this,value,key); }; });
   await page.getByTestId('capture-confirm').click(); await page.getByRole('alert').filter({hasText:'selection is retained'}).waitFor();
   assert.equal((await rows('captureAttachments')).length,0); assert.equal((await rows('captureImportReceipts')).length,0);
-  await page.getByTestId('capture-confirm').dblclick(); await page.waitForFunction(()=>document.querySelector('[data-testid="capture-set-set-0"]')?.hasAttribute('disabled'));
+  await page.getByTestId('capture-confirm').dblclick(); await waitMatched('set-0');
   assert.equal((await rows('captureAttachments')).length,1); assert.equal((await rows('captureImportReceipts')).length,1);
   await page.getByTestId('capture-set-set-1').click(); await page.locator('[data-testid^="capture-student-"]').first().click(); await page.getByTestId('capture-confirm').click();
-  await page.waitForFunction(()=>document.querySelector('[data-testid="capture-set-set-1"]')?.hasAttribute('disabled'));
+  await waitMatched('set-1');
   const saved=await rows('captureAttachments'); assert.equal(saved.length,2); assert.equal(saved[0].pages.length,2); assert.notEqual(saved[0].classEnrollmentId,saved[1].classEnrollmentId);
   // Partial completion survives reload/reimport; labels never identify a student.
   await page.reload(); const teacher=page.locator('[data-testid^="select-teacher-"]').first(); if(await teacher.isVisible()) await teacher.click(); await openMatching(); await upload();
-  await page.waitForFunction(()=>document.querySelector('[data-testid="capture-set-set-0"]')?.hasAttribute('disabled'));
+  await waitMatched('set-0');
   assert.equal(await page.getByTestId('capture-set-set-1').isDisabled(),true); assert.equal(await page.getByTestId('capture-set-set-2').isDisabled(),false);
   await page.getByTestId('capture-set-set-2').click(); await page.locator('[data-testid^="capture-student-"]').first().click(); await page.getByTestId('capture-confirm').click();
-  await page.waitForFunction(()=>document.querySelector('[data-testid="capture-set-set-2"]')?.hasAttribute('disabled'));
+  await waitMatched('set-2');
   assert.equal((await rows('captureAttachments')).length,3);
   await upload(); await page.getByRole('status').filter({hasText:'3 already saved'}).waitFor();
   assert.equal((await rows('captureAttachments')).length,3); assert.deepEqual(await rows('categoryResults'),beforeResults); assert.deepEqual(await rows('markingAttempts'),beforeAttempts);
@@ -61,8 +68,7 @@ try {
     await upload(phoneBytes); await page.getByTestId(`capture-set-${phone.submissions[0].id}`).waitFor();
     for (const submission of phone.submissions) {
       await page.getByTestId(`capture-set-${submission.id}`).click(); await page.locator('[data-testid^="capture-student-"]').first().click(); await page.getByTestId('capture-confirm').click();
-      await page.waitForFunction(id=>document.querySelector(`[data-testid="capture-set-${id}"]`)?.hasAttribute('disabled'),submission.id);
-      await page.waitForFunction(()=>!document.querySelector<HTMLInputElement>('[data-testid="capture-zip"]')?.disabled);
+      await waitMatched(submission.id);
     }
     const phoneSaved=(await rows('captureAttachments')).filter(a=>a.packageId===phone.manifest.packageId);
     assert.equal(phoneSaved.length,phone.submissions.length);

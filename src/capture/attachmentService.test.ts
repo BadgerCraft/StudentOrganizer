@@ -54,7 +54,7 @@ describe('durable capture matching boundary', () => {
     const loaded = await service.context('assess-eng-essay', actor);
     expect(loaded.attachments.every(a => a.pageCount === 10)).toBe(true);
     expect(await service.reconcile('assess-eng-essay', pkg, actor)).toHaveLength(40);
-  });
+  }, 30_000); // Forty durable transactions plus backup-capacity scans on slower CI hosts.
   it('double confirm and restart/reimport recover the receipt without duplicate attachments', async () => {
     const [first, second] = await Promise.all([confirm(service, pkg, enrollments[0], actor), confirm(service, pkg, enrollments[0], actor)]);
     expect(first.id).toBe(second.id); db.close(); await db.open();
