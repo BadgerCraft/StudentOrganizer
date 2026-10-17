@@ -297,7 +297,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
 }
 
 /** New builds require an explicit draft-preserving departure; pinned legacy builds do not. */
-async function leaveMarkingWithDraft(page: Page) {
+export async function leaveMarkingWithDraft(page: Page) {
   const expectsConfirmation = await page.getByTestId('marking-back').count() > 0;
   const messages: string[] = [];
   const handleDialog = async (dialog: Dialog) => {

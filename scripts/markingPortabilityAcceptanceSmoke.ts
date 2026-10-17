@@ -1,4 +1,5 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
+import { leaveMarkingWithDraft } from '../src/benchmarks/markingDesktopAcceptance';
 import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -209,7 +210,7 @@ try {
     rubrics: (await records(page, 'markingRubrics')).filter(row => row.assessmentId === assessment.id)
   };
   assert.equal(before.sessions.length, 2);
-  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await leaveMarkingWithDraft(page);
   await page.getByTestId('nav-portability-btn').click();
   const backupDownload = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   const downloadedBackup = await backupDownload; await downloadedBackup.saveAs(`${artifacts}-backup.json`);

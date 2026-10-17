@@ -2,7 +2,7 @@ import { installFictionalClassroom } from './helpers/classroomFixture';
 import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
-import { chromium, type Page, type BrowserContext } from 'playwright';
+import { chromium, type Page, type BrowserContext, type Dialog } from 'playwright';
 
 // Real UI editing/navigation with isolated fictional browser profiles. Vite module
 // access is reserved for explicit identity/authorization fixtures and failed-write
@@ -156,9 +156,41 @@ async function reopen(fixture: Fixture) {
   await fixture.page.getByTestId(`marking-session-open-${fixture.attempt.id}`).click();
   await fixture.page.getByTestId('marking-document').waitFor();
 }
+async function navigate(page: Page, action: string, message?: string, accept = true) {
+  const messages: string[] = [];
+  const handleDialog = async (dialog: Dialog) => {
+    messages.push(dialog.message());
+    if (accept && message !== undefined && dialog.message() === message) await dialog.accept();
+    else await dialog.dismiss();
+  };
+  page.on('dialog', handleDialog);
+  try { await page.getByRole('button', { name: action, exact: true }).click(); }
+  finally { page.off('dialog', handleDialog); }
+  assert.deepEqual(messages, message === undefined ? [] : [message], 'Navigation may handle only the exact expected draft-preservation prompt');
+}
+const switchDraftPrompt = 'Keep unfinished feedback saved as a draft and switch teacher?';
+const leaveDraftPrompt = 'Keep unfinished feedback saved as a draft and leave marking?';
 async function switchAndReturn(fixture: Fixture) {
   const { page, actorId, otherTeacherId } = fixture;
-  await page.getByRole('button', { name: 'Switch teacher', exact: true }).click();
+  const beforeDismiss = await storedSession(page, fixture.attempt.id);
+  const identityBefore = await page.evaluate(async () => {
+    const path = '/src/services/identityService.ts';
+    const { getIdentityEpoch } = await import(path);
+    return { userId: sessionStorage.getItem('ontario_active_user_id'), epoch: getIdentityEpoch() };
+  });
+  await navigate(page, 'Switch teacher', switchDraftPrompt, false);
+  assert.equal(await page.getByTestId('teacher-selector-modal').count(), 0);
+  assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${fixture.scenario}`);
+  assert.equal(await page.getByLabel('Evidence level (optional)').inputValue(), 'Level 3');
+  assert.equal(await page.getByLabel('Category T feedback').inputValue(), `T feedback ${fixture.scenario}`);
+  assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), `Overall feedback ${fixture.scenario}`);
+  assert.deepEqual(await storedSession(page, fixture.attempt.id), beforeDismiss, 'Dismiss must leave the exact stored draft intact');
+  assert.deepEqual(await page.evaluate(async () => {
+    const path = '/src/services/identityService.ts';
+    const { getIdentityEpoch } = await import(path);
+    return { userId: sessionStorage.getItem('ontario_active_user_id'), epoch: getIdentityEpoch() };
+  }), identityBefore, 'Dismiss must retain the same actor and identity epoch');
+  await navigate(page, 'Switch teacher', switchDraftPrompt);
   await page.getByTestId('teacher-selector-modal').waitFor();
   assertFeedback((await storedSession(page, fixture.attempt.id)).draft, fixture.scenario);
   await page.clock.resume();
@@ -172,7 +204,7 @@ async function switchAndReturn(fixture: Fixture) {
   await page.getByText('No submissions yet. Confirm a rubric, then import student work.', { exact: true }).waitFor();
   assert.equal(await page.getByTestId(`marking-session-open-${fixture.attempt.id}`).count(), 0);
   assert.equal(await page.getByText(`Saved annotation ${fixture.scenario}`, { exact: true }).count(), 0);
-  await page.getByRole('button', { name: 'Switch teacher', exact: true }).click();
+  await navigate(page, 'Switch teacher');
   await page.getByTestId(`select-teacher-${actorId}`).click();
   await reopen(fixture);
   assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${fixture.scenario}`);
@@ -219,7 +251,7 @@ try {
     } else if (scenario === 'failed-navigation-retry') {
       await failSessionWrites(page, true);
       for (const action of ['Back to Organizer', 'Switch teacher', 'Rubric editor']) {
-        await page.getByRole('button', { name: action, exact: true }).click();
+        await navigate(page, action, action === 'Back to Organizer' ? leaveDraftPrompt : action === 'Switch teacher' ? switchDraftPrompt : undefined);
         await page.getByRole('alert').filter({ hasText: 'Fictional authority storage failure' }).waitFor();
         assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
         assert.equal(await page.getByTestId('teacher-selector-modal').count(), 0);
@@ -231,7 +263,7 @@ try {
       await failSessionWrites(page, false);
       await page.getByRole('button', { name: 'Retry save', exact: true }).click();
       assertFeedback((await storedSession(page, attempt.id)).draft, scenario);
-      await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+      await navigate(page, 'Back to Organizer', leaveDraftPrompt);
       assert.equal(await page.getByTestId('marking-document').count(), 0);
       await reopen(fixture);
       await switchAndReturn(fixture);
