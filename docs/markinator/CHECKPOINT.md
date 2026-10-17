@@ -1,3 +1,17 @@
+# Current PR34 recovery and refinements — October 17, 2026
+
+Current authority supersedes local-only statements below: Tyler approved recovery from verified `0982c71b409969bd0e4319a27e764313e7ccb504`, refinement implementation/testing/review, commit and safe fast-forward push to existing `codex/reliability-20261017` / draft PR34. Local recovery branch is `codex/pr34-refinements-recovery`; existing work preserved. Explicit failed-file replacement, secondary former-student read-only history, and finalized-only Archive are implemented and independently source-reviewed. Final local verification PASS: 603 tests, build/typechecks, repeated/interrupted import and Archive/export/restore flows, and four authority scenarios. Implementation `913a67b07d3713372bd7bd0af0ca07397049e389` safely pushed/read back on draft/open/unmerged PR34. Initial exact-head CI query returned no runs yet; latest status belongs in PR description. see [current work order](../work-orders/CLASSROOM-USE-2026-10-15.md#october-17--pr34-product-refinements) and [queue](../FEATURE_QUEUE.md). No PR35 changes, merge, release, deployment, OAuth, real data or bulk legacy-record purge. Native Windows/Mac acceptance remains separate.
+
+---
+
+# Current reliability batch — October 17, 2026
+
+Fresh workspace execution succeeded. Current fetched and independently read-back main is `753ac300f0b0e08059539a18de42a01e939764b3` (merged PR33), superseding older PR32/33 pending-merge checkpoints below. Local branch `codex/reliability-20261017` starts there. Tyler approved C13, C15, TUV-UX-001/002, C12 and C18 with “Make it so.” Implementation, focused verification, independent review and local commits are authorized; no push, merge, release, installer update, OAuth changes, scanner changes or real student data. Existing historical records and marks, explicit teacher authorization and backup compatibility must be preserved.
+
+Current state: all six reliability cards implemented and locally verified; independent review findings repaired. The full suite passes 592 tests in 60 files; production build, strict script typecheck and interrupted/repeated Chromium workflows pass. Implementation commit `a78a0f848fe34771ffcdfac188aace3d136262db` was independently reviewed/read back PASS with clean tree; this documentation-only follow-up records the immutable target. Exact results and next gate are recorded in the existing [work order](../work-orders/CLASSROOM-USE-2026-10-15.md#october-17--approved-reliability-batch-local-review) and [queue](../FEATURE_QUEUE.md). Physical Windows/Mac acceptance remains separate. This successful handoff is observed execution, not a claim that all future automatic dispatch works.
+
+---
+
 # Current classroom-use fixes — October 15, 2026
 
 PR31 is merged: live main `495ba2af97663123ac332ba258a8c0e7f820ec13`, including `0fe0e0c`. Current authorized branch `codex/classroom-use-20261015` starts from that main. Tyler requested the complete usable import → marking → saved Markbook path, then profile/presentation fixes. Implementation, verification, commit/push and review preparation are authorized; merge/release remain reserved. Current IDs TUV-C01–C10 and deferred TUV-PARTICIPATION are in [FEATURE_QUEUE.md](../FEATURE_QUEUE.md); [work order](../work-orders/CLASSROOM-USE-2026-10-15.md) owns measured evidence. Earlier pending PR31 merge statements below are historical.

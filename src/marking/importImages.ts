@@ -319,10 +319,10 @@ export async function validateMarkingImageBytes(page: MarkingImagePage): Promise
   await browserDecode(bytes, info);
 }
 
-export async function parseMarkingImages(files: File[]): Promise<{ pages: MarkingImagePage[]; errors: { name: string; message: string }[] }> {
-  const pages: MarkingImagePage[] = [], errors: { name: string; message: string }[] = [];
+export async function parseMarkingImages(files: File[]): Promise<{ pages: MarkingImagePage[]; errors: { name: string; message: string; file: File }[] }> {
+  const pages: MarkingImagePage[] = [], errors: { name: string; message: string; file: File }[] = [];
   if (files.length > MARKING_LIMITS.imagePages || files.reduce((sum, file) => sum + file.size, 0) > MARKING_LIMITS.imageBatchBytes) {
-    return { pages, errors: files.map(file => ({ name: file.name, message: 'Import at most 10 images and 32 MB in one batch.' })) };
+    return { pages, errors: files.map(file => ({ file, name: file.name, message: 'Import at most 10 images and 32 MB in one batch.' })) };
   }
   for (const file of files) {
     try {
@@ -336,7 +336,7 @@ export async function parseMarkingImages(files: File[]): Promise<{ pages: Markin
       if (info.mime !== expected || (file.type && file.type !== info.mime)) fail('Image bytes do not match the file extension or format.');
       await browserDecode(bytes, info);
       pages.push({ id: crypto.randomUUID(), name: file.name, ...info, base64: encode(bytes), size: bytes.length, hash: await sha256(bytes) });
-    } catch (error) { errors.push({ name: file.name, message: error instanceof Error ? error.message : 'Unable to read this image.' }); }
+    } catch (error) { errors.push({ file, name: file.name, message: error instanceof Error ? error.message : 'Unable to read this image.' }); }
   }
   return { pages, errors };
 }

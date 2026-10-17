@@ -1,5 +1,5 @@
 import { listAccessibleClassSections } from './services/authHelper';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/database';
 import { Header } from './components/Header';
@@ -39,6 +39,7 @@ export function App() {
   });
 
   const handleViewChange = (view: 'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability') => {
+    if (view === currentView || !confirmParticipationDiscard()) return;
     setCurrentView(view);
     try {
       sessionStorage.setItem('ontario_active_view', view);
@@ -47,6 +48,12 @@ export function App() {
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [selectedEnrollmentIds, setSelectedEnrollmentIds] = useState<UUID[]>([]);
+  const [participationMode, setParticipationMode] = useState<'single' | 'group'>('single');
+  const participationDraftDirty = useRef(false);
+  const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
+  const confirmParticipationDiscard = () => !participationDraftDirty.current || window.confirm(
+    'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
+  );
   const [selectedSchoolDate, setSelectedSchoolDate] = useState<string>(() => getSchoolLocalDate());
   const [historicalTime, setHistoricalTime] = useState<string>(() => getCurrentTorontoTime());
   const [profileEnrollmentId, setProfileEnrollmentId] = useState<UUID | null>(null);
@@ -67,6 +74,17 @@ export function App() {
   }, [markingTarget, isTeacherSelectorOpen]);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
+
+  // A new classroom context always starts with a deliberate, single-student target.
+  useEffect(() => {
+    setSelectedEnrollmentIds([]);
+    setParticipationMode('single');
+  }, [activeSectionId, selectedSchoolDate, currentView, appIdentity?.userId, isTeacherSelectorOpen]);
+
+  const clearParticipationSelection = () => {
+    setSelectedEnrollmentIds([]);
+    setParticipationMode('single');
+  };
 
   const handleOpenStudentSettings = (student: Student) => {
     setEditingStudent(student);
@@ -115,6 +133,7 @@ export function App() {
   }, []);
 
   const handleStartSwitchTeacher = () => {
+    if (!confirmParticipationDiscard()) return;
     setMarkingTarget(null);
     // Clear old identity immediately to prevent pending/stale forms from submitting under old teacher ID
     const prevTeacherId = appIdentity?.userId || currentUser?.id || null;
@@ -327,6 +346,8 @@ export function App() {
   const sessionService = new ClassSessionService(db);
 
   const handleSelectClass = async (sectionId: string) => {
+    if (sectionId === activeSectionId) return true;
+    if (!confirmParticipationDiscard()) return false;
     setActiveSectionId(sectionId);
     setSelectedEnrollmentIds([]);
     setSelectedSchoolDate(getSchoolLocalDate());
@@ -336,19 +357,19 @@ export function App() {
         lastOpenedClassSectionId: sectionId
       });
     }
+    return true;
   };
 
-  const handleOpenClass = (sectionId: string) => {
-    handleSelectClass(sectionId);
+  const handleOpenClass = async (sectionId: string) => {
+    if (!await handleSelectClass(sectionId)) return;
     handleViewChange('seating'); // Open class workspace in Class View by default
   };
 
   const handleToggleSelectStudent = (enrollmentId: UUID) => {
-    if (selectedEnrollmentIds.includes(enrollmentId)) {
-      setSelectedEnrollmentIds(selectedEnrollmentIds.filter(id => id !== enrollmentId));
-    } else {
-      setSelectedEnrollmentIds([...selectedEnrollmentIds, enrollmentId]);
-    }
+    if (!confirmParticipationDiscard()) return;
+    setSelectedEnrollmentIds(ids => ids.includes(enrollmentId)
+      ? ids.filter(id => id !== enrollmentId)
+      : participationMode === 'group' ? [...ids, enrollmentId] : [enrollmentId]);
   };
 
   const handleRecordParticipation = async (params: any) => {
@@ -395,7 +416,7 @@ export function App() {
         eventName: events[0].snapshottedName,
         studentCount: selectedEnrollmentIds.length
       });
-      setSelectedEnrollmentIds([]);
+      clearParticipationSelection();
       setTimeout(() => setLastUndo(null), 8000);
     }
   };
@@ -441,7 +462,7 @@ export function App() {
         onSelectClass={handleSelectClass}
         currentUser={currentUser}
         onOpenTeacherSelector={handleStartSwitchTeacher}
-        onReportProblem={() => setIsBugReportOpen(true)}
+        onReportProblem={() => { if (confirmParticipationDiscard()) setIsBugReportOpen(true); }}
       />
 
       <BugReportModal isOpen={isBugReportOpen} onClose={() => setIsBugReportOpen(false)} currentView={currentView} />
@@ -497,6 +518,17 @@ export function App() {
         )}
 
         {currentView === 'seating' && activeLayout && (
+          <>
+          <div role="group" aria-label="Participation selection mode" className="flex flex-wrap items-center gap-2 px-6 pt-4">
+            <span className="text-sm font-semibold">Participation:</span>
+            <button aria-pressed={participationMode === 'single'} onClick={() => { if (participationMode !== 'single' && confirmParticipationDiscard()) clearParticipationSelection(); }}
+              className="min-h-[44px] px-3 py-2 rounded-lg border bg-white aria-pressed:bg-blue-100 aria-pressed:border-blue-600">Single student</button>
+            <button aria-pressed={participationMode === 'group'} onClick={() => { if (participationMode !== 'group' && confirmParticipationDiscard()) setParticipationMode('group'); }}
+              className="min-h-[44px] px-3 py-2 rounded-lg border bg-white aria-pressed:bg-blue-100 aria-pressed:border-blue-600">Group</button>
+            <span className="text-xs text-slate-600">{participationMode === 'group'
+              ? 'Group mode: select each student. Switching to Single student clears the selection.'
+              : 'Select one student at a time. Use Group for a shared observation.'}</span>
+          </div>
           <SeatingChartView
             layout={activeLayout}
             seatPositions={activeSeats}
@@ -508,12 +540,13 @@ export function App() {
             selectedSchoolDate={selectedSchoolDate}
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
-            onSelectDate={setSelectedSchoolDate}
+            onSelectDate={date => { if (date !== selectedSchoolDate && confirmParticipationDiscard()) setSelectedSchoolDate(date); }}
             onToggleSelectStudent={handleToggleSelectStudent}
-            onOpenStudentProfile={setProfileEnrollmentId}
-            onOpenStudentSettings={handleOpenStudentSettings}
+            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setProfileEnrollmentId(id); } }}
+            onOpenStudentSettings={student => { if (confirmParticipationDiscard()) { clearParticipationSelection(); handleOpenStudentSettings(student); } }}
             onRefresh={() => {}}
           />
+          </>
         )}
 
         {currentView === 'seating' && !activeLayout && (
@@ -566,7 +599,7 @@ export function App() {
             overrides={activeOverrides}
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
-            onOpenStudentProfile={setProfileEnrollmentId}
+            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setProfileEnrollmentId(id); } }}
             onOpenMarking={(assessmentId, enrollmentId) => setMarkingTarget({ assessmentId, enrollmentId })}
             onRefresh={() => {}}
           />
@@ -624,15 +657,18 @@ export function App() {
       </main>
 
       {/* Real-Time Fast Participation Dock */}
-      {currentView === 'seating' && (
+      {currentView === 'seating' && !profileEnrollmentId && !editingStudent && !isTeacherSelectorOpen && !isBugReportOpen && (
         <ParticipationDock
+          key={`${activeSectionId}:${selectedSchoolDate}:${appIdentity?.userId}:${participationMode}:${selectedEnrollmentIds.join(',')}`}
+          selectionMode={participationMode}
           selectedEnrollments={selectedStudentsData}
           eventTypes={eventTypes}
           selectedSchoolDate={selectedSchoolDate}
           historicalLocalTime={historicalTime}
           onHistoricalTimeChange={setHistoricalTime}
           onRecordEvent={handleRecordParticipation}
-          onClearSelection={() => setSelectedEnrollmentIds([])}
+          onDraftChange={handleParticipationDraftChange}
+          onClearSelection={() => { if (confirmParticipationDiscard()) clearParticipationSelection(); }}
           onConfigureButtons={() => handleViewChange('settings')}
           lastBatchUndo={lastUndo}
           onUndo={handleUndo}

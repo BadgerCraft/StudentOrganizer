@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   RotateCcw,
@@ -20,6 +20,8 @@ import type {
 import { getSchoolLocalDate } from '../utils/dateUtils';
 
 interface ParticipationDockProps {
+  selectionMode?: 'single' | 'group';
+  onDraftChange?: (dirty: boolean) => void;
   selectedEnrollments: { enrollment: ClassEnrollment; student: Student }[];
   eventTypes: ParticipationEventType[];
   selectedSchoolDate: string;
@@ -42,6 +44,8 @@ interface ParticipationDockProps {
 }
 
 export const ParticipationDock: React.FC<ParticipationDockProps> = ({
+  selectionMode = 'single',
+  onDraftChange,
   selectedEnrollments,
   eventTypes,
   selectedSchoolDate,
@@ -57,6 +61,11 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   const [note, setNote] = useState('');
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [pendingLevelEventType, setPendingLevelEventType] = useState<ParticipationEventType | null>(null);
+
+  useEffect(() => {
+    onDraftChange?.(!!note.trim() || categoryOverride !== 'DEFAULT' || !!pendingLevelEventType);
+    return () => onDraftChange?.(false);
+  }, [note, categoryOverride, pendingLevelEventType, onDraftChange]);
 
   const today = getSchoolLocalDate();
   const isHistorical = selectedSchoolDate !== today;
@@ -116,7 +125,8 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   };
 
   return (
-    <div className="participation-dock fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex flex-col items-center pb-4 px-4">
+    <div className={`participation-dock fixed bottom-0 left-0 right-0 z-50 ${selectedEnrollments.length ? 'pointer-events-auto' : 'pointer-events-none'} flex flex-col items-center pb-4 px-4`}
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); pendingLevelEventType ? handleCancelLevel() : onClearSelection(); } }}>
       {/* Non-Blocking Undo Toast Banner */}
       {lastBatchUndo && (
         <div
@@ -182,7 +192,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                     : `${selectedEnrollments.length} Students Selected`}
                 </span>
                 <span className="text-xs text-slate-500 ml-2">
-                  (Choose an observation or quick-tally button below)
+                  {selectionMode === 'group' ? '(Group observation)' : '(Single-student observation)'}
                 </span>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { archiveDraft, archiveSnapshot } from './archive';
+import { archiveDraft, archiveSnapshot, discardUnfinishedDraft } from './archive';
 import type { OntarioTeacherDB } from '../db/database';
 import type { Assessment, AssessmentCategory, CategoryResult } from '../types/schema';
 import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
@@ -126,12 +126,15 @@ export class MarkingService {
       const allAttempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId));
       const archivedAttempts = allAttempts.filter(a => !!a.archivedAt);
       const attempts = allAttempts.filter(a => !a.archivedAt && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
-      const visibleAttempts = [...attempts, ...archivedAttempts];
+      // Historical discovery is separate from the writable active-roster queue.
+      // Require a live, same-school student link, just as enrollment reads do.
+      const historicalAttempts = allAttempts.filter(a => !a.archivedAt && a.classEnrollmentId && roster.some(e => e.id === a.classEnrollmentId && e.enrollmentStatus !== 'active' && students.some(s => s.id === e.studentId)));
+      const visibleAttempts = [...attempts, ...archivedAttempts, ...historicalAttempts];
       const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && visibleAttempts.some(a => a.id === s.attemptId));
       const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && visibleAttempts.some(a => a.id === c.attemptId));
       const studentAssessments = live(await this.db.studentAssessments.where('assessmentId').equals(assessmentId).toArray()).filter(sa => enrollments.some(e => e.id === sa.classEnrollmentId));
       const currentResults = studentAssessments.length ? live(await this.db.categoryResults.where('studentAssessmentId').anyOf(studentAssessments.map(sa => sa.id)).toArray()) : [];
-      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
+      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, historicalAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
     });
   }
   async saveRubric(assessmentId: string, content: RubricContent, actor: MarkingActor): Promise<MarkingRubric> {
@@ -398,24 +401,41 @@ export class MarkingService {
       if ([...sessions, ...commits].some(row => row.createdBy !== actor.userId || row.assessmentId !== attempt.assessmentId || row.classSectionId !== attempt.classSectionId)) throw new ValidationError('The marking history has inconsistent ownership. Archive was cancelled.');
       const next: MarkingAttempt = { ...attempt, archivedAt: now, keepStudentWork: keep, ...(keep ? {} : { documents: [], imagePages: [] }), updatedAt: now, version: attempt.version + 1 };
       const transactionId = crypto.randomUUID();
-      if (!keep) {
-        for (const [table, rows] of [[this.db.markingSessions, sessions], [this.db.markingCommits, commits]] as const) {
-          for (const row of rows) {
-            const redacted = { ...row, draft: archiveDraft(row.draft), updatedAt: now, version: row.version + 1 };
-            await table.put(redacted as MarkingSession & MarkingCommit);
-          }
-        }
-        const targets = new Map<string, Set<string>>([
-          ['markingAttempts', new Set([id])], ['markingSessions', new Set(sessions.map(row => row.id))], ['markingCommits', new Set(commits.map(row => row.id))]
-        ]);
-        for (const entry of await this.db.auditEntries.toArray()) {
-          if (!targets.get(entry.entityName)?.has(entry.entityId)) continue;
-          await this.db.auditEntries.put({ ...entry, previousStateJson: archiveSnapshot(entry.previousStateJson, entry.entityName, now), newStateJson: archiveSnapshot(entry.newStateJson, entry.entityName, now), diffJson: null });
-        }
-        for (const mutation of await this.db.syncMutations.toArray()) {
-          if (!targets.get(mutation.entityName)?.has(mutation.entityId)) continue;
-          await this.db.syncMutations.put({ ...mutation, payloadJson: archiveSnapshot(mutation.payloadJson, mutation.entityName, now)!, lastError: null });
-        }
+      const finalDrafts = new Map(commits.map(commit => [commit.id, keep ? clone(commit.draft) : archiveDraft(commit.draft)]));
+      const retainedSessions = new Map<string, MarkingSession>();
+      for (const session of sessions) {
+        const committed = session.status === 'finalized' && session.commitId ? commits.find(commit => commit.id === session.commitId && commit.sessionId === session.id && commit.rubricId === session.rubricId) : undefined;
+        if (session.status === 'finalized' && !committed) throw new ValidationError('The finalized marking history is inconsistent. Archive was cancelled.');
+        const retained = { ...session, draft: committed ? clone(finalDrafts.get(committed.id)!) : discardUnfinishedDraft(session.draft, keep), retainedCategoryJudgments: committed ? session.retainedCategoryJudgments : [], updatedAt: now, version: session.version + 1 };
+        retainedSessions.set(session.id, retained);
+        await this.db.markingSessions.put(retained);
+      }
+      for (const commit of commits) {
+        await this.db.markingCommits.put({ ...commit, draft: finalDrafts.get(commit.id)!, updatedAt: now, version: commit.version + 1 });
+      }
+      const targets = new Map<string, Set<string>>([
+        ['markingAttempts', new Set([id])], ['markingSessions', new Set(sessions.map(row => row.id))], ['markingCommits', new Set(commits.map(row => row.id))]
+      ]);
+      // Only this deliberately archived attempt is affected. Audit metadata remains,
+      // but old payloads must not recover unpublished feedback through backup/sync.
+      const retainedSnapshot = (json: string | null, entity: string, entityId: string): string | null => {
+        if (json === null) return null;
+        if (entity === 'markingAttempts') return keep ? json : archiveSnapshot(json, entity, now);
+        const value = JSON.parse(json);
+        if (!value || typeof value !== 'object' || Array.isArray(value) || !value.draft) throw new ValidationError('A retained marking snapshot is invalid. Archive was cancelled without changes.');
+        if (entity === 'markingCommits') return JSON.stringify({ ...value, draft: finalDrafts.get(entityId) });
+        const retained = retainedSessions.get(entityId)!;
+        // An old draft event is never relabelled as a finalized publication.
+        const published = value.status === 'finalized' && value.commitId === retained.commitId && retained.status === 'finalized';
+        return JSON.stringify({ ...value, draft: published ? retained.draft : discardUnfinishedDraft(retained.draft, keep), retainedCategoryJudgments: published ? retained.retainedCategoryJudgments : [] });
+      };
+      for (const entry of await this.db.auditEntries.toArray()) {
+        if (!targets.get(entry.entityName)?.has(entry.entityId)) continue;
+        await this.db.auditEntries.put({ ...entry, previousStateJson: retainedSnapshot(entry.previousStateJson, entry.entityName, entry.entityId), newStateJson: retainedSnapshot(entry.newStateJson, entry.entityName, entry.entityId), diffJson: null });
+      }
+      for (const mutation of await this.db.syncMutations.toArray()) {
+        if (!targets.get(mutation.entityName)?.has(mutation.entityId)) continue;
+        await this.db.syncMutations.put({ ...mutation, payloadJson: retainedSnapshot(mutation.payloadJson, mutation.entityName, mutation.entityId)!, lastError: null });
       }
       await this.db.markingAttempts.put(next);
       // The archive event must never reintroduce the pre-redaction originals.
