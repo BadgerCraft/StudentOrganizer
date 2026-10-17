@@ -115,7 +115,9 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
   // A retained old package is the upgrade baseline. Keep its original controls intact.
-  const guided = await page.getByTestId('evidence-import-wizard').count() > 0;
+  // The rubric gate intentionally leaves the import wizard unmounted until saved.
+  // Detect the modern rubric itself so retained legacy upgrade fixtures still use their controls.
+  const guided = await page.getByTestId('marking-rubric-paste').count() > 0;
   const rubricText = 'Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited reasoning\tSome reasoning\tClear reasoning\tThorough reasoning';
   if (guided) {
     await page.locator('summary').filter({ hasText: /^Paste rubric text or table$/ }).click();

@@ -218,7 +218,7 @@ try {
   pass('All 17 level choices select visibly; failed final save retains draft and rolls back results; Save and next/return update Markbook, feedback-only stays ungraded, and saved results survive restart.');
 
   await assessments(); await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await wizard.getByLabel('Paste text', { exact: true }).check(); await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
   await wizard.getByLabel('Work title', { exact: true }).fill('Fictional pasted work');
   await wizard.getByRole('textbox', { name: /^Student work/ }).fill('Fictional pasted text remains intact when going Back.');
@@ -234,7 +234,7 @@ try {
   await page.getByTestId('marking-document').filter({ hasText: 'Fictional pasted text' }).waitFor();
   pass('Single-student pasted-text flow requires explicit student confirmation, skips matching, and retains entered content on Back without duplicate imports.');
 
-  await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
   await wizard.getByLabel('Upload a picture', { exact: true }).check(); await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
   const pngs = await page.evaluate(() => [1, 2].map(number => { const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 640; const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 480, 640); ctx.fillStyle = '#111'; ctx.font = '20px sans-serif'; ctx.fillText(`Fictional photographed work ${number}`, 20, 40); return canvas.toDataURL('image/png').split(',')[1]; }));
   await wizard.getByLabel('Choose pictures', { exact: true }).setInputFiles(pngs.map((png, index) => ({ name: `Fictional-page-${index + 1}.png`, mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })));
@@ -264,7 +264,7 @@ try {
       await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
       await page.getByLabel('Rubric title', { exact: true }).fill(title);
     } else {
-      await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+      await page.getByRole('button', { name: 'Add student work', exact: true }).click();
       await wizard.getByLabel('Paste text', { exact: true }).check();
       await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
       await wizard.getByLabel('Work title', { exact: true }).fill(title);
@@ -285,7 +285,7 @@ try {
       await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
       assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), title);
     } else {
-      await page.getByRole('button', { name: 'Import submissions', exact: true }).click();
+      await page.getByRole('button', { name: 'Add student work', exact: true }).click();
       assert.equal(await wizard.getByLabel('Work title', { exact: true }).inputValue(), title);
       assert.equal(await wizard.getByRole('textbox', { name: /^Student work/ }).inputValue(), work);
     }
