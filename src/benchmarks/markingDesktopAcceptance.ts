@@ -104,7 +104,7 @@ const defaultDownload = (page: Page): MarkingDownload => async (trigger, destina
 };
 
 /** Run only against a disposable fictional QA profile, with its Assessment Hub already visible. */
-async function runAcceptance(page: Page, artifactsDir: string, download: MarkingDownload): Promise<MarkingDesktopEvidence> {
+async function runAcceptance(page: Page, artifactsDir: string, download: MarkingDownload, expectedBackupSchema: 4 | 5): Promise<MarkingDesktopEvidence> {
   await fs.mkdir(artifactsDir, { recursive: true });
   const assessmentTitle = `QA Fictional Desktop Markinator ${Date.now()}`;
   await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
@@ -252,7 +252,12 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   const backupPath = path.join(artifactsDir, 'markinator-backup.json');
   await download(() => page.getByTestId('create-backup-btn').click(), backupPath);
   const backup = JSON.parse(await fs.readFile(backupPath, 'utf8'));
-  assert.equal(backup.schemaVersion, 5);
+  assert.equal(backup.schemaVersion, expectedBackupSchema, 'Backup must match the exact installed fixture schema');
+  assert.equal(Object.keys(backup.tables).length, expectedBackupSchema === 4 ? 39 : 41);
+  for (const table of ['captureAttachments', 'captureImportReceipts']) {
+    if (expectedBackupSchema === 4) assert.equal(Object.prototype.hasOwnProperty.call(backup.tables, table), false, 'Pinned legacy backup predates capture tables');
+    else assert.deepEqual(backup.tables[table], [], 'Marking-only acceptance must leave additive capture tables empty');
+  }
   for (const [table, rows] of Object.entries(snapshots)) {
     const ids = new Set(rows.map(row => row.id));
     assert.deepEqual(backup.tables[table].filter((row: any) => ids.has(row.id)).sort((a: any, b: any) => a.id.localeCompare(b.id)), rows, `Full backup must preserve ${table}`);
@@ -313,10 +318,10 @@ function observeLocalRequests(page: Page) {
   };
 }
 
-export async function runMarkingDesktopAcceptance(page: Page, artifactsDir: string, download = defaultDownload(page)): Promise<MarkingDesktopEvidence> {
+export async function runMarkingDesktopAcceptance(page: Page, artifactsDir: string, download = defaultDownload(page), expectedBackupSchema: 4 | 5 = 5): Promise<MarkingDesktopEvidence> {
   const finish = observeLocalRequests(page);
   try {
-    const evidence = await runAcceptance(page, artifactsDir, download);
+    const evidence = await runAcceptance(page, artifactsDir, download, expectedBackupSchema);
     evidence.checks.push('zero external request attempts during marking and backup/restore');
     return evidence;
   } finally { finish(); }
