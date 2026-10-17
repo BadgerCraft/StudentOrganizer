@@ -1,6 +1,10 @@
 # StudentOrganizer — authoritative feature and execution queue
 
-## October 17 — physical-phone transfer recovery (active)
+## October 17 — marking usability publication
+
+Bounded usability and subsequently approved unified entry are implemented on `codex/classroom-marking-usability-20261017`; implementation `968a59e1dff934508fd2574d86a841757c935928` pushed/read back and [draft PR39](https://github.com/BadgerCraft/StudentOrganizer/pull/39) opened against verified main `b1ff8b5`. Desktop688/phone23 tests, builds, focus/pointer baseline reproduction, touch crop, unified intake/reopen and affected capture browser checks pass. Independent root source/visual review found no blocker. Fresh CI and installed-device acceptance remain pending; no merge/release. Broader app redesign stays deferred for the parent stock-ping reminder, which is not created by this implementation.
+
+## October 17 — physical-phone transfer recovery (historical checkpoint)
 
 PR36 merged at `ea4380f6294932cd234b3f33c044c3174125056b`. Tyler completed private Google setup and owner-local signing; signing key/password remain exclusively with Tyler. Physical-phone feedback ("I tested the remote app did it work? There should probably be a confirm and home page") authorizes a bounded F-008-CAPTURE repair on `codex/capture-transfer-recovery-20261017`: diagnose retained-upload retry, distinguish local completion from verified Drive delivery, add safe Home/saved assignments, and correct system-bar overlap. Screenshot status is RETRY, not upload success. Preserve original packages, stable remote IDs and existing limited Drive grant; fictional automated fixtures only. No merge, release, account change or environment live upload. Review/test evidence is appended to the existing Android work order.
 
