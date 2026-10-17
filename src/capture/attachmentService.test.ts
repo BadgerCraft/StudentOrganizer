@@ -122,6 +122,47 @@ describe('durable capture matching boundary', () => {
     const receipt = await confirm(service, pkg, enrollments[0], actor);
     return { marking, markingActor, rubric, receipt };
   }
+  it('starts marking large saved photos for two of five students and preserves receipts across restart', async () => {
+    for (const id of enrollments.slice(5)) await db.classEnrollments.update(id, { enrollmentStatus: 'dropped' });
+    enrollments = (await service.context('assess-eng-essay', actor)).roster.map(row => row.enrollment.id);
+    expect(enrollments).toHaveLength(5);
+    // A valid one-pixel PNG with a 4 MiB ancillary chunk reproduces camera-sized
+    // base64 without private photos or changing the decoded image dimensions.
+    const png = Uint8Array.from(atob(PNG), c => c.charCodeAt(0));
+    const chunk = new Uint8Array(4 * 1024 * 1024), view = new DataView(chunk.buffer);
+    view.setUint32(0, chunk.length - 12); chunk.set(new TextEncoder().encode('tEXt'), 4);
+    let crc = 0xffffffff;
+    for (const byte of chunk.subarray(4, -4)) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1; }
+    view.setUint32(chunk.length - 4, (crc ^ 0xffffffff) >>> 0);
+    const bytes = new Uint8Array(png.length + chunk.length);
+    bytes.set(png.subarray(0, -12)); bytes.set(chunk, png.length - 12); bytes.set(png.subarray(-12), bytes.length - 12);
+    const hash = await captureSha256(bytes);
+    for (const submission of pkg.submissions) for (const page of submission.pages) {
+      page.bytes = bytes; page.metadata.byteLength = bytes.length; page.metadata.sha256 = hash;
+    }
+    const official = await db.studentAssessments.toArray();
+    const { marking, markingActor, rubric, receipt } = await markingFixture();
+    const second = await confirm(service, pkg, enrollments[1], actor, 'student-two');
+    const attachments = await db.captureAttachments.toArray(), receipts = await db.captureImportReceipts.toArray();
+    for (const [index, saved] of [receipt, second].entries()) {
+      const attempt = await marking.bindCaptureRoot(saved.attachmentId, { rubricId: rubric.id }, markingActor);
+      expect(attempt.classEnrollmentId).toBe(enrollments[index]);
+      expect(attempt.imagePages).toHaveLength(2);
+      expect(attempt.imagePages!.every(page => page.hash === hash && page.size === bytes.length)).toBe(true);
+      const session = await marking.openSession(attempt.id, markingActor);
+      await marking.saveDraft(session.id, { ...session.draft, overallFeedback: 'Fictional retained draft' }, session.version, markingActor);
+    }
+    db.close(); await db.open();
+    expect(await service.reconcile('assess-eng-essay', pkg, actor)).toEqual(expect.arrayContaining(receipts));
+    const retained = await db.captureAttachments.toArray();
+    expect(retained.map(row => ({ id: row.id, pages: row.pages, manifest: row.manifest }))).toEqual(attachments.map(row => ({ id: row.id, pages: row.pages, manifest: row.manifest })));
+    expect(retained.every(row => !!row.markingAttemptId)).toBe(true);
+    expect(await db.captureImportReceipts.toArray()).toEqual(receipts);
+    expect(await db.markingAttempts.count()).toBe(2);
+    expect((await db.markingSessions.toArray()).every(session => session.draft.overallFeedback === 'Fictional retained draft')).toBe(true);
+    expect(await db.studentAssessments.toArray()).toEqual(official);
+    expect(await db.markingCommits.count()).toBe(0);
+  }, 60_000);
   it('explicitly starts capture marking then atomically appends originals while preserving draft feedback and rejecting stale editors', async () => {
     const { marking, markingActor, rubric, receipt } = await markingFixture();
     const originalReceipt = await db.captureImportReceipts.get(receipt.id);

@@ -14,6 +14,11 @@ function object(value: unknown, label: string): Record<string, unknown> {
 function str(value: unknown, label: string, max = 2000, empty = false): asserts value is string {
   if (typeof value !== 'string' || value.length > max || (!empty && !value.trim()) || value.includes('\u0000')) fail(`${label} is missing, too large, or invalid.`);
 }
+// Repeating four-character groups can overflow the regex engine stack on valid
+// camera-sized payloads. Check length and alphabet/padding without nested groups.
+function isBase64(value: string): boolean {
+  return value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value);
+}
 function arr(value: unknown, label: string, max: number): asserts value is unknown[] {
   if (!Array.isArray(value) || value.length > max) fail(`${label} must be an array with at most ${max} items.`);
 }
@@ -95,7 +100,7 @@ export function assertMarkingDocument(value: unknown): asserts value is MarkingD
     integer(original.size, 'Original file size', 0);
     if ((original.size as number) > MARKING_LIMITS.fileBytes) fail('Original file exceeds size limit.');
     str(original.base64, 'Original bytes', 4 * Math.ceil(MARKING_LIMITS.fileBytes / 3), true);
-    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(original.base64 as string)) fail('Original file is not valid base64.');
+    if (!isBase64(original.base64 as string)) fail('Original file is not valid base64.');
     const encoded = original.base64 as string;
     const decodedSize = encoded.length / 4 * 3 - (encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0);
     if (decodedSize !== original.size) fail('Original file size does not match its bytes.');
@@ -124,7 +129,7 @@ export function assertMarkingImagePages(value: unknown): asserts value is Markin
     if (page.size > MARKING_LIMITS.imageBytes) fail('Image exceeds the page size limit.');
     bytes += page.size;
     str(page.base64, 'Image bytes', 4 * Math.ceil(MARKING_LIMITS.imageBytes / 3));
-    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(page.base64)) fail('Image bytes must be plain base64, never a URL.');
+    if (!isBase64(page.base64)) fail('Image bytes must be plain base64, never a URL.');
     const size = page.base64.length / 4 * 3 - (page.base64.endsWith('==') ? 2 : page.base64.endsWith('=') ? 1 : 0);
     if (size !== page.size) fail('Image size does not match its retained bytes.');
     integer(page.width, 'Image width'); integer(page.height, 'Image height');
