@@ -14,6 +14,10 @@ import java.util.concurrent.TimeUnit;
 public final class TransferWorker extends Worker {
     static final String SCOPE="https://www.googleapis.com/auth/drive.file";
     static final Object LOCK=new Object();
+    private static volatile String activeQueueId;
+    static boolean isActive(String queueId){return queueId!=null&&queueId.equals(activeQueueId);}
+    static State runTracked(TransferEngine engine,String queueId)throws java.io.IOException{activeQueueId=queueId;try{return engine.run(queueId);}finally{activeQueueId=null;}}
+    static void accountState(CaptureQueue queue,String account,State state,String detail){for(UploadRecord r:queue.all())if(account.equals(r.accountId)&&r.state!=State.COMPLETE&&r.state!=State.BLOCKED&&(state!=State.RETRY||r.state!=State.NEEDS_AUTH)){r.state=state;r.detail=detail;queue.save(r);}}
     public TransferWorker(@NonNull Context c,@NonNull WorkerParameters p){super(c,p);}
     static TransferSettings settings(Context c){return TransferSettings.get(c);}
     static boolean enabled(Context c){return BuildConfig.CAPTURE_DRIVE_SETUP_APPROVED && settings(c).enabled();}
@@ -29,19 +33,19 @@ public final class TransferWorker extends Worker {
         try(CaptureQueue queue=new CaptureQueue(c)){
             if(!enabled(c))return Result.success();
             AuthorizationResult auth=Tasks.await(Identity.getAuthorizationClient(c).authorize(request(email)),45,TimeUnit.SECONDS);
-            if(auth.hasResolution()||auth.getAccessToken()==null){p.pause("Reconnect Google in settings; queued originals retained");return Result.success();}
+            if(auth.hasResolution()||auth.getAccessToken()==null){p.pause("Reconnect Google in settings; queued originals retained");accountState(queue,account,State.NEEDS_AUTH,"Google permission must be renewed before this revision can transfer.");return Result.success();}
             HttpDriveGateway drive=new HttpDriveGateway(auth::getAccessToken,()->enabled(c)&&!isStopped()&&account.equals(p.text("accountId","")));
-            if(!account.equals(drive.identity())){p.pause("Google account mismatch; transfers paused");return Result.success();}
+            if(!account.equals(drive.identity())){p.pause("Google account mismatch; transfers paused");accountState(queue,account,State.BLOCKED,"Google account changed. Reconnect the original account before retrying.");return Result.success();}
             boolean retry=false;
             for(UploadRecord r:queue.all()){
                 if(isStopped()||!enabled(c))break;
                 if(r.state==State.COMPLETE||!account.equals(r.accountId))continue;
                 if(r.state==State.BLOCKED||r.state==State.NEEDS_AUTH)continue;
-                State state=new TransferEngine(drive,queue,()->enabled(c)&&!isStopped(),()->p.text("accountId","")).run(r.queueId);
+                State state=runTracked(new TransferEngine(drive,queue,()->enabled(c)&&!isStopped(),()->p.text("accountId","")),r.queueId);
                 retry|=state==State.RETRY;
                 if(state==State.NEEDS_AUTH){Identity.getAuthorizationClient(c).clearToken(ClearTokenRequest.builder().setToken(auth.getAccessToken()).build());break;}
             }
             return retry?Result.retry():Result.success();
-        }catch(Exception e){return p.setNotice("Transfer interrupted; local originals retained. Reconnect if needed.")?Result.retry():Result.success();}
+        }catch(Exception e){try(CaptureQueue queue=new CaptureQueue(c)){accountState(queue,account,State.RETRY,"Transfer interrupted before delivery was verified. Check network access; reconnect Google if needed.");}catch(RuntimeException unavailable){/* Preserve originals and existing receipts if status storage also fails. */}return p.setNotice("Transfer interrupted; local originals retained. Reconnect if needed.")?Result.retry():Result.success();}
     }}
 }

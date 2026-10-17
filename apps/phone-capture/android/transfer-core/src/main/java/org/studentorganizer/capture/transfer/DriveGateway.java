@@ -21,7 +21,8 @@ public interface DriveGateway {
     }
     /** Stable Drive user permission ID, not an email/display name. */
     String identity() throws IOException;
-    String rootId() throws IOException;
+    /** Verify exact ID is a direct child of My Drive root using app-authorized files only. */
+    boolean isRootChild(String id) throws IOException;
     String generateId() throws IOException;
     /** Null only for a genuine 404. Permissions must be complete, including inherited permissions. */
     Metadata metadata(String id) throws IOException;

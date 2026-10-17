@@ -1,5 +1,9 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 17 — physical-phone transfer recovery (active)
+
+PR36 merged at `ea4380f6294932cd234b3f33c044c3174125056b`. Tyler completed private Google setup and owner-local signing; signing key/password remain exclusively with Tyler. Physical-phone feedback ("I tested the remote app did it work? There should probably be a confirm and home page") authorizes a bounded F-008-CAPTURE repair on `codex/capture-transfer-recovery-20261017`: diagnose retained-upload retry, distinguish local completion from verified Drive delivery, add safe Home/saved assignments, and correct system-bar overlap. Screenshot status is RETRY, not upload success. Preserve original packages, stable remote IDs and existing limited Drive grant; fictional automated fixtures only. No merge, release, account change or environment live upload. Review/test evidence is appended to the existing Android work order.
+
 Updated: October 17, 2026 (America/Toronto). Tyler directed P0 teacher-use readiness after independent PR31 review; this current phase supersedes earlier feature-expansion priorities. **Single source of truth for feature status, priority, approval and next action.** Application acceptance is scoped to the exact evidence below; packaged/native device acceptance remains separate.
 
 ## October 17 — fresh capture integration recovery

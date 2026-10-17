@@ -27,9 +27,26 @@ public final class HttpDriveGateway implements DriveGateway {
         try { return required(object(request("GET",API+"about?fields=user(permissionId)",null,null)).getAsJsonObject("user"),"permissionId"); }
         catch (RuntimeException e) { throw new IOException("Invalid Drive identity response"); }
     }
-    @Override public String rootId() throws IOException {
-        try { return required(object(request("GET",API+"files/root?fields=id",null,null)),"id"); }
-        catch (RuntimeException e) { throw new IOException("Invalid Drive root response"); }
+    @Override public boolean isRootChild(String id) throws IOException {
+        try{return readRootMembership(id);}catch(RuntimeException error){throw new IOException("Invalid root membership response");}
+    }
+    private boolean readRootMembership(String id) throws IOException {
+        segment(id);String page=null;Set<String> seen=new HashSet<>();
+        // drive.file need not expose root metadata. Query its app-authorized children,
+        // selecting only the already reserved ID, never an assignment display name.
+        for(int count=0;count<100;count++) {
+            JsonObject result=object(request("GET",API+"files?q="+encode("'root' in parents and trashed = false")
+                +"&corpora=user&spaces=drive&pageSize=100&fields="+encode("files(id),nextPageToken,incompleteSearch")
+                +(page==null?"":"&pageToken="+encode(page)),null,null));
+            if(!result.has("files")||!result.get("files").isJsonArray()||bool(result,"incompleteSearch",false))throw new IOException("Root membership could not be verified");
+            for(JsonElement item:result.getAsJsonArray("files")) {
+                if(!item.isJsonObject())throw new IOException("Invalid root membership response");
+                if(id.equals(required(item.getAsJsonObject(),"id")))return true;
+            }
+            page=str(result,"nextPageToken");if(page==null||page.isEmpty())return false;
+            if(!seen.add(page))throw new IOException("Repeated root membership page");
+        }
+        throw new IOException("Root membership lookup limit reached");
     }
     @Override public String generateId() throws IOException {
         try { return segment(object(request("GET",API+"files/generateIds?count=1&space=drive&type=files",null,null)).getAsJsonArray("ids").get(0).getAsString()); }
@@ -57,7 +74,7 @@ public final class HttpDriveGateway implements DriveGateway {
         return m;
     }
     @Override public void createFolder(String id,String name) throws IOException {
-        JsonObject o=new JsonObject();o.addProperty("id",id);o.addProperty("name",name);o.addProperty("mimeType","application/vnd.google-apps.folder");
+        JsonObject o=new JsonObject();o.addProperty("id",id);o.addProperty("name",name);o.addProperty("mimeType","application/vnd.google-apps.folder");JsonArray parents=new JsonArray();parents.add("root");o.add("parents",parents);
         object(request("POST",API+"files?fields=id",Collections.singletonMap("Content-Type","application/json; charset=UTF-8"),json(o)));
     }
     @Override public String begin(UploadRecord r) throws IOException {

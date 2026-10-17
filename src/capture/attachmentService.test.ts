@@ -223,7 +223,9 @@ describe('durable capture matching boundary', () => {
     await expect(service.confirm('assess-eng-essay', large, 'student-two', enrollments[1], actor, { rootAttachmentId: separate.attachmentId })).rejects.toThrow('32 MiB');
     expect(await db.captureImportReceipts.count()).toBe(6);
     expect((await service.groupedAttachment('assess-eng-essay', separate.attachmentId, actor)).pages).toHaveLength(2);
-  }, 20_000);
+  // This checks real 35 MiB originals, hashes and transactional rollback, not a
+  // latency target. Allow slower shared Intel CI runners without reducing data.
+  }, 60_000);
   it('roundtrips attachments and receipts; rejects corrupt content and receipt scope before changing data', async () => {
     const receipt = await confirm(service, pkg, enrollments[0], actor); const portability = new PortabilityService(db);
     const json = await portability.createFullBackupJSON(); expect(JSON.parse(json).schemaVersion).toBe(5);

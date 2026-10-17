@@ -31,6 +31,16 @@ public class TransferEngineTest {
     @Test public void sharedFolderNeverUploads() throws Exception {drive.folder.shared=true;assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));assertEquals(0,drive.creates);}
     @Test public void extraInheritedReaderBlocks() throws Exception {drive.folder.permissions.add(new DriveGateway.Permission("reader","user","reader"));assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));assertEquals(0,drive.creates);}
     @Test public void movedFolderBlocks() throws Exception {drive.folder.parents=List.of("shared-parent");assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));}
+    @Test public void rootAliasReservationAcceptsVerifiedCanonicalParentWithoutRewritingIdentity()throws Exception {
+        drive.folder.parents=List.of("canonical-root");drive.canonicalRoot=true;
+        assertEquals(TransferEngine.State.COMPLETE,engine().run("q"));assertEquals("root",store.load("q").folderParentId);
+    }
+    @Test public void legacyCanonicalParentMustStillMatchAlongsideRootMembership()throws Exception {
+        record.folderParentId="canonical-root";store.save(record);
+        assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));assertEquals(0,drive.creates);
+        drive.folder.parents=List.of("canonical-root");drive.canonicalRoot=true;
+        assertEquals(TransferEngine.State.COMPLETE,engine().run("q"));assertEquals("canonical-root",store.load("q").folderParentId);
+    }
     @Test public void wrongRemoteAccountBlocks() throws Exception {drive.identity="different";assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));assertEquals(0,drive.creates);}
     @Test public void wrongSelectedAccountPausesWithoutNetwork() throws Exception {account="different";assertEquals(TransferEngine.State.PAUSED,engine().run("q"));assertEquals(0,drive.calls);}
     @Test public void optOutBeforeAttemptNeverNetworks() throws Exception {enabled=false;assertEquals(TransferEngine.State.PAUSED,engine().run("q"));assertEquals(0,drive.calls);}
@@ -42,6 +52,19 @@ public class TransferEngineTest {
     @Test public void expiredSessionRetainsId() throws Exception {
         drive.failure=new DriveGateway.Failure(410,"gone");assertEquals(TransferEngine.State.RETRY,engine().run("q"));assertNull(store.load("q").sessionUrl);
         drive.failure=null;assertEquals(TransferEngine.State.COMPLETE,engine().run("q"));assertEquals(1,drive.generated);
+    }
+    @Test public void missingAccountResourceDoesNotClearSessionOrClaimSessionExpired()throws Exception {
+        record.fileId="retained-file";record.sessionUrl="retained-session";store.save(record);
+        drive.identityFailure=new DriveGateway.Failure(404,"notFound");
+        assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));
+        UploadRecord retained=store.load("q");assertEquals("retained-session",retained.sessionUrl);assertEquals("retained-file",retained.fileId);
+        assertTrue(retained.detail.contains("checking account"));assertFalse(retained.detail.contains("expired"));assertEquals(0,drive.creates);
+    }
+    @Test public void missingBeginResourceIsNotAnExpiredUploadSession()throws Exception {
+        drive.beginFailure=new DriveGateway.Failure(404,"notFound");
+        assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));
+        assertTrue(store.load("q").detail.contains("starting upload"));String retained=store.load("q").fileId;
+        drive.beginFailure=null;assertEquals(TransferEngine.State.COMPLETE,engine().run("q"));assertEquals(retained,store.load("q").fileId);assertEquals(1,drive.generated);
     }
     @Test public void changedLocalOriginalNeverUploads() throws Exception {Files.write(local.toPath(),"changed fictional bytes".getBytes());assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));assertEquals(0,drive.creates);}
     @Test public void sharedUploadedFileNeverCompletes() throws Exception {drive.shareFile=true;assertEquals(TransferEngine.State.BLOCKED,engine().run("q"));}
@@ -100,15 +123,15 @@ public class TransferEngineTest {
     }
     class FakeDrive implements DriveGateway {
         Metadata folder=meta("folder","application/vnd.google-apps.folder","root"),file;
-        int calls,creates,generated,folderCreates;String savedFolderAtCreate,createdFolderName;boolean folderTimeout;boolean timeout,badChecksum,noSha,disableAfterUpload,conflict,wrongParent,shareFile,shareFolderAfterUpload;
-        String identity="owner";Failure failure;
-        public String identity(){calls++;return identity;}
-        public String rootId(){calls++;return "root";}
+        int calls,creates,generated,folderCreates;String savedFolderAtCreate,createdFolderName;boolean folderTimeout,canonicalRoot;boolean timeout,badChecksum,noSha,disableAfterUpload,conflict,wrongParent,shareFile,shareFolderAfterUpload;
+        String identity="owner";Failure failure,identityFailure,beginFailure;
+        public String identity()throws IOException{calls++;if(identityFailure!=null)throw identityFailure;return identity;}
+        public boolean isRootChild(String id){calls++;return folder!=null && id.equals(folder.id) && folder.parents.contains(canonicalRoot?"canonical-root":"root");}
         public String generateId(){calls++;generated++;return generated==1?"generated":"generated-"+generated;}
         public Metadata metadata(String id){calls++;return folder!=null&&id.equals(folder.id)?folder:file!=null&&id.equals(file.id)?file:null;}
         public void createFolder(String id,String name)throws IOException{folderCreates++;savedFolderAtCreate=store.load("q").folderId;createdFolderName=name;folder=meta(id,"application/vnd.google-apps.folder","root");if(folderTimeout)throw new IOException("timeout after folder creation");}
         public String begin(UploadRecord r)throws IOException {
-            calls++;creates++;store.savedIdAtBegin=store.load(r.queueId).fileId;
+            calls++;creates++;if(beginFailure!=null)throw beginFailure;store.savedIdAtBegin=store.load(r.queueId).fileId;
             if(conflict){commit(r);throw new Failure(409,"conflict");}return "session";
         }
         public void upload(UploadRecord r)throws IOException {
