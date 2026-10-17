@@ -52,6 +52,15 @@ export function calculateAssessmentSummary(enrollmentId: UUID, assessment: Asses
     [assessment], categories, assignments, results, { ...policy, excludeFormative: false }, []);
 }
 
+/** Feedback presence is display-only and restricted to this assignment's live categories. */
+export function hasAssessmentFeedback(assignment: StudentAssessment | undefined, categories: AssessmentCategory[], results: CategoryResult[]): boolean {
+  if (!assignment || assignment.deletedAt !== null) return false;
+  if (assignment.overallFeedback?.trim()) return true;
+  const categoryIds = new Set(categories.filter(category => category.assessmentId === assignment.assessmentId && category.deletedAt === null).map(category => category.id));
+  return results.some(result => result.studentAssessmentId === assignment.id && result.deletedAt === null && categoryIds.has(result.assessmentCategoryId)
+    && (!!result.feedback?.trim() || (result.inputFormat === 'descriptive' && !!result.rawScore.trim())));
+}
+
 /** Display only the saved representation; never infer a level from a percentage. */
 export function getMarkbookResultLabel(result: CategoryResult | null | undefined): string {
   if (!result) return 'Unassessed';
@@ -558,7 +567,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
                         // Include formative evidence here only, without modifying the saved/course policy.
                         const summary = calculateAssessmentSummary(enr.id, assessment, categories, studentAssessments, categoryResults, policy);
                         return <td key={`${assessment.id}-summary`} data-testid={`markbook-summary-${enr.id}-${assessment.id}`} className="px-3 py-2 text-center border-r border-slate-200">
-                          <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? (showPercentages ? `${summary.finalOverall}%` : 'Calculated') : sa?.overallFeedback?.trim() ? 'Feedback only' : 'Unassessed'}</span>
+                          <span className="font-bold">{sa?.completionStatus === 'excused' ? 'EXC' : summary.finalOverall !== null ? (showPercentages ? `${summary.finalOverall}%` : 'Calculated') : hasAssessmentFeedback(sa, categories, categoryResults) ? 'Feedback only' : 'Unassessed'}</span>
                           {sa?.completionStatus === 'missing' && <span className="block text-[10px] text-red-700">Missing</span>}
                           {sa?.isLate && <span className="block text-[10px] text-amber-700">Late</span>}
                           <button type="button" onClick={() => toggleAssessment(assessment.id)} aria-label={`Edit ${assessment.title} categories for ${std.preferredName || std.firstName} ${std.lastName}`} className="block mx-auto mt-1 text-blue-700 underline">Edit categories</button>

@@ -154,6 +154,41 @@ describe('minimal marking archive and deliberate student-work retention', () => 
     const revoked = await snapshot();
     await expect(service.archiveAttempt(f.attempt.id, f.attempt.version + 1, actor)).rejects.toThrow(); expect(await snapshot()).toEqual(revoked);
   });
+  it('discovers former-student drafts and finished attempts without writes or reenrollment', async () => {
+    const f = await fixture();
+    const revision = await service.openSession(f.attempt.id, actor);
+    await db.classEnrollments.update(f.enrollment.id, { enrollmentStatus: 'dropped' });
+    const before = await snapshot();
+    for (let repeat = 0; repeat < 2; repeat++) {
+      const context = await service.getContext(ASSESSMENT, actor);
+      expect(context.historicalAttempts).toEqual([f.attempt]);
+      expect(context.attempts).toEqual([]);
+      expect(context.sessions.map(row => row.id)).toContain(revision.id);
+      expect(context.commits.map(row => row.id)).toContain(f.commit.id);
+      expect((await service.exportContext(f.commit.id, actor)).student.id).toBe(f.enrollment.studentId);
+    }
+    await expect(service.openSession(f.attempt.id, actor)).rejects.toThrow('active student enrollment');
+    await expect(service.saveDraft(revision.id, revision.draft, revision.version, actor)).rejects.toThrow('active student enrollment');
+    await expect(service.finalize(revision.id, revision.version, actor)).rejects.toThrow('active student enrollment');
+    await expect(service.matchAttempt(f.attempt.id, f.enrollment.id, f.attempt.version, actor)).rejects.toThrow('active student enrollment');
+    expect(await snapshot()).toEqual(before);
+    const backup = await new PortabilityService(db).createFullBackupJSON();
+    await new PortabilityService(db).restoreFromJSON(backup);
+    expect((await service.getContext(ASSESSMENT, actor)).historicalAttempts).toEqual([f.attempt]);
+    await db.organizationMemberships.where('userId').equals(actor.userId).modify({ status: 'suspended' });
+    await expect(service.getContext(ASSESSMENT, actor)).rejects.toThrow();
+  });
+  it('does not expose former-student work through an invalid school or deleted enrollment link', async () => {
+    const f = await fixture();
+    await db.classEnrollments.update(f.enrollment.id, { enrollmentStatus: 'dropped' });
+    const student = (await db.students.get(f.enrollment.studentId))!;
+    await db.students.update(f.enrollment.studentId, { organizationId: 'another-school' });
+    expect((await service.getContext(ASSESSMENT, actor)).historicalAttempts).toEqual([]);
+    await db.students.update(f.enrollment.studentId, { organizationId: student.organizationId });
+    expect((await service.getContext(ASSESSMENT, actor)).historicalAttempts).toEqual([f.attempt]);
+    await db.classEnrollments.update(f.enrollment.id, { deletedAt: new Date().toISOString() });
+    expect((await service.getContext(ASSESSMENT, actor)).historicalAttempts).toEqual([]);
+  });
   it('archives historical work after enrollment becomes inactive and the assessment is locked', async () => {
     const f = await fixture();
     await db.classEnrollments.update(f.enrollment.id, { enrollmentStatus: 'dropped' });

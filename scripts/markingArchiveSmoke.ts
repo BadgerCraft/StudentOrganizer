@@ -3,7 +3,7 @@ import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } fr
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { preview } from 'vite';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Page, type Locator } from 'playwright';
 
 // Fictional data only. All successful writes use visible UI; IndexedDB is read-only.
 const port = 4201, origin = `http://127.0.0.1:${port}`;
@@ -80,7 +80,8 @@ try {
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
   const students = await importDocumentsForStudents(page, [
     { name: 'Fictional-remove.txt', mimeType: 'text/plain', buffer: Buffer.from(removedSource) },
-    { name: 'Fictional-keep.txt', mimeType: 'text/plain', buffer: Buffer.from(retainedSource) }
+    { name: 'Fictional-keep.txt', mimeType: 'text/plain', buffer: Buffer.from(retainedSource) },
+    { name: 'Fictional-history.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional former student submission.') }
   ]);
   const first = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[0].value);
   const second = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[1].value);
@@ -127,7 +128,8 @@ try {
     await archivedCard.locator('summary').first().click();
     assert.match(await archivedCard.innerText(), /Fictional archived overall feedback/);
     assert.match(await archivedCard.innerText(), /T: 3\+/);
-    if (!keep) assert.match(await archivedCard.innerText(), /Fictional teacher passage feedback retained/);
+    assert.match(await archivedCard.innerText(), /Fictional teacher passage feedback retained/);
+    assert.equal((await archivedCard.innerText()).split('Fictional teacher passage feedback retained after archive.').length - 1, 1, 'retained and redacted comments are not duplicated');
     assert.equal(await archivedCard.getByRole('textbox').count(), 0, 'archive is read-only');
     assert.equal(await page.getByTestId(`marking-session-open-${attempt.id}`).count(), 0);
     assert.deepEqual(await official(page, assessment.id), grades, 'archiving preserves official grades');
@@ -137,6 +139,48 @@ try {
     scenarios.push(`${keep ? 'Explicit retain' : 'Default removal'}: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation`);
     if (!keep) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   }
+  // Leave a saved unfinished comment, then remove the student through the real roster UI.
+  const historical = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[2].value);
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+  await page.getByTestId(`marking-session-open-${historical.id}`).click();
+  await selectText(page, 9);
+  await page.getByTestId('marking-feedback').fill('Fictional unfinished former-student feedback.');
+  await page.getByRole('button', { name: 'Save now', exact: true }).click();
+  await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
+  await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await page.getByTestId('nav-seating-btn').click();
+  const enrollment = (await records(page, 'classEnrollments')).find(row => row.id === students[2].value);
+  const student = (await records(page, 'students')).find(row => row.id === enrollment.studentId);
+  const card = page.getByTestId('student-seat-card').filter({ has: page.getByTestId('student-seat-name').filter({ hasText: `${student.preferredName || student.firstName} ${student.lastName}` }) });
+  await card.getByTestId('open-student-profile-btn').click();
+  await page.getByTestId('remove-from-class-btn').click();
+  await page.getByTestId('cancel-remove-from-class-btn').click();
+  await page.getByTestId('remove-from-class-btn').click();
+  await page.getByTestId('confirm-remove-from-class-btn').click();
+  await card.waitFor({ state: 'hidden' });
+  const historyTables = ['classEnrollments', 'markingAttempts', 'markingSessions', 'markingCommits', 'categoryResults', 'studentAssessments', 'auditEntries'];
+  const historySnapshot = async () => Object.fromEntries(await Promise.all(historyTables.map(async table => [table, await records(page!, table)])));
+  const beforeBrowsing = await historySnapshot();
+  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await page.getByTestId(`open-marking-${assessment.id}`).click();
+  assert.equal(await page.getByTestId(`marking-session-open-${historical.id}`).count(), 0);
+  for (let repeat = 0; repeat < 2; repeat++) {
+    await page.getByRole('button', { name: 'Former students', exact: true }).click();
+    const historyCard: Locator = page.getByTestId(`marking-historical-${historical.id}`);
+    await historyCard.waitFor();
+    await historyCard.locator('summary').first().click();
+    assert.match(await historyCard.innerText(), /Fictional unfinished former-student feedback/);
+    assert.match(await historyCard.innerText(), /Unfinished comment/);
+    assert.equal(await historyCard.getByRole('textbox').count(), 0);
+    assert.equal(await historyCard.getByRole('button').count(), 0, 'draft history exposes no write actions');
+    assert.deepEqual(await historySnapshot(), beforeBrowsing, 'repeated history browsing changes no records or enrollment');
+    if (repeat === 0) {
+      await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+      await page.reload();
+      await page.getByTestId(`open-marking-${assessment.id}`).click();
+    }
+  }
+  scenarios.push('Former-student pending draft remains discoverable read-only across close/reload/reopen; no revision, marks, audit or enrollment writes');
   const beforeRestart = await records(page, 'markingAttempts');
   await page.reload();
   await page.getByTestId('header-teacher-btn').waitFor();

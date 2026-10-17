@@ -126,12 +126,15 @@ export class MarkingService {
       const allAttempts = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId && rubrics.some(r => r.id === a.rubricId));
       const archivedAttempts = allAttempts.filter(a => !!a.archivedAt);
       const attempts = allAttempts.filter(a => !a.archivedAt && (!a.classEnrollmentId || enrollments.some(e => e.id === a.classEnrollmentId)));
-      const visibleAttempts = [...attempts, ...archivedAttempts];
+      // Historical discovery is separate from the writable active-roster queue.
+      // Require a live, same-school student link, just as enrollment reads do.
+      const historicalAttempts = allAttempts.filter(a => !a.archivedAt && a.classEnrollmentId && roster.some(e => e.id === a.classEnrollmentId && e.enrollmentStatus !== 'active' && students.some(s => s.id === e.studentId)));
+      const visibleAttempts = [...attempts, ...archivedAttempts, ...historicalAttempts];
       const sessions = live(await this.db.markingSessions.where('assessmentId').equals(assessmentId).toArray()).filter(s => s.createdBy === actor.userId && visibleAttempts.some(a => a.id === s.attemptId));
       const commits = live(await this.db.markingCommits.where('assessmentId').equals(assessmentId).toArray()).filter(c => c.createdBy === actor.userId && visibleAttempts.some(a => a.id === c.attemptId));
       const studentAssessments = live(await this.db.studentAssessments.where('assessmentId').equals(assessmentId).toArray()).filter(sa => enrollments.some(e => e.id === sa.classEnrollmentId));
       const currentResults = studentAssessments.length ? live(await this.db.categoryResults.where('studentAssessmentId').anyOf(studentAssessments.map(sa => sa.id)).toArray()) : [];
-      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
+      return { assessment, categories, enrollments, historicalEnrollments: roster, students, rubrics, attempts, archivedAttempts, historicalAttempts, sessions, commits, scaleOptions: await this.scaleOptions(assessment, categories), studentAssessments, currentResults };
     });
   }
   async saveRubric(assessmentId: string, content: RubricContent, actor: MarkingActor): Promise<MarkingRubric> {

@@ -1,3 +1,11 @@
+# Current reliability batch — October 17, 2026
+
+Fresh workspace execution succeeded. Current fetched and independently read-back main is `753ac300f0b0e08059539a18de42a01e939764b3` (merged PR33), superseding older PR32/33 pending-merge checkpoints below. Local branch `codex/reliability-20261017` starts there. Tyler approved C13, C15, TUV-UX-001/002, C12 and C18 with “Make it so.” Implementation, focused verification, independent review and local commits are authorized; no push, merge, release, installer update, OAuth changes, scanner changes or real student data. Existing historical records and marks, explicit teacher authorization and backup compatibility must be preserved.
+
+Current state: all six reliability cards implemented and locally verified; independent review findings repaired. The full suite passes 592 tests in 60 files; production build, strict script typecheck and interrupted/repeated Chromium workflows pass. Local commit identifiers follow in the work order. Exact results and next gate are recorded in the existing [work order](../work-orders/CLASSROOM-USE-2026-10-15.md#october-17--approved-reliability-batch-local-review) and [queue](../FEATURE_QUEUE.md). Physical Windows/Mac acceptance remains separate. This successful handoff is observed execution, not a claim that all future automatic dispatch works.
+
+---
+
 # Current classroom-use fixes — October 15, 2026
 
 PR31 is merged: live main `495ba2af97663123ac332ba258a8c0e7f820ec13`, including `0fe0e0c`. Current authorized branch `codex/classroom-use-20261015` starts from that main. Tyler requested the complete usable import → marking → saved Markbook path, then profile/presentation fixes. Implementation, verification, commit/push and review preparation are authorized; merge/release remain reserved. Current IDs TUV-C01–C10 and deferred TUV-PARTICIPATION are in [FEATURE_QUEUE.md](../FEATURE_QUEUE.md); [work order](../work-orders/CLASSROOM-USE-2026-10-15.md) owns measured evidence. Earlier pending PR31 merge statements below are historical.

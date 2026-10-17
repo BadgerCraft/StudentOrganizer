@@ -114,6 +114,10 @@ try {
   await wizard.getByRole('button', { name: 'Add work and select students' }).click();
   await wizard.getByRole('group', { name: 'Class students' }).waitFor();
   assert.match(await wizard.innerText(), /Already added; no extra copies: A-one.txt/);
+  assert.match(await wizard.innerText(), /retry.txt: Fictional read failure/, 'reselecting a filename cannot acknowledge the failed original');
+  await wizard.getByRole('button', { name: 'Retry retry.txt', exact: true }).click();
+  await wizard.getByRole('button', { name: 'Retry retry.txt', exact: true }).waitFor({ state: 'detached' });
+  assert.match(await wizard.innerText(), /Already added; no extra copies: retry.txt/);
   assert.doesNotMatch(await wizard.innerText(), /retry.txt: Fictional read failure/);
   await wizard.getByRole('checkbox', { name: /Continue with only the work successfully added/ }).check();
   await wizard.getByRole('button', { name: 'Continue to matching' }).click();

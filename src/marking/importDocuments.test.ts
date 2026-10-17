@@ -14,6 +14,21 @@ function docx(document = wrap('Fictional essay &amp; evidence.'), additions: Rec
 function file(bytes: Uint8Array, name = 'Fictional.docx') { return new File([new Uint8Array(bytes)], name); }
 
 describe('local marking document import', () => {
+  it('retains the precise failed file for retry when two same-name, same-size inputs differ', async () => {
+    const failed = new File(['First work.'], 'Assignment.txt', { lastModified: 100 });
+    const other = new File(['Other work.'], 'Assignment.txt', { lastModified: 100 });
+    const read = vi.spyOn(failed, 'arrayBuffer').mockRejectedValue(new Error('Temporary read failure'));
+    const first = await parseMarkingFiles([failed, other]);
+    expect(first.documents.map(row => row.text)).toEqual(['Other work.']);
+    expect(first.errors).toHaveLength(1);
+    expect(first.errors[0].file).toBe(failed);
+    expect(first.errors[0].file).not.toBe(other);
+    expect((await parseMarkingFiles([first.errors[0].file])).errors[0].file).toBe(failed);
+    read.mockRestore();
+    const retry = await parseMarkingFiles([first.errors[0].file]);
+    expect(retry.errors).toEqual([]);
+    expect(retry.documents[0].text).toBe('First work.');
+  });
   it('rejects a retained DOCX paired with independently rehashed different marking text', async () => {
     const result = await parseMarkingFiles([file(docx())]);
     expect(result.errors).toEqual([]);

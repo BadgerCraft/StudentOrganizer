@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
-import { calculateAssessmentSummary, getMarkbookResultLabel, MarkbookView } from './MarkbookView';
+import { calculateAssessmentSummary, hasAssessmentFeedback, getMarkbookResultLabel, MarkbookView } from './MarkbookView';
 import { LevelPicker } from './LevelPicker';
 import { CLASSROOM_LEVELS } from '../services/classroomLevels';
 import { AssessmentHubView } from './AssessmentHubView';
@@ -94,6 +94,20 @@ describe('assessment display preserves persisted grading inputs', () => {
     expect(results).toEqual(before);
     expect(getMarkbookResultLabel(undefined)).toBe('Unassessed');
     expect(getMarkbookResultLabel({ ...result, inputFormat: 'scale_code', rawScore: 'R', normalizedPercentage: 35 })).toBe('R');
+  });
+
+  it('recognizes category-only and overall feedback without conflating students, deleted evidence or marks', async () => {
+    const f = await fixture();
+    const assignment = { ...f.assignment, overallFeedback: '' };
+    const feedback = { ...f.results[0], normalizedPercentage: null, rawScore: '', feedback: 'Fictional category feedback.' };
+    expect(hasAssessmentFeedback(assignment, f.categories, [feedback])).toBe(true);
+    expect(hasAssessmentFeedback(assignment, f.categories, [{ ...feedback, feedback: '', inputFormat: 'descriptive', rawScore: 'Fictional descriptive text' }])).toBe(true);
+    expect(hasAssessmentFeedback({ ...assignment, overallFeedback: 'Overall feedback' }, [], [])).toBe(true);
+    expect(hasAssessmentFeedback(assignment, f.categories, [{ ...feedback, studentAssessmentId: 'other-student' }])).toBe(false);
+    expect(hasAssessmentFeedback(assignment, f.categories, [{ ...feedback, deletedAt: '2026-10-17' }])).toBe(false);
+    expect(hasAssessmentFeedback(assignment, [], [feedback])).toBe(false);
+    expect(hasAssessmentFeedback(assignment, f.categories, [{ ...feedback, feedback: '  ' }])).toBe(false);
+    expect(hasAssessmentFeedback(undefined, f.categories, [feedback])).toBe(false);
   });
 
   it('renders all 17 level choices with an explicit selected state and no implicit default selection', () => {
