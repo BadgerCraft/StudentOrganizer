@@ -40,6 +40,7 @@ This file describes product scope, not a second feature backlog. Status in older
 
 ## Deliberately deferred
 
+- F-008-CAPTURE-SEAMLESS: revisit smoother private phone-to-computer/Drive transfer and less repeated re-enabling after the safe pilot and actual-device transfer validation. Future proposal only: retain explicit consent, fail-closed recovery, private destinations, no AI processing of captured work and manual matching; do not weaken the current restart gate.
 - F-009: selected exemplary essay + feedback repository in the owner control panel. Tyler shelved this October6 to prioritize bug transfer; revisit after transfer works.
 - Rubric-file import, PDF/OCR inputs, legacy Markinator JSON and standalone scratch marking remain extensions. Annotated local PDF export is approved October 14 and no longer deferred.
 - iPad-specific development/acceptance is shelved at Tyler's request; [resume map](SHELVED_FEATURES.md).
