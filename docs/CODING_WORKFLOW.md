@@ -1,5 +1,7 @@
 # Daily development workflow
 
+Current execution discipline is canonical in [AGENTS.md: Execution efficiency](../AGENTS.md#execution-efficiency--october-19-2026). Apply its one-stream default, completion criteria, recovery limits, context reuse, milestone reporting and lightweight measures to the routines below. Dated schedule, capability and priority examples remain historical where superseded; this update changes no schedules or approval boundaries.
+
 ## Current platform scope — October 14, 2026
 
 Tyler explicitly shelved **all iPad-specific work** and prioritized installed **Windows and Mac**. Preserve existing iOS code, assets, scripts and historical evidence; do not schedule iPad camera, touch, Files, simulator, physical-device, signing or renewal acceptance as a current next gate. Retained CI/static checks can remain regression evidence; their failure is not permission to resume iPad feature development. See [shelved feature resume map](SHELVED_FEATURES.md) for exact source and prior work orders. Revisit only when Tyler explicitly reactivates iPad support. No main merge, release, spending or real-student use follows from this decision.
@@ -19,10 +21,7 @@ This is a workflow discipline, not an automated enforcement mechanism; demonstra
 
 ## Codex task routing — persistent handoff requirement (October 13, 2026)
 
-For every substantial Codex implementation, investigation, verification, or review handoff, the coordinating agent must specify: **(1)** the model to select from the models actually available in the receiving Codex environment, **(2)** supported reasoning effort, **(3)** why that effort is proportionate, **(4)** the condition for escalating or switching, and **(5)** an observable completion check. If model availability is unknown, label the selection a recommendation to confirm rather than asserting that it is available. Do not imply that the coordinating chat can launch Codex or change Codex's model settings unless that action was actually performed.
-
-Use cost-aware defaults: medium effort for bounded visual/UI investigation and simple documentation; high for cross-component changes, local-file handling, permissions, grading data or migrations; extra-high only for unusually consequential architecture, destructive data risk, or independent final integration review. Escalate based on observed complexity or failed verification, not habit. Preserve the user's approval boundaries and the decision-persistence contract above. Include this routing information in the concrete copyable Codex handoff so it survives chat changes.
-
+Use [AGENTS.md: Codex task routing](../AGENTS.md#codex-task-routing--persistent-handoff-requirement-october-13-2026) for the canonical model/effort, rationale, escalation and completion-check requirements. Do not duplicate or strengthen model defaults here; confirm actual receiving-environment availability and preserve mandatory host constraints.
 
 ## Current check-in destination — October 9, 2026
 
@@ -152,7 +151,7 @@ No current Cloud-launch control is exposed to this chat. Relevant plugin discove
 
 ## Parallel agents
 
-Tyler explicitly requested parallel subagents on 2026-09-30. Use them for independent approved work so technical Windows investigation and overnight setup can proceed together. The coordinating agent owns shared queue/learning/workflow writes and integrates findings. Delegate bounded scopes, assign separate code branches or file ownership when implementing, and avoid multiple writers on the same files. A subagent is a worker for part of a task; its existence is not proof of unattended scheduling or hours-long execution.
+Follow the current one-primary-stream default and justified-parallelism criteria in [AGENTS.md](../AGENTS.md#execution-efficiency--october-19-2026); the September 30 subagent request permits bounded independent work but does not require multiple implementation streams. The coordinating agent owns shared queue/learning/workflow writes and integrates findings. Delegate bounded scopes, assign separate code branches or file ownership when implementing, and avoid multiple writers on the same files. A subagent is a worker for part of a task; its existence is not proof of unattended scheduling or hours-long execution.
 
 ## Durable records and concurrent work
 
