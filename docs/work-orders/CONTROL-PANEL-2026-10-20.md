@@ -32,3 +32,8 @@ Demonstrated limits/blockers:
 - Real stable publication, trusted publisher/signature setup, a publisher that enforces approval, and a live end-to-end update are **deliberately unavailable/deferred pending separate authorization**. No student/installation telemetry, account controls, credentials, signing keys, external service or release was added. Console approval does not currently affect live discovery.
 
 Review walkthrough prepared, not completed: local approval is preparation, publication would make it discoverable. Hashes identify bytes but do not establish publisher trust; actual OS acceptance remains separate. Dashboard measures meaningful completion/return and labels all data fictional; aggregate marks are context and no quality ranking exists. Learning status DEFERRED, no actual user understanding/acceptance claimed. No merge/release/deploy performed.
+
+
+## Review publication
+
+Implementation commit `e1a3b9dbf7d905672ef231b9f720bf8b908d2113` pushed normally and independently matched with `git ls-remote`. [Draft PR44](https://github.com/BadgerCraft/StudentOrganizer/pull/44) was created/read back on `codex/control-panel-stage1-20261020` against main `81058d87d669ff4cd787b06c25fe84217581f2ad`, open and unmerged. This documentation-only follow-up records publication; exact final branch head is reported in the PR/handoff. Local engineering verification and independent review are complete; CI packaging and native/device/user acceptance remain pending. No merge/release/deploy or live collection occurred. Recommended next gate: inspect exact-head Windows/Mac package audits, then separately arrange disposable native UI/restart/lock acceptance; live publication/signing decisions remain reserved.
