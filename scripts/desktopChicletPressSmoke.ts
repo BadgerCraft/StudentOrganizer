@@ -4,11 +4,31 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'vite';import {chromium} from 'playwright';
 import {installFictionalClassroom} from './helpers/classroomFixture';
-const server=await createServer({root:process.cwd(),server:{host:'127.0.0.1',port:0,watch:null,hmr:false}});await server.listen();const port=(server.httpServer!.address() as any).port;
+const server=await createServer({root:process.cwd(),cacheDir:join(tmpdir(),`desktop-chiclet-press-vite-${process.pid}`),server:{host:'127.0.0.1',port:0,watch:null,hmr:false}});await server.listen();const port=(server.httpServer!.address() as any).port;
 const b=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium'});const r:any={};
 try{const p=await b.newPage({viewport:{width:1440,height:1000}});p.setDefaultTimeout(10000);await p.goto(`http://127.0.0.1:${port}`);await installFictionalClassroom(p);await p.locator('[data-testid^="select-teacher-"]').first().click();await p.getByTestId('chiclet-open-overlay-btn').first().click();const cards=p.getByTestId('student-seat-card');await cards.first().waitFor();
 const first=cards.first();await first.scrollIntoViewIfNeeded();let box=(await first.boundingBox())!;
-await p.mouse.move(box.x+12,box.y+box.height-12);await p.mouse.down();assert.equal(await first.getAttribute('aria-pressed'),'true','selection starts on press');const dockOverlap=await p.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('.participation-dock'),{x:box.x+12,y:box.y+box.height-12});assert.equal(dockOverlap,true,'new dock overlaps this regression press point');await p.mouse.up();assert.equal(await first.getAttribute('aria-pressed'),'true','release does not toggle twice');await p.mouse.move(box.x+40,box.y+box.height-12);assert.equal(await first.getAttribute('aria-pressed'),'true','movement after release cannot undo completed selection');
+// Measure the real dock, then put the card's body near the viewport bottom. A
+// fixed 1000px viewport only happened to overlap with our local font metrics.
+// This still requires a genuine new overlay over the held physical pointer.
+await first.focus();await p.keyboard.press('Space');
+assert.equal(await first.getAttribute('aria-pressed'),'true');
+const dock=p.locator('.participation-dock');const measuredDock=(await dock.boundingBox())!;
+assert.ok(measuredDock.height>48,'real selected-student dock has usable height');
+await p.keyboard.press('Space');
+assert.equal(await first.getAttribute('aria-pressed'),'false');
+const regressionHeight=Math.ceil(box.y+box.height-12+Math.min(24,measuredDock.height/4));
+await p.setViewportSize({width:1440,height:regressionHeight});
+box=(await first.boundingBox())!;
+const pressPoint={x:box.x+12,y:box.y+box.height-12};
+assert.ok(pressPoint.y>0&&pressPoint.y<regressionHeight,'regression body point remains visible');
+assert.equal(await p.evaluate(({x,y})=>document.elementFromPoint(x,y)?.closest('[data-testid="student-seat-card"]')?.getAttribute('data-enrollment-id'),pressPoint),await first.getAttribute('data-enrollment-id'),'physical press starts on the intended card');
+await p.mouse.move(pressPoint.x,pressPoint.y);await p.mouse.down();assert.equal(await first.getAttribute('aria-pressed'),'true','selection starts on press');
+const dockOverlap=await p.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('.participation-dock'),pressPoint);
+assert.equal(dockOverlap,true,'new dock overlaps this regression press point');
+r.dockOverlapGeometry={viewportHeight:regressionHeight,pressPoint,measuredDock,openedDock:await dock.boundingBox()};
+await p.mouse.up();assert.equal(await first.getAttribute('aria-pressed'),'true','release does not toggle twice');await p.mouse.move(pressPoint.x+28,pressPoint.y);assert.equal(await first.getAttribute('aria-pressed'),'true','movement after release cannot undo completed selection');
+await p.setViewportSize({width:1440,height:1000});
 // Native child keyboard actions do not bubble into parent selection.
 await first.getByTestId('student-settings-gear-btn').focus();await p.keyboard.press('Enter');await p.getByTestId('student-settings-modal').waitFor();await p.keyboard.press('Escape');
 await first.getByTestId('open-student-profile-btn').focus();await p.keyboard.press('Enter');const modal=p.getByTestId('student-profile-modal');await modal.waitFor();
