@@ -122,6 +122,7 @@ jobs:
         run: |
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
           npm run test:classroom
+          npm run test:desktop:photo-reliability
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/nativePilotSmoke.ts
@@ -146,6 +147,12 @@ jobs:
             /tmp/annotation-feedback-results.json
             /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json
+            /tmp/desktop-photo-*
+            /tmp/student-chiclet-names*
+            /tmp/desktop-chiclet-*
+            /tmp/desktop-crop-*
+            /tmp/capture-preview-scheduling-*
+            /tmp/capture-loading-retry-*
             /tmp/markinator-modes-photo-*.png
             /tmp/annotated-report-smoke*
             /tmp/markinator-archive*

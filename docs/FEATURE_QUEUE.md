@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 20 — approved desktop photo reliability repairs
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-DESKTOP-PHOTO-RELIABILITY | Tyler approved the four-part plan with “Yeah rock it”: contain document render failures and add recoverable context loading; guarded press dismissal/student transfer and keyboard repair; bounded/lazy photo previews; visual crop Apply/Cancel/Undo and resize-stroke safeguards. Branch `codex/desktop-photo-reliability-20261020` starts at verified main `9d989e161b02ecb89856ed885ec9b1ed569bf1b9` (photo code matches delivered QA301.1 / PR41 merge `4da9597`). Review evidence is preserved in the delegated workspace. Additional approved class-view change: full actual names wrap, student numbers leave chiclets only, readable bounded card dimensions preserve seating and actions. | Implemented and independently reviewed. Final712/712 unit tests, production build, strict changed-harness typecheck, all6 combined photo/name regression flows, classroom/full photo-mode/backup, large-photo, all4 authority scenarios, PDF and production archive/restore checks PASS. Names wrap with retained profile numbers and unchanged seats; press/dock/drag regressions PASS. Feature-branch publication/PR is the current authorized step; fresh CI and physical Windows/Mac acceptance remain separate gates. No merge/release/deploy, phone work, telemetry or real data. Exact reported runtime error remains unknown; do not claim its definitive fix. Physical Windows/Mac acceptance remains separate. |
+
 ## October 17 — annotation feedback follow-up
 
 Parent verified PR40 merged into current main `fc4074b6554506007aa38b15977e68258563ef91`; this supersedes earlier PR39/PR40 pending-merge checkpoints below. Tyler's highlight/comment/level request authorizes this bounded follow-up, routine verification and review publication on `codex/annotation-feedback-20261017`. Parent review precedes worker commit/push; no main merge, release, signing, real student files or Android rebuild.

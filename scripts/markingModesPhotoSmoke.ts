@@ -226,8 +226,13 @@ try {
   await delayedPreview(page, photo.id, () => page.getByRole('button', { name: 'Rotate clockwise', exact: true }).click());
   for (let i = 0; i < 3; i++) { await page.getByRole('button', { name: 'Rotate clockwise', exact: true }).click(); await page.getByTestId('image-annotation-surface').waitFor({ state: 'visible' }); }
   await assertOriginalAxes(page, files[1].name);
-  await delayedPreview(page, photo.id, () => page.getByLabel('Crop width', { exact: true }).fill('80'));
+  await page.getByRole('button', { name: 'Edit crop', exact: true }).click();
+  await page.getByText('Advanced crop percentages', { exact: true }).click();
+  await page.getByLabel('Crop width', { exact: true }).fill('80');
+  await delayedPreview(page, photo.id, () => page.getByRole('button', { name: 'Apply crop', exact: true }).click());
+  await page.getByRole('button', { name: 'Edit crop', exact: true }).click();
   await page.getByRole('button', { name: 'Reset crop', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply crop', exact: true }).click();
   await page.getByTestId('image-annotation-surface').waitFor({ state: 'visible' });
   await assertOriginalAxes(page, files[1].name);
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
@@ -322,10 +327,13 @@ try {
   assert.equal(await page.getByLabel('Image criterion',{exact:true}).inputValue(),criterionId);
   assert.match(await page.getByTestId('marking-image-comments').innerText(),/Selected level: Level 3/);
   await page.getByRole('button',{name:'Save feedback',exact:true}).click();
+  await page.getByRole('button', { name: 'Edit crop', exact: true }).click();
+  await page.getByText('Advanced crop percentages', { exact: true }).click();
   await page.getByLabel('Crop width', { exact: true }).fill('80');
   await page.getByLabel('Crop height', { exact: true }).fill('70');
   await page.getByLabel('Crop x', { exact: true }).fill('10');
   await page.getByLabel('Crop y', { exact: true }).fill('20');
+  await page.getByRole('button', { name: 'Apply crop', exact: true }).click();
   await page.getByRole('button', { name: 'Rotate clockwise', exact: true }).click();
   await page.getByRole('button', { name: 'Move page later', exact: true }).click();
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();

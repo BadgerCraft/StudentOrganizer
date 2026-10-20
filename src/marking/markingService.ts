@@ -8,7 +8,7 @@ import { assertClassSectionWriteAccess, AuthorizationError } from '../services/a
 import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
-import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertRubricContent, sessionCategories } from './validation';
+import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertMarkingRecord, assertRubricContent, sessionCategories } from './validation';
 import { validateMarkingImageBytes, inspectMarkingImage } from './importImages';
 import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
 
@@ -75,9 +75,11 @@ export class MarkingService {
   }
   private async attemptContext(attemptId: string, actor: MarkingActor, write: boolean) {
     const attempt = this.owned(await this.db.markingAttempts.get(attemptId), actor, 'Submission');
+    assertMarkingRecord('markingAttempts', attempt);
     const context = await this.context(attempt.assessmentId, actor, write);
     if (write && attempt.archivedAt) throw new ValidationError('Archived work is read-only. Import a new attempt to mark again.');
     const rubric = this.owned(await this.db.markingRubrics.get(attempt.rubricId), actor, 'Rubric');
+    assertMarkingRecord('markingRubrics', rubric);
     if (attempt.classSectionId !== context.assessment.classSectionId || rubric.assessmentId !== attempt.assessmentId || rubric.classSectionId !== attempt.classSectionId || !rubric.confirmed) throw new ValidationError('Submission and rubric links are inconsistent.');
     if (attempt.classEnrollmentId) await this.enrollment(context.assessment, attempt.classEnrollmentId, write);
     return { ...context, attempt, rubric };

@@ -28,9 +28,9 @@ const [image,setImage]=useState([{pageId:'page',rotation:0,crop:{x:0,y:0,width:1
 return e('div',{onClick:()=>setBackground(value=>value+1),onPointerDown:()=>{window.backgroundPointers=(window.backgroundPointers||0)+1},onKeyDown:()=>{window.backgroundKeys=(window.backgroundKeys||0)+1}},
 e('button',{id:'open-profile',onClick:()=>setOpen(true)},'Open fictional profile'),e('output',{id:'background'},background),
 open&&e(StudentProfileModal,{enrollmentId:'enrollment',enrollment:{id:'enrollment',studentId:'student',classSectionId:'class',enrollmentStatus:'active'},student:{id:'student',firstName:'Fictional',lastName:'Learner',localStudentNumber:'000'},assessments:[],categories:[],studentAssessments:[],categoryResults:[],participationEvents:[],policy:{weightK:25,weightT:25,weightC:25,weightA:25,decimalPrecision:1},overrides:[],notes:[],auditEntries:[],onRefresh:()=>{},onClose:()=>setOpen(false)}),
-e(RubricEvidenceEditor,{rubric,value:feedback,onChange:setFeedback,disabled:false,annotations:[{id:'quote',documentId:'work',start:0,end:7,quote:'A claim',criterionId:'reason',level:'3',text:'Recorded text annotation'}],imageFeedback:image}),
 e('output',{id:'criterion-state'},JSON.stringify(feedback)),
 e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:false}),
+e(RubricEvidenceEditor,{rubric,value:feedback,onChange:setFeedback,disabled:false,annotations:[{id:'quote',documentId:'work',start:0,end:7,quote:'A claim',criterionId:'reason',level:'3',text:'Recorded text annotation'}],imageFeedback:image}),
 e('output',{id:'image-state'},JSON.stringify(image)),e('output',{id:'original-unchanged'},String(pages[0].base64===original)));
 }
 createRoot(document.getElementById('root')).render(e(Harness));

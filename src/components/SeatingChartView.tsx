@@ -1,5 +1,6 @@
 import { safePhotoSource } from '../utils/localPhoto';
 import { createPortal } from 'react-dom';
+import { consumeStudentPress, registerStudentPress } from './studentPress';
 import { ModalDialog } from './ModalDialog';
 import React, { useState, useEffect } from 'react';
 import {
@@ -48,7 +49,7 @@ interface SeatingChartViewProps {
   userId?: UUID;
   deviceId?: UUID;
   onSelectDate: (date: string) => void;
-  onToggleSelectStudent: (enrollmentId: UUID) => void;
+  onToggleSelectStudent: (enrollmentId: UUID) => void | (() => void);
   onOpenStudentProfile: (enrollmentId: UUID) => void;
   onOpenStudentSettings?: (student: Student) => void;
   onRefresh: () => void;
@@ -497,7 +498,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                     onDragOver={e => e.preventDefault()}
                     onDrop={() => handleDrop(r, c)}
                     className={`rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 text-xs font-medium hover:border-blue-300 transition ${
-                      layout.cardSize === 'compact' ? 'h-20' : 'h-28'
+                      layout.cardSize === 'compact' ? 'min-h-20' : 'min-h-28'
                     }`}
                   >
                     Empty Seat
@@ -524,6 +525,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                 <div
                   key={seatPos.id}
                   data-testid="student-seat-card"
+                  data-enrollment-id={enr!.id}
                   role="button"
                   tabIndex={0}
                   aria-pressed={tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected}
@@ -531,28 +533,34 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   onDragStart={() => handleDragStart(seatPos)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={() => handleDrop(r, c)}
-                  onClick={() => handleTapSeat(r, c, seatPos)}
+                  ref={element => registerStudentPress(element, tapMoveMode ? null : () => onToggleSelectStudent(enr!.id))}
+                  onPointerDown={event => {
+                    if (tapMoveMode || !event.isPrimary || event.button !== 0 || (event.target as Element).closest('button,input,select,textarea,a')) return;
+                    event.stopPropagation(); event.currentTarget.focus({ preventScroll: true });
+                    consumeStudentPress(event, event.currentTarget, onToggleSelectStudent(enr!.id), !layout.isLocked);
+                  }}
+                  onClick={event => { if (tapMoveMode || event.detail === 0) void handleTapSeat(r, c, seatPos); }}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
                       void handleTapSeat(r, c, seatPos);
                     }
                   }}
                   className={`relative rounded-2xl border transition-all cursor-pointer select-none p-3 flex flex-col justify-between ${
-                    layout.cardSize === 'compact' ? 'h-20' : 'h-28'
+                    layout.cardSize === 'compact' ? 'min-h-20' : 'min-h-28'
                   } ${
                     (tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected)
-                      ? 'ring-2 ring-blue-600 border-blue-600 bg-blue-50/60 shadow-md scale-[1.02]'
+                      ? 'ring-2 ring-blue-600 border-blue-600 bg-blue-50/60 shadow-md'
                       : isAbsent
                       ? 'bg-slate-100 border-slate-300 opacity-60'
                       : isHighlighted
-                      ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50 shadow-md scale-[1.02]'
+                      ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50 shadow-md'
                       : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-sm'
                   }`}
                 >
                   {/* Top Row: Name, Photo/Initials & Quick Actions */}
-                  <div className="seat-card-top flex items-start justify-between">
-                    <div className="flex items-center space-x-2.5 truncate">
+                  <div className="seat-card-top flex flex-wrap items-start gap-y-2">
+                    <div className="flex w-full min-w-0 items-start gap-2.5">
                       {/* Student Photo or Stylized Initials Avatar */}
                       {safePhotoSource(student.photoUrl) ? (
                         <img
@@ -579,18 +587,17 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                         </div>
                       )}
 
-                      <div className="truncate">
+                      <div className="min-w-0 flex-1">
                         <div
                           data-testid="student-seat-name"
-                          className={`font-extrabold text-slate-900 truncate leading-tight ${
-                            layout.cardSize === 'compact' ? 'text-xs' : 'text-sm'
-                          }`}
+                          className="text-sm font-extrabold leading-snug text-slate-900"
+                          style={{ overflowWrap: 'anywhere' }}
                         >
                           {student.preferredName || student.firstName} {student.lastName}
                         </div>
-                        {student.preferredName && layout.cardSize === 'standard' && (
-                          <span className="text-[10px] text-slate-400 block leading-none mt-0.5">
-                            ({student.firstName})
+                        {student.preferredName && student.preferredName !== student.firstName && (
+                          <span data-testid="student-seat-full-name" className="mt-1 block text-sm leading-snug text-slate-600" style={{ overflowWrap: 'anywhere' }}>
+                            {student.firstName} {student.lastName}
                           </span>
                         )}
                         {student.pronouns && layout.cardSize === 'standard' && (
@@ -602,7 +609,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                     </div>
 
                     {/* Attendance, Profile & Settings Quick Actions */}
-                    <div className={tapMoveMode ? 'hidden' : 'seat-card-actions flex items-center space-x-0.5'}>
+                    <div className={tapMoveMode ? 'hidden' : 'seat-card-actions flex w-full flex-wrap items-center justify-end gap-1'}>
                       <button
                         onClick={e => handleToggleAttendance(enr!.id, e)}
                         className={`p-1 rounded transition ${
@@ -624,6 +631,12 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                         <button
                           type="button"
                           data-testid="student-settings-gear-btn"
+                          ref={element => registerStudentPress(element, () => onOpenStudentSettings(student))}
+                          onPointerDown={event => {
+                            if (!event.isPrimary || event.button !== 0) return;
+                            event.preventDefault(); event.stopPropagation(); event.currentTarget.focus({ preventScroll: true });
+                            onOpenStudentSettings(student); consumeStudentPress(event);
+                          }}
                           onClick={e => {
                             e.stopPropagation();
                             onOpenStudentSettings(student);
@@ -642,6 +655,12 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                           onOpenStudentProfile(enr!.id);
                         }}
                         data-testid="open-student-profile-btn"
+                        ref={element => registerStudentPress(element, () => onOpenStudentProfile(enr!.id))}
+                        onPointerDown={event => {
+                          if (!event.isPrimary || event.button !== 0) return;
+                          event.preventDefault(); event.stopPropagation(); event.currentTarget.focus({ preventScroll: true });
+                          onOpenStudentProfile(enr!.id); consumeStudentPress(event);
+                        }}
                         className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
                         title="Open Full Profile"
                         aria-label={`Open full profile for ${student.firstName} ${student.lastName}`}
@@ -681,10 +700,6 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                         </>
                       )}
                     </div>
-
-                    <span className="text-slate-600 font-mono">
-                      #{student.localStudentNumber}
-                    </span>
                   </div>
                 </div>
               );
@@ -718,14 +733,20 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                 return (
                   <button
                     key={enr.id}
-                    onClick={() => onToggleSelectStudent(enr.id)}
-                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
+                    ref={element => registerStudentPress(element, () => onToggleSelectStudent(enr.id))}
+                    onPointerDown={event => {
+                      if (!event.isPrimary || event.button !== 0) return;
+                      event.preventDefault(); event.stopPropagation(); event.currentTarget.focus({ preventScroll: true });
+                      consumeStudentPress(event, event.currentTarget, onToggleSelectStudent(enr.id));
+                    }}
+                    onClick={event => { if (event.detail === 0) onToggleSelectStudent(enr.id); }}
+                    className={`flex max-w-full min-w-0 items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium text-left transition ${
                       isSelected
                         ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                         : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <span>{student.firstName} {student.lastName}</span>
+                    <span className="min-w-0 whitespace-normal" style={{ overflowWrap: 'anywhere' }}>{student.firstName} {student.lastName}</span>
                   </button>
                 );
               })}

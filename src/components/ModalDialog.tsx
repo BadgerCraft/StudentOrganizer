@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { consumeStudentPress, studentPressAt } from './studentPress';
 import { X } from 'lucide-react';
 
 // Module-level stack for managing topmost modal
@@ -26,6 +27,8 @@ export interface ModalDialogProps {
   hideHeader?: boolean;
   testId?: string;
   initialFocusRef?: React.RefObject<HTMLElement>;
+  /** Only student-facing dialogs opt into explicit underlying student intents. */
+  allowStudentTransfer?: boolean;
 }
 
 export const ModalDialog: React.FC<ModalDialogProps> = ({
@@ -41,11 +44,13 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
   bodyClassName = 'overflow-y-auto min-h-0 flex-1 p-4',
   hideHeader = false,
   testId = 'modal-dialog',
-  initialFocusRef
+  initialFocusRef,
+  allowStudentTransfer = false
 }) => {
   const modalIdRef = useRef<string>(`modal-${crypto.randomUUID()}`);
   const modalId = modalIdRef.current;
   const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef(true);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   // Maintain stable refs so updates to isDirty or callbacks never re-trigger the focus lifecycle
@@ -61,10 +66,11 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       const confirmed = window.confirm(confirmDiscardMessageRef.current);
       if (!confirmed) {
         dialogRef.current?.focus();
-        return;
+        return false;
       }
     }
     onCloseRef.current();
+    return true;
   }, []);
 
   useEffect(() => {
@@ -189,6 +195,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
       }
       // Resilient focus restoration: only focus if element is still in DOM
       if (
+        restoreFocus.current &&
         previouslyFocusedRef.current &&
         document.body.contains(previouslyFocusedRef.current) &&
         typeof previouslyFocusedRef.current.focus === 'function'
@@ -200,19 +207,27 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (e.target === e.currentTarget && getTopmostModalId() === modalId) {
-      requestDismiss();
-    }
+  const handleBackdropPress = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || getTopmostModalId() !== modalId || !event.isPrimary || event.button !== 0) return;
+    event.preventDefault();
+    const target = allowStudentTransfer ? studentPressAt(event.clientX, event.clientY, event.currentTarget) : null;
+    // Snapshot intent before closing. Never retarget from pointer-up coordinates.
+    if (!requestDismiss()) { consumeStudentPress(event); return; }
+    if (target) {
+      restoreFocus.current = false;
+      const undo = target.action();
+      target.element.focus({ preventScroll: true });
+      consumeStudentPress(event, target.element, undo);
+    } else consumeStudentPress(event);
   };
 
   return (
     <div
       data-testid={testId}
       className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
-      onClick={handleBackdropClick}
-      onPointerDown={event => event.stopPropagation()}
+      onClick={event => event.stopPropagation()}
+      onPointerDown={handleBackdropPress}
       onPointerUp={event => event.stopPropagation()}
       onMouseDown={event => event.stopPropagation()}
       onMouseUp={event => event.stopPropagation()}

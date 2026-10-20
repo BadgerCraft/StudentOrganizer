@@ -2,9 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { DocumentErrorBoundary } from './components/DocumentErrorBoundary';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <DocumentErrorBoundary resetKey="application" label="This view"><App /></DocumentErrorBoundary>
   </React.StrictMode>
 );

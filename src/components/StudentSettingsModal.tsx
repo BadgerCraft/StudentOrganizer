@@ -151,6 +151,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
 
   return (
     <ModalDialog
+      allowStudentTransfer
       isOpen={isOpen}
       onClose={onClose}
       title="Student Settings"

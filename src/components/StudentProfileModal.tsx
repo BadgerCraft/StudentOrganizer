@@ -375,6 +375,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   };
   return (
     <ModalDialog
+      allowStudentTransfer
       isOpen={true}
       onClose={onClose}
       isDirty={isProfileDirty}

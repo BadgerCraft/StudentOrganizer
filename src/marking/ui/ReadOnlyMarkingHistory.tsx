@@ -1,5 +1,16 @@
 import type { MarkingAttempt, MarkingContext, MarkingSession } from '../types';
-import { sessionCategories } from '../validation';
+import { assertMarkingRecord, sessionCategories } from '../validation';
+import { useState } from 'react';
+import { DocumentDisplayFailure, DocumentErrorBoundary } from '../../components/DocumentErrorBoundary';
+import { validateSavedMarkingSession } from '../readValidation';
+
+/** Validation and rendering run inside the caller's document boundary. */
+export function ReadOnlyOriginalWork({ attempt }: { attempt: MarkingAttempt }) {
+  const [, retry] = useState(0);
+  try { assertMarkingRecord('markingAttempts', attempt); }
+  catch { return <DocumentDisplayFailure label="This saved original" onRetry={() => retry(value => value + 1)}/>; }
+  return <>{attempt.documents.map(doc => <details key={doc.id}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{attempt.imagePages?.map(page => <details key={page.id}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}</>;
+}
 
 /** No editing callbacks: browsing retained or former-student work never opens a session. */
 export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingAttempt; context: MarkingContext }) {
@@ -12,7 +23,12 @@ export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingA
     // without destructively migrating any historical records on read.
     return session.status === 'finalized' && commit ? [{ ...session, draft: commit.draft }] : [];
   }).sort((a, b) => a.revision - b.revision);
-  function feedback(session: MarkingSession) {
+  function Feedback({ session }: { session: MarkingSession }) {
+    const [, retry] = useState(0);
+    try {
+      if (!rubric) throw new Error('The saved rubric is unavailable.');
+      validateSavedMarkingSession(session, attempt, rubric);
+    } catch { return <DocumentDisplayFailure label="This saved revision" onRetry={() => retry(value => value + 1)}/>; }
     const draft = session.draft;
     // A pending edit replaces its saved annotation, rather than appearing twice.
     const annotations = draft.annotations.filter(row => row.id !== draft.pending?.id);
@@ -32,5 +48,5 @@ export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingA
       {session.retainedCategoryJudgments?.map((row, index) => <p key={index}>Retained {row.category.categoryCode}: {row.judgment.rawScore} · {row.judgment.feedback}</p>)}
     </>;
   }
-  return <><p>Rubric: {rubric?.title}</p>{!revisions.length && <p>{attempt.archivedAt ? 'No finalized feedback was published for this submission.' : 'No marking session was started for this submission.'}</p>}{revisions.map(session => <details key={session.id}><summary>Revision {session.revision} · {session.status} · {session.updatedAt}</summary>{feedback(session)}</details>)}</>;
+  return <><p>Rubric: {rubric?.title}</p>{!revisions.length && <p>{attempt.archivedAt ? 'No finalized feedback was published for this submission.' : 'No marking session was started for this submission.'}</p>}{revisions.map(session => <details key={session.id}><summary>Revision {session.revision} · {session.status} · {session.updatedAt}</summary><DocumentErrorBoundary resetKey={`${session.id}:${session.version}:${session.updatedAt}`} label="This saved revision"><Feedback session={session} /></DocumentErrorBoundary></details>)}</>;
 }

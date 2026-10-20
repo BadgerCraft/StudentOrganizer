@@ -344,3 +344,14 @@ Prepared usability/unified-entry walkthrough, review pending. A pointer capture 
 ## October 17 — annotation feedback confirmation and recovery
 
 Prepared annotation follow-up walkthrough; review pending. Selecting a mark identifies the exact evidence item being discussed. Save feedback finishes that discussion; Cancel restores the opening feedback for an existing mark or removes the newly drawn mark. Draft autosave remains separate from confirmation so an interruption still retains typed feedback. A criterion supplies the rubric context for an evidence level; selecting the visible first criterion makes the level choices usable without guessing a grade. Official Markbook results still require the existing deliberate finalization. Focused browser checks cover all17 choices and cancellation; complete photo/recovery checks passed, with repeated pointer verification and the final editor-mount interruption repair recorded in the existing classroom work order. No comprehension response or recall is claimed; education does not delay authorized review preparation or imply merge/release approval.
+
+
+## October 20 — desktop photo recovery, async ownership and edit transactions
+
+Prepared review walkthrough, response pending. A render boundary contains a failed screen; validating saved records prevents known malformed data reaching that screen. Neither silently repairs damaged records. A request generation is a changing number that lets a view ignore an old asynchronous result: an earlier successful teacher read must not override a later access denial. The current draft stays with its original teacher and submission.
+
+Small compressed photos can expand into large decoded bitmaps. A shared queue limits active decoding and drops obsolete waiting previews; it cannot abort a browser codec that is already running, so that job keeps its slot until completion. Cropping stores original-coordinate viewing metadata, while Apply/Cancel groups an edit and bounded metadata Undo avoids copying the original photo. These controls do not replace draft autosave or official finalization.
+
+A press-time student transfer is an explicit target intent, not a simulated click through a removed modal. The remaining release/click is consumed once; dirty-form confirmation and native keyboard buttons remain separate. A resized drawing surface ends the held stroke before using another coordinate frame.
+
+Deferred learning checks for Tyler's return: (1) Why does an old successful context read still need to be ignored after a newer access denial? (2) Why can Undo restore a crop without keeping another copy of the original photo? No answer or demonstrated recall is claimed; these checks do not delay approved review publication. Source comparator patterns were independently implemented; no GPL source/dependency was copied. Shared lesson resources were unavailable, so no external lesson update is claimed.
