@@ -355,3 +355,6 @@ Small compressed photos can expand into large decoded bitmaps. A shared queue li
 A press-time student transfer is an explicit target intent, not a simulated click through a removed modal. The remaining release/click is consumed once; dirty-form confirmation and native keyboard buttons remain separate. A resized drawing surface ends the held stroke before using another coordinate frame.
 
 Deferred learning checks for Tyler's return: (1) Why does an old successful context read still need to be ignored after a newer access denial? (2) Why can Undo restore a crop without keeping another copy of the original photo? No answer or demonstrated recall is claimed; these checks do not delay approved review publication. Source comparator patterns were independently implemented; no GPL source/dependency was copied. Shared lesson resources were unavailable, so no external lesson update is claimed.
+
+
+October20 publication link: [PR42](https://github.com/BadgerCraft/StudentOrganizer/pull/42), reviewed implementation `50bae0c265a8850eda312da46a6aececee99833e`. Explain Back skill was available and read at publication. The prepared walkthrough above remains pending for Tyler's return; no demonstrated recall or merge/release approval is claimed.
