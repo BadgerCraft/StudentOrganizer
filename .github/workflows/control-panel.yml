@@ -1,0 +1,47 @@
+name: Control Panel packages (no publication)
+on:
+  pull_request:
+    paths:
+      - 'apps/control-panel/**'
+      - 'electron/updateApproval.cjs'
+      - 'electron/manualUpdater.cjs'
+      - 'electron/windowsInstallerUpdate.cjs'
+      - 'scripts/audit-control-panel-package.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/control-panel.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: owner-console-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win
+            architecture: --x64
+            resources: release/control-panel/win-unpacked/resources
+          - runner: macos-15
+            platform: mac
+            architecture: --arm64
+            resources: release/control-panel/mac-arm64/Student Organizer Control Panel.app/Contents/Resources
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Build the separate owner executable (never publish)
+        run: npm run control-panel:package:${{ matrix.platform }} -- ${{ matrix.architecture }}
+      - name: Audit actual packaged entry and shared contract bytes
+        run: node scripts/audit-control-panel-package.cjs "${{ matrix.resources }}"

@@ -358,3 +358,15 @@ Deferred learning checks for Tyler's return: (1) Why does an old successful cont
 
 
 October20 publication link: [PR42](https://github.com/BadgerCraft/StudentOrganizer/pull/42), reviewed implementation `50bae0c265a8850eda312da46a6aececee99833e`. Explain Back skill was available and read at publication. The prepared walkthrough above remains pending for Tyler's return; no demonstrated recall or merge/release approval is claimed.
+
+
+### DEV-CONTROL-LOCAL-APPROVAL — preparation versus publication
+- Date/source: October20,2026; approved Stage1 Control Panel increment.
+- Explanation prepared for review: a candidate binds the intended version and source claim to a filename, byte count and SHA-512 fingerprint. Recording test evidence and approving stores a local owner decision. Publishing would separately distribute those tested bytes and trusted metadata so installed apps can discover them. This increment deliberately stops at local preparation: its preview contract cannot enter live mode, and the existing live checker is unchanged.
+- Tradeoff: safe review of the workflow now, but approving here will not yet make an update available to teachers. Real publisher/signature/host choices and OS install acceptance are still needed. Hashes identify bytes, not a trusted publisher; source/test notes are owner attestations.
+- Prepared review question (deferred to Tyler's return): What additional step would make an approved local version discoverable by teachers, and why does the fingerprint alone not verify its publisher?
+- Review/recall: DEFERRED; no answer or understanding claimed. PR/revision is recorded in the work order; no merge/release approval implied.
+
+### DEV-CONTROL-AGGREGATES — adoption versus marks
+- Explanation prepared October20: completing marking work and returning later measure use. An assignment/class average describes marking context; it does not prove use or teacher quality. Mature return cohorts exclude teachers who have not had time to reach the return window. Dashboard values are all fictional and provide no investor evidence.
+- Review/recall: DEFERRED; no actual answer. No additional learning gate blocks authorized engineering work.
