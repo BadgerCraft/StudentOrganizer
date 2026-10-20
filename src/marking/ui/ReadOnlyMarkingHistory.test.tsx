@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ReadOnlyMarkingHistory } from './ReadOnlyMarkingHistory';
@@ -14,12 +15,31 @@ const draft: MarkingDraft = {
   ] }]
 };
 function render(value: MarkingDraft, archived = false, published?: MarkingDraft) {
-  const attempt = { id: 'attempt', archivedAt: archived ? '2026-10-17' : null, rubricId: 'rubric', documents: [{ id: 'doc', name: 'fictional.txt' }], imagePages: [{ id: 'photo', name: 'fictional.png' }] } as MarkingAttempt;
-  const session = { id: 'session', attemptId: 'attempt', revision: 2, status: published ? 'finalized' : 'draft', commitId: published ? 'commit' : null, updatedAt: '2026-10-17', categorySnapshot: [], draft: value } as unknown as MarkingSession;
-  const context = { rubrics: [{ id: 'rubric', title: 'Fictional rubric', criteria: [{ id: 'reason', name: 'Reasoning' }] }], sessions: [session], commits: published ? [{ id: 'commit', sessionId: session.id, attemptId: attempt.id, draft: published } as MarkingCommit] : [] } as unknown as MarkingContext;
+  // These are complete persisted-record fixtures: read validation now runs before display.
+  if (value.archivedFeedback) { archived = true; published = value; }
+  const base = { assessmentId: 'assessment', classSectionId: 'class', createdBy: 'fictional-teacher', createdAt: '2026-10-17T00:00:00Z', updatedAt: '2026-10-17T00:00:00Z', deletedAt: null, version: 1 };
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG3sAAAAASUVORK5CYII=';
+  const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
+  const attempt: MarkingAttempt = { ...base, id: 'attempt', archivedAt: archived ? base.createdAt : null, keepStudentWork: false, rubricId: 'rubric', classEnrollmentId: 'enrollment', previousAttemptId: null,
+    documents: archived ? [] : [{ id: 'doc', name: 'fictional.txt', text: 'Work', hash: hash('Work'), original: null }],
+    imagePages: archived ? [] : [{ id: 'photo', name: 'fictional.png', base64: png, mime: 'image/png', size: Buffer.from(png, 'base64').length, hash: hash(Buffer.from(png, 'base64')), width: 1, height: 1 }] };
+  const session: MarkingSession = { ...base, id: 'session', attemptId: 'attempt', rubricId: 'rubric', revision: 2, status: published ? 'finalized' : 'draft', commitId: published ? 'commit' : null, categorySnapshot: [], baseline: JSON.stringify({ categories: [] }), draft: value };
+  const context = { rubrics: [{ ...base, id: 'rubric', confirmed: true, title: 'Fictional rubric', levels: ['3', '4'], criteria: [{ id: 'reason', name: 'Reasoning', categoryCode: 'K', descriptors: { '3': 'Clear', '4': 'Strong' } }] }], sessions: [session], commits: published ? [{ ...base, id: 'commit', sessionId: session.id, attemptId: attempt.id, draft: published } as MarkingCommit] : [] } as unknown as MarkingContext;
   return renderToStaticMarkup(<ReadOnlyMarkingHistory attempt={attempt} context={context} />);
 }
 describe('read-only retained revision feedback', () => {
+  it('isolates malformed feedback without mutating the supplied record', () => {
+    const malformed = structuredClone(draft); malformed.imageFeedback![0].annotations = null as never;
+    const before = JSON.stringify(malformed), html = render(malformed);
+    expect(html).toContain('This saved revision could not be displayed');
+    expect(html).toContain('Original work and saved records have not been changed');
+    expect(JSON.stringify(malformed)).toBe(before);
+  });
+  it('does not erase valid feedback after a failed read or require an editable history form', () => {
+    const html = render(draft);
+    expect(html).toContain('Unfinished replacement');
+    expect(html).not.toContain('Retry display');
+  });
   it('renders a legacy finalized archive exclusively from its commit, never newer session edits', () => {
     const html = render(draft, true, { annotations: [], pending: null, judgments: [], overallFeedback: 'Published committed feedback' });
     expect(html).toContain('Published committed feedback');

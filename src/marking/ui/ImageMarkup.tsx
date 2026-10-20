@@ -5,6 +5,8 @@ import { CLASSROOM_LEVEL_LABELS } from '../../services/classroomLevels';
 import { CommentBankPicker } from './CommentBankPicker';
 import { markingImageDecodeBytes } from '../importImages';
 import { displayToOriginal, imageDisplaySize, originalToDisplay } from '../imageGeometry';
+import { FULL_PAGE_CROP, sameSurfaceRect, setPageCropValue, type PageCrop, type SurfaceRect } from '../cropEditing';
+import { PageCropHandles } from './PageCropHandles';
 import { MARKING_LIMITS, type MarkingActor, type MarkingImagePage, type MarkingPageFeedback, type MarkingPoint, type MarkingRubric, type MarkingVisualAnnotation } from '../types';
 
 export interface ImageMarkupProps {
@@ -20,11 +22,12 @@ export interface ImageMarkupProps {
   actor?: MarkingActor;
   onComposerDirtyChange?: (dirty: boolean) => void;
   onFeedbackActiveChange?: (active: boolean) => void;
+  onCropEditingChange?: (editing: boolean) => void;
 }
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange }: ImageMarkupProps) {
+export function ImageMarkup({ commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
   const pages = feedback.map(item => originalPages.find(page => page.id === item.pageId)).filter((page): page is MarkingImagePage => Boolean(page));
   for (const page of originalPages) if (!pages.some(item => item.id === page.id)) pages.push(page);
@@ -37,7 +40,12 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   const [feedbackNotice, setFeedbackNotice] = useState('');
   useEffect(() => { onFeedbackActiveChange?.(Boolean(selected) && !readOnly); return () => onFeedbackActiveChange?.(false); }, [selected, readOnly, onFeedbackActiveChange]);
   const [bankDirty, setBankDirty] = useState(false);
+  const [cropDraft, setCropDraft] = useState<{ pageId: string; crop: PageCrop } | null>(null);
+  type ViewGeometry = Pick<MarkingPageFeedback, 'crop' | 'rotation'>;
+  const [viewUndo, setViewUndo] = useState<Record<string, { before: ViewGeometry; after: ViewGeometry }[]>>({});
+  useEffect(() => { onCropEditingChange?.(Boolean(cropDraft)); return () => onCropEditingChange?.(false); }, [Boolean(cropDraft), onCropEditingChange]);
   const allowLeavingComment = () => {
+    if (cropDraft) { setFeedbackNotice('Apply or cancel the crop before leaving this page or marking.'); return false; }
     if (selected) { setFeedbackNotice('Save or cancel feedback for the current mark first. Your work is retained.'); return false; }
     if (bankDirty && !window.confirm('Discard the unsaved comment bank import? Your recorded comment will be kept.')) return false;
     if (bankDirty) onComposerDirtyChange?.(false);
@@ -62,18 +70,21 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   }
   const changeVisiblePage = (id: string) => { if (allowLeavingComment()) setPageId(id); };
   const [renderError, setRenderError] = useState('');
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [previewKey, setPreviewKey] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const latest = useRef({ feedback, onChange, disabled });
   latest.current = { feedback, onChange, disabled };
-  const stroke = useRef<{ id: string; pageId: string; pointerId: number; renderKey: string } | null>(null);
+  const stroke = useRef<{ id: string; pageId: string; pointerId: number; renderKey: string; rect: SurfaceRect } | null>(null);
   const pageIndex = Math.max(0, pages.findIndex(page => page.id === pageId));
   const page = pages[pageIndex];
   const current = feedback.find(item => item.pageId === page?.id);
   const selectedAnnotation = current?.annotations.find(item => item.id === selected);
-  const size = page && current ? imageDisplaySize(page, current) : { width: 1, height: 1 };
-  const renderKey = page && current ? JSON.stringify([page.id, page.hash, page.mime, page.width, page.height, current.rotation, current.crop]) : '';
+  const editingCrop = cropDraft?.pageId === page?.id ? cropDraft.crop : null;
+  const view = current && editingCrop ? { ...current, crop: FULL_PAGE_CROP } : current;
+  const size = page && view ? imageDisplaySize(page, view) : { width: 1, height: 1 };
+  const renderKey = page && current ? JSON.stringify([page.id, page.hash, page.mime, page.width, page.height, view!.rotation, view!.crop]) : '';
   const previewReady = Boolean(renderKey) && previewKey === renderKey;
 
   function endStroke(selectFeedback = true) {
@@ -87,24 +98,30 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
   useEffect(() => {
     // Keep the already recorded points; never extend a stroke after focus or geometry changes.
     const interrupt = () => endStroke();
+    const surfaceChanged = () => { const active = stroke.current, rect = svgRef.current?.getBoundingClientRect(); if (active && rect && !sameSurfaceRect(active.rect, rect)) endStroke(); };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(surfaceChanged);
+    if (svgRef.current) observer?.observe(svgRef.current);
+    window.addEventListener('resize', surfaceChanged);
     window.addEventListener('blur', interrupt);
     document.addEventListener('focusin', interrupt);
     document.addEventListener('scroll', interrupt, true);
     document.addEventListener('visibilitychange', interrupt);
     return () => {
       endStroke(false);
+      observer?.disconnect();
+      window.removeEventListener('resize', surfaceChanged);
       window.removeEventListener('blur', interrupt);
       document.removeEventListener('focusin', interrupt);
       document.removeEventListener('scroll', interrupt, true);
       document.removeEventListener('visibilitychange', interrupt);
     };
-  }, []);
+  }, [page?.id]);
   useEffect(() => { if (disabled) endStroke(); }, [disabled]);
 
   useEffect(() => { if (!pages.some(item => item.id === pageId)) setPageId(pages[0]?.id ?? ''); }, [pages, pageId]);
   useEffect(() => { setSelected(null); stroke.current = null; }, [page?.id]);
   useEffect(() => {
-    if (!page || !current) return;
+    if (!page || !view) return;
     const activeStroke = stroke.current;
     stroke.current = null;
     if (activeStroke && svgRef.current?.hasPointerCapture(activeStroke.pointerId)) svgRef.current.releasePointerCapture(activeStroke.pointerId);
@@ -112,6 +129,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     let disposable: ImageBitmap | null = null;
     let objectUrl = '';
     setRenderError('');
+    setPreviewKey('');
     const draw = (source: CanvasImageSource) => {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
@@ -122,11 +140,11 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
       if (!context) { setRenderError('Image preview is unavailable in this browser.'); return; }
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.scale(canvas.width / size.width, canvas.height / size.height);
-      if (current.rotation === 90) context.translate(size.width, 0);
-      if (current.rotation === 180) context.translate(size.width, size.height);
-      if (current.rotation === 270) context.translate(0, size.height);
-      context.rotate(current.rotation * Math.PI / 180);
-      context.drawImage(source, current.crop.x * page.width, current.crop.y * page.height, current.crop.width * page.width, current.crop.height * page.height, 0, 0, current.crop.width * page.width, current.crop.height * page.height);
+      if (view.rotation === 90) context.translate(size.width, 0);
+      if (view.rotation === 180) context.translate(size.width, size.height);
+      if (view.rotation === 270) context.translate(0, size.height);
+      context.rotate(view.rotation * Math.PI / 180);
+      context.drawImage(source, view.crop.x * page.width, view.crop.y * page.height, view.crop.width * page.width, view.crop.height * page.height, 0, 0, view.crop.width * page.width, view.crop.height * page.height);
       setPreviewKey(renderKey);
     };
     const render = async () => {
@@ -149,7 +167,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     };
     void render();
     return () => { cancelled = true; disposable?.close(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [renderKey, page?.base64]);
+  }, [renderKey, page?.base64, previewAttempt]);
 
   function changePage(targetPageId: string, change: (item: MarkingPageFeedback) => MarkingPageFeedback) {
     const state = latest.current;
@@ -169,7 +187,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     return { x: Math.max(0, Math.min(1, original.x)), y: Math.max(0, Math.min(1, original.y)) };
   }
   function pointerDown(event: React.PointerEvent<SVGSVGElement>) {
-    if (disabled || !previewReady || renderError || !page || !current || (event.pointerType === 'mouse' && event.button !== 0) || stroke.current || current.annotations.length >= MARKING_LIMITS.visualAnnotations) return;
+    if (disabled || editingCrop || !previewReady || renderError || !page || !current || (event.pointerType === 'mouse' && event.button !== 0) || stroke.current || current.annotations.length >= MARKING_LIMITS.visualAnnotations) return;
     const point = pointFor(event); if (!point) return;
     event.preventDefault();
     if (!allowLeavingComment()) return;
@@ -179,14 +197,15 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     setFeedbackStart({ text: '', criterionId: annotation.criterionId, level: '', isNew: true });
     if (tool === 'comment') { setSelected(id); setFeedbackNotice(''); }
     if (tool !== 'comment') {
-      stroke.current = { id, pageId: page.id, pointerId: event.pointerId, renderKey };
+      stroke.current = { id, pageId: page.id, pointerId: event.pointerId, renderKey, rect: event.currentTarget.getBoundingClientRect() };
       event.currentTarget.setPointerCapture(event.pointerId);
     }
   }
   function pointerMove(event: React.PointerEvent<SVGSVGElement>) {
     const active = stroke.current;
     if (!active || active.pointerId !== event.pointerId || disabled) return;
-    if (!previewReady || active.renderKey !== renderKey || (event.pointerType === 'mouse' && event.buttons !== 1)) { endStroke(); return; }
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !sameSurfaceRect(active.rect, rect) || !previewReady || active.renderKey !== renderKey || (event.pointerType === 'mouse' && event.buttons !== 1)) { endStroke(); return; }
     const point = pointFor(event); if (!point) return;
     changePage(active.pageId, item => ({ ...item, annotations: item.annotations.map(annotation => {
       if (annotation.id !== active.id || annotation.points.length >= MARKING_LIMITS.strokePoints) return annotation;
@@ -204,15 +223,31 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     if (!selected) return;
     change(item => ({ ...item, annotations: item.annotations.map(annotation => annotation.id === selected ? { ...annotation, ...changes } : annotation) }));
   }
-  function cropValue(key: keyof MarkingPageFeedback['crop'], value: string) {
-    if (!allowLeavingComment()) return;
-    const number = Number(value) / 100;
-    if (!Number.isFinite(number)) return;
-    change(item => {
-      const crop = { ...item.crop, [key]: number };
-      if (crop.x < 0 || crop.y < 0 || crop.width < 0.01 || crop.height < 0.01 || crop.x + crop.width > 1 + 1e-9 || crop.y + crop.height > 1 + 1e-9) return item;
-      return { ...item, crop };
-    });
+  function beginCrop() {
+    if (disabled || !page || !current || !allowLeavingComment()) return;
+    endStroke(); onCropEditingChange?.(true); setCropDraft({ pageId: page.id, crop: { ...current.crop } }); setFeedbackNotice('');
+  }
+  function commitView(next: ViewGeometry) {
+    if (disabled || !page || !current) return;
+    const before = { rotation: current.rotation, crop: { ...current.crop } };
+    if (JSON.stringify(before) === JSON.stringify(next)) return;
+    setViewUndo(history => ({ ...history, [page.id]: [...(history[page.id] ?? []), { before, after: { rotation: next.rotation, crop: { ...next.crop } } }].slice(-32) }));
+    change(item => ({ ...item, rotation: next.rotation, crop: { ...next.crop } }));
+  }
+  function undoView() {
+    if (disabled || !page || !current || !allowLeavingComment()) return;
+    const history = viewUndo[page.id] ?? [], last = history[history.length - 1];
+    if (!last) return;
+    if (JSON.stringify(last.after) !== JSON.stringify({ rotation: current.rotation, crop: current.crop })) {
+      setViewUndo(previous => ({ ...previous, [page.id]: [] })); setFeedbackNotice('The saved view changed. Its newer geometry was kept.'); return;
+    }
+    change(item => ({ ...item, rotation: last.before.rotation, crop: { ...last.before.crop } }));
+    setViewUndo(previous => ({ ...previous, [page.id]: history.slice(0, -1) }));
+  }
+  function finishCrop(apply: boolean) {
+    if (disabled || !page || !current || !editingCrop) return;
+    if (apply) commitView({ rotation: current.rotation, crop: editingCrop });
+    onCropEditingChange?.(false); setCropDraft(null); setFeedbackNotice(apply ? 'Crop applied to the local draft. Original image and marks are retained.' : 'Crop cancelled. The saved view is unchanged.');
   }
   function reorder(offset: number) {
     const ids = pages.map(item => item.id), destination = pageIndex + offset;
@@ -236,21 +271,29 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
       {(['pen', 'highlight', 'comment'] as const).map(value => <button key={value} type="button" className={buttonClass} aria-pressed={tool === value} disabled={disabled} onClick={() => setTool(value)}>{value === 'pen' ? 'Pen' : value === 'highlight' ? 'Highlight' : 'Write a comment'}</button>)}
       <label className="text-sm">Ink <select aria-label="Ink color" className="rounded border p-2" disabled={disabled || tool === 'highlight'} value={color} onChange={event => setColor(event.target.value as typeof color)}><option value="red">Red</option><option value="blue">Blue</option><option value="yellow">Yellow</option></select></label>
       <button type="button" className={buttonClass} disabled={disabled || !current.annotations.length} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, annotations: item.annotations.slice(0, -1) })); setSelected(null); }}>Undo last mark</button>
-      <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (!allowLeavingComment()) return; change(item => ({ ...item, rotation: ((item.rotation + 90) % 360) as MarkingPageFeedback['rotation'] })); }}>Rotate clockwise</button>
+      <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (!allowLeavingComment()) return; commitView({ crop: current.crop, rotation: ((current.rotation + 90) % 360) as MarkingPageFeedback['rotation'] }); }}>Rotate clockwise</button>
+      <button type="button" className={buttonClass} disabled={disabled || Boolean(editingCrop) || !(viewUndo[page.id]?.length)} onClick={undoView}>Undo last view edit</button>
       <span className="text-sm">Rotation {current.rotation}°</span>
     </div>
     {tool === 'comment' && <p role="status" className="text-sm font-medium">Click the page where you want to place your comment, then write it below.</p>}
-    <fieldset disabled={disabled} className="flex flex-wrap items-center gap-2"><legend className="text-sm">Crop original page (%)</legend>
-      {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-sm">{key === 'x' ? 'Left' : key === 'y' ? 'Top' : key === 'width' ? 'Width' : 'Height'} <input aria-label={`Crop ${key}`} className="w-20 rounded border p-2" type="number" min={key === 'width' || key === 'height' ? 1 : 0} max="100" step="1" value={Math.round(current.crop[key] * 10000) / 100} onChange={event => cropValue(key, event.target.value)} /></label>)}
-      <button type="button" className={buttonClass} onClick={() => { if (allowLeavingComment()) change(item => ({ ...item, crop: { x: 0, y: 0, width: 1, height: 1 } })); }}>Reset crop</button>
-    </fieldset>
-    {renderError && <p role="alert" className="text-red-700">{renderError}</p>}
+    <div className="flex flex-wrap items-center gap-2">
+      {!editingCrop ? <button type="button" className={buttonClass} disabled={disabled} onClick={beginCrop}>Edit crop</button> : <>
+        <p className="text-sm">Drag a blue corner to crop the original page. Arrow keys move a focused corner; Shift moves farther. Changes stay here until Apply crop.</p>
+        <button type="button" className={`${buttonClass} font-semibold`} disabled={disabled} onClick={() => finishCrop(true)}>Apply crop</button>
+        <button type="button" className={buttonClass} disabled={disabled} onClick={() => finishCrop(false)}>Cancel crop</button>
+        <button type="button" className={buttonClass} disabled={disabled} onClick={() => setCropDraft({ pageId: page.id, crop: { ...FULL_PAGE_CROP } })}>Reset crop</button>
+        <details><summary className="cursor-pointer text-sm">Advanced crop percentages</summary><fieldset disabled={disabled} className="flex flex-wrap gap-2 p-2">
+          {(['x', 'y', 'width', 'height'] as const).map(key => <label key={key} className="text-sm">{key === 'x' ? 'Left' : key === 'y' ? 'Top' : key === 'width' ? 'Width' : 'Height'} <input aria-label={`Crop ${key}`} className="w-20 rounded border p-2" type="number" min={key === 'width' || key === 'height' ? 1 : 0} max="100" step="1" value={Math.round(editingCrop[key] * 10000) / 100} onChange={event => setCropDraft({ pageId: page.id, crop: setPageCropValue(editingCrop, key, Number(event.target.value) / 100) })} /></label>)}
+        </fieldset></details>
+      </>}
+    </div>
+    {renderError && <div><p role="alert" className="text-red-700">{renderError}</p><button type="button" className={buttonClass} onClick={() => setPreviewAttempt(value => value + 1)}>Retry image preview</button></div>}
     <div className="relative mx-auto w-full overflow-hidden rounded border bg-white" style={{ maxWidth: 900, aspectRatio: `${size.width} / ${size.height}` }}>
       <canvas ref={canvasRef} aria-label={`Original image preview: ${page.name}`} className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden' }} />
       {!previewReady && !renderError && <p role="status" className="absolute inset-0 flex items-center justify-center text-sm text-gray-600">Loading original image…</p>}
-      <svg ref={svgRef} aria-label="Page annotation surface" data-testid="image-annotation-surface" className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden', touchAction: disabled ? 'auto' : 'none', cursor: disabled ? 'default' : 'crosshair' }} viewBox={`0 0 ${size.width} ${size.height}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={() => endStroke()}>
+      <svg ref={svgRef} aria-label="Page annotation surface" data-testid="image-annotation-surface" className="absolute inset-0 h-full w-full" style={{ visibility: previewReady ? 'visible' : 'hidden', touchAction: disabled ? 'auto' : 'none', cursor: disabled ? 'default' : 'crosshair', pointerEvents: editingCrop ? 'none' : 'auto' }} viewBox={`0 0 ${size.width} ${size.height}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onLostPointerCapture={() => endStroke()}>
         {current.annotations.map(annotation => {
-          const points = annotation.points.map(point => { const p = originalToDisplay(point, current); return { x: p.x * size.width, y: p.y * size.height }; });
+          const points = annotation.points.map(point => { const p = originalToDisplay(point, view!); return { x: p.x * size.width, y: p.y * size.height }; });
           const first = points[0]; if (!first) return null;
           const thickness = annotation.width * Math.min(page.width, page.height);
           if (annotation.kind === 'comment') return <g key={annotation.id} onPointerDown={event => { event.stopPropagation(); selectMark(annotation.id); }} style={{ cursor: 'pointer' }}><circle cx={first.x} cy={first.y} r={Math.max(8, Math.min(page.width, page.height) * 0.014)} fill={colors[annotation.color]} /><text x={first.x + Math.max(10, page.width * 0.012)} y={first.y} fill={colors[annotation.color]} stroke="white" strokeWidth={1} paintOrder="stroke" fontSize={Math.max(14, Math.min(page.width, page.height) * 0.024)}>{selectedAnnotation && selectedAnnotation.id !== annotation.id ? 'Comment' : annotation.text || 'Comment'}</text></g>;
@@ -258,6 +301,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
           return <path key={annotation.id} d={path} stroke={colors[annotation.color]} strokeWidth={thickness} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={annotation.kind === 'highlight' ? 0.4 : 1} pointerEvents="none" />;
         })}
       </svg>
+      {editingCrop && previewReady && <PageCropHandles crop={editingCrop} rotation={current.rotation} disabled={disabled} onChange={crop => setCropDraft({ pageId: page.id, crop })} />}
     </div>
     </div>
     {renderComments()}

@@ -298,7 +298,8 @@ try {
         });
       }, { actorId: fixture.actorId, classSectionId: fixture.assessment.classSectionId });
       await page.clock.runFor(1000);
-      await page.getByText('Marking is unavailable for this teacher or assessment.', { exact: true }).waitFor();
+      await page.getByRole('alert').filter({ hasText: /Marking could not load:.*membership is suspended/ }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Retry loading marking', exact: true }).isVisible(), true);
       assert.equal(await page.getByTestId('marking-document').count(), 0);
       assert.equal(await page.getByTestId('marking-feedback').count(), 0);
       assert.equal(await page.getByLabel('Overall student-facing feedback').count(), 0);

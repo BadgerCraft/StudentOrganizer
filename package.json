@@ -39,7 +39,8 @@
     "test:capture:desktop": "node --import tsx scripts/captureDesktopSmoke.ts",
     "test:capture:capacity": "node --import tsx scripts/captureCapacitySmoke.ts",
     "test:capture:late-work": "node --import tsx scripts/captureLateWorkSmoke.ts",
-    "test:capture:large-photo": "node --import tsx scripts/captureLargePhotoSmoke.ts"
+    "test:capture:large-photo": "node --import tsx scripts/captureLargePhotoSmoke.ts",
+    "test:desktop:photo-reliability": "node --import tsx scripts/desktopPhotoRecoverySmoke.ts && node --import tsx scripts/desktopChicletPressSmoke.ts && node --import tsx scripts/desktopCropSmoke.ts && node --import tsx scripts/capturePreviewSchedulingSmoke.ts && node --import tsx scripts/captureLoadingRetrySmoke.ts && node --import tsx scripts/studentChicletNamesSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

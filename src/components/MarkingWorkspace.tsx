@@ -1,12 +1,12 @@
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database';
 import { getAppIdentity, getIdentityEpoch, getActiveTeacherId, subscribeIdentityChange } from '../services/identityService';
 import { MarkingService } from '../marking/markingService';
 import type { MarkingActor, MarkingDocument, MarkingDraft, MarkingSession, MarkingAnnotation, MarkingAttempt, MarkingContext, KTAC, CategoryChangeReview, MarkingMode, MarkingImagePage } from '../marking/types';
 import { EvidenceImportWizard } from '../marking/ui/EvidenceImportWizard';
-import { ReadOnlyMarkingHistory } from '../marking/ui/ReadOnlyMarkingHistory';
+import { ReadOnlyMarkingHistory, ReadOnlyOriginalWork } from '../marking/ui/ReadOnlyMarkingHistory';
 import { LevelPicker } from './LevelPicker';
 import { classroomLevelOptions } from '../services/classroomLevels';
 
@@ -18,8 +18,11 @@ import { CommentBankPicker } from '../marking/ui/CommentBankPicker';
 import { RubricEditor } from '../marking/ui/RubricEditor';
 import { CategoryRecoveryReview } from '../marking/ui/CategoryRecoveryReview';
 import { categorySignature } from '../marking/categoryRecovery';
-import { assertMarkingImagePages, sessionCategories } from '../marking/validation';
+import { assertMarkingImagePages, assertMarkingRecord, sessionCategories } from '../marking/validation';
 import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
+import { AuthorizationError } from '../services/authHelper';
+import { DocumentErrorBoundary } from './DocumentErrorBoundary';
+import { validateSavedMarkingSession } from '../marking/readValidation';
 
 const button = 'border border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed';
 const field = 'border border-slate-300 rounded-lg p-2 w-full bg-white text-slate-900';
@@ -33,6 +36,12 @@ function studentName(context: MarkingContext, enrollmentId: string | null) {
 export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, onClose, onRefresh, onSwitchTeacher, onReturnToMarkbook }: Props) {
   const epoch = useSyncExternalStore(subscribeIdentityChange, getIdentityEpoch);
   const [actor, setActor] = useState<MarkingActor | null>(null);
+  const [loadRevision, setLoadRevision] = useState(0);
+  const [identityError, setIdentityError] = useState('');
+  const [retainedContext, setRetainedContext] = useState<{ scope: string; value: MarkingContext } | null>(null);
+  const deniedContextScope = useRef<string | null>(null);
+  const contextReadGeneration = useRef(0);
+  const currentRead = useRef({ scope: '', request: 0 });
   const [error, setError] = useState('');
   const [exportStatus, setExportStatus] = useState('');
   const [tab, setTab] = useState<'queue' | 'rubric' | 'import' | 'archive' | 'history'>('queue');
@@ -57,12 +66,20 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
   const textComposerDirty = useCallback((dirty: boolean) => trackComposer('text', dirty), [trackComposer]);
   const rubricComposerDirty = useCallback((dirty: boolean) => trackComposer('rubric', dirty), [trackComposer]);
   const imageFeedbackActive = useRef(false);
+  const imageCropEditing = useRef(false);
+  const imageCropEditingChanged = useCallback((editing: boolean) => { imageCropEditing.current = editing; }, []);
   const imageFeedbackActiveChanged = useCallback((active: boolean) => { imageFeedbackActive.current = active; }, []);
+  function allowCropDeparture() {
+    if (imageCropEditing.current) { setError('Apply or cancel the photo crop before leaving this page. Your saved crop is unchanged.'); return false; }
+    return true;
+  }
   function allowFeedbackDeparture() {
+    if (!allowCropDeparture()) return false;
     if (imageFeedbackActive.current || draftRef.current?.pending) { setError('Save or cancel feedback for the current mark first. Your work is retained.'); return false; }
     return true;
   }
   function confirmWorkspaceDeparture(destination: 'leave marking' | 'switch teacher' | 'switch submission' = 'leave marking') {
+    if (!allowCropDeparture()) return false;
     return !(imageFeedbackActive.current || draftRef.current?.pending) || confirm(`Keep unfinished feedback saved as a draft and ${destination}?`);
   }
   const imageComposerDirty = useCallback((dirty: boolean) => trackComposer('image', dirty), [trackComposer]);
@@ -92,22 +109,45 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
   };
   useEffect(() => {
     const started = getIdentityEpoch(); let cancelled = false;
+    setIdentityError('');
     getAppIdentity(db).then(identity => {
       if (!cancelled && identity.userId === userId && getIdentityEpoch() === started) {
         const value = { userId, deviceId: identity.deviceId, epoch: started }; actorRef.current = value; setActor(value);
       }
-    }).catch(e => setError(String(e.message)));
+    }).catch(e => { if (!cancelled && getIdentityEpoch() === started) setIdentityError(e instanceof Error ? e.message : 'Could not load the acting teacher.'); });
     return () => { cancelled = true; };
-  }, [userId]);
-  const context = useLiveQuery(async () => {
-    if (!actor || actor.epoch !== epoch || getActiveTeacherId() !== userId) return null;
-    try { return await service.getContext(assessmentId, actor); } catch { return null; }
-  }, [assessmentId, actor, epoch, userId]);
+  }, [userId, loadRevision]);
+  const contextScope = `${assessmentId}:${userId}:${epoch}:${actor?.deviceId ?? ''}`;
+  currentRead.current = { scope: contextScope, request: loadRevision };
+  const loaded = useLiveQuery(async () => {
+    const base = { scope: contextScope, request: loadRevision };
+    const readGeneration = ++contextReadGeneration.current;
+    const current = () => readGeneration === contextReadGeneration.current && currentRead.current.scope === contextScope && currentRead.current.request === loadRevision && getIdentityEpoch() === epoch && getActiveTeacherId() === userId;
+    if (!actor || actor.epoch !== epoch || getActiveTeacherId() !== userId) return { ...base, status: 'inactive' as const };
+    try {
+      const value = await service.getContext(assessmentId, actor);
+      if (!current()) return { ...base, status: 'inactive' as const };
+      deniedContextScope.current = null;
+      return { ...base, status: 'ready' as const, value };
+    } catch (cause) {
+      // A retry must not flash the previously authorized snapshot while access is denied.
+      if (current() && cause instanceof AuthorizationError) deniedContextScope.current = contextScope;
+      return { ...base, status: 'error' as const, denied: cause instanceof AuthorizationError,
+        message: cause instanceof Error ? cause.message : 'Could not load marking. Retry when this device is ready.' };
+    }
+  }, [assessmentId, actor, epoch, userId, contextScope, loadRevision]);
+  const load = loaded?.scope === contextScope && loaded.request === loadRevision ? loaded : undefined;
+  const context = load?.status === 'ready' ? load.value : (load?.status === 'error' && load.denied) || deniedContextScope.current === contextScope ? null :
+    retainedContext?.scope === contextScope ? retainedContext.value : null;
+  const loadError = load?.status === 'error' ? load.message : identityError;
+  useEffect(() => {
+    if (load?.status === 'ready') setRetainedContext({ scope: contextScope, value: load.value });
+  }, [load, contextScope]);
   useEffect(() => {
     if (context && !rubricId && context.rubrics.length) setRubricId(context.rubrics[context.rubrics.length - 1].id);
   }, [context, rubricId]);
   function change(next: MarkingDraft) {
-    if (busyRef.current || importBusyRef.current || sessionRef.current?.status !== 'draft') return;
+    if (busyRef.current || importBusyRef.current || activeRead.error || sessionRef.current?.status !== 'draft') return;
     try { validActor(); } catch { return; }
     draftRef.current = next; setDraft(next); generation.current++; setSaveStatus('Saving…'); setPreviewFinal(false); setCategoryReview(null);
   }
@@ -131,14 +171,16 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     return () => clearTimeout(timer);
   }, [draft]);
   useEffect(() => {
-    const guard = (event: BeforeUnloadEvent) => { if (rubricDirty.current || importDirty.current || composerDirty.current || imageFeedbackActive.current || draftRef.current?.pending || savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
+    const guard = (event: BeforeUnloadEvent) => { if (rubricDirty.current || importDirty.current || composerDirty.current || imageCropEditing.current || imageFeedbackActive.current || draftRef.current?.pending || savedGeneration.current < generation.current) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, []);
   async function action(work: () => Promise<void>, rethrow = false) {
     if (busyRef.current || importBusyRef.current) return; busyRef.current = true; setBusy(true); setError('');
     try { validActor(); await flush(); validActor(); await work(); } catch (e) { setError(e instanceof Error ? e.message : 'Operation failed.'); if (rethrow) throw e; } finally { busyRef.current = false; setBusy(false); }
   }
-  function useSession(next: MarkingSession, attempt: MarkingAttempt) {
+  function useSession(next: MarkingSession, attempt: MarkingAttempt, pinned = context?.rubrics.find(item => item.id === next.rubricId)) {
+    if (!pinned) throw new Error('The saved rubric is unavailable. Retry loading marking.');
+    validateSavedMarkingSession(next, attempt, pinned);
     validActor(); sessionRef.current = next; draftRef.current = next.draft; generation.current = 0; savedGeneration.current = 0;
     setSession(next); setDraft(next.draft); setSaveStatus('Saved locally'); setActiveDocument(attempt.documents[0]?.id ?? ''); setTab('queue'); setPreviewFinal(false); setConflictReview(false); setCategoryReview(null); setSelectedFeedbackIds([]);
   }
@@ -156,11 +198,23 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
       // Merely navigating across the class set must not create revisions of finished work.
       const latest = history[0];
       const next = latest?.status === 'finalized' && !reopen ? latest : await service.openSession(attempt.id, validActor());
-      useSession(next, attempt);
+      useSession(next, attempt, fresh.rubrics.find(item => item.id === next.rubricId));
     });
   }
-  const activeAttempt = context?.attempts.find(a => a.id === session?.attemptId && a.deletedAt === null);
-  const rubric = context?.rubrics.find(r => r.id === session?.rubricId);
+  const activeRead = useMemo(() => {
+    const attempt = context?.attempts.find(a => a.id === session?.attemptId && a.deletedAt === null);
+    const rubric = context?.rubrics.find(r => r.id === session?.rubricId);
+    try {
+      if (attempt) assertMarkingRecord('markingAttempts', attempt);
+      if (rubric) assertMarkingRecord('markingRubrics', rubric);
+      return { attempt, rubric, error: '' };
+    } catch { return { attempt: undefined, rubric: undefined, error: 'This submission could not refresh safely. Original work and your open draft are retained. Retry loading marking before continuing.' }; }
+  }, [context, session?.attemptId, session?.rubricId]);
+  const lastActiveRead = useRef<{ scope: string; attemptId: string; value: typeof activeRead } | null>(null);
+  if (!activeRead.error && activeRead.attempt) lastActiveRead.current = { scope: contextScope, attemptId: activeRead.attempt.id, value: activeRead };
+  const displayRead = activeRead.error && lastActiveRead.current?.scope === contextScope && lastActiveRead.current.attemptId === session?.attemptId ? lastActiveRead.current.value : activeRead;
+  const activeAttempt = displayRead.attempt;
+  const rubric = displayRead.rubric;
   const doc = activeAttempt?.documents.find(d => d.id === activeDocument);
   function captureSelection() {
     if (imageFeedbackActive.current) { setError('Save or cancel feedback for the current mark first. Your work is retained.'); return; }
@@ -195,7 +249,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     });
   }
   if (actor && (actor.epoch !== epoch || getActiveTeacherId() !== userId)) return <div className="p-8"><p role="alert">Teacher changed. Protected marking content is hidden. Pending writes from the previous context were blocked. Saved drafts remain with their teacher.</p><button className={button} onClick={onClose}>Close marking</button></div>;
-  if (!context) return <div className="p-8"><p>{actor ? 'Marking is unavailable for this teacher or assessment.' : 'Opening marking…'}</p>{error && <p role="alert">{error}</p>}<button className={button} onClick={onClose}>Close marking</button></div>;
+  if (!context) return <div className="p-8 space-y-3"><p role={loadError ? 'alert' : 'status'}>{loadError ? `Marking could not load: ${loadError}` : 'Opening marking…'}</p>{error && <p role="alert">{error}</p>}<button className={button} onClick={() => setLoadRevision(value => value + 1)}>Retry loading marking</button><button className={button} onClick={onClose}>Close marking</button></div>;
   const attempts = context.attempts.filter(a => a.deletedAt === null && (allStudents || !initialEnrollmentId || a.classEnrollmentId === initialEnrollmentId));
   const currentStudentAssessment = context.studentAssessments.find(a => a.classEnrollmentId === activeAttempt?.classEnrollmentId);
   const currentResults = context.currentResults.filter(r => r.studentAssessmentId === currentStudentAssessment?.id);
@@ -226,7 +280,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
       const fresh = await service.getContext(assessmentId, validActor());
       const saved = fresh.sessions.find(item => item.id === current.id);
       if (!saved) throw new Error('The assessment was saved. Reopen marking to see its saved status.');
-      useSession(saved, activeAttempt); setSaveStatus('Assessment saved to Markbook'); onRefresh();
+      useSession(saved, activeAttempt, fresh.rubrics.find(item => item.id === saved.rubricId)); setSaveStatus('Assessment saved to Markbook'); onRefresh();
       if (destination === 'markbook') { (onReturnToMarkbook ?? onClose)(); return; }
       if (destination === 'next') {
         const list = fresh.attempts.filter(item => item.deletedAt === null && item.classEnrollmentId);
@@ -235,7 +289,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
         if (next) {
           const history = fresh.sessions.filter(item => item.attemptId === next.id).sort((a,b)=>b.revision-a.revision);
           const opened = history[0]?.status === 'finalized' ? history[0] : await service.openSession(next.id, validActor());
-          useSession(opened, next);
+          useSession(opened, next, fresh.rubrics.find(item => item.id === opened.rubricId));
         } else { setSaveStatus('Assessment saved to Markbook. No next submission in this queue.'); }
       }
     });
@@ -267,12 +321,14 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
         </fieldset>;
   };
   return <div className="max-w-7xl mx-auto p-4 space-y-4 text-slate-900">
+    {activeRead.error && <div role="alert" className="rounded border border-amber-500 bg-amber-50 p-3">{activeRead.error} <button className={button} onClick={() => setLoadRevision(value => value + 1)}>Retry loading marking</button></div>}
+    {loadError && <div role="alert" className="rounded border border-amber-500 bg-amber-50 p-3">Marking could not refresh: {loadError}. Your open draft is retained. <button className={button} onClick={() => setLoadRevision(value => value + 1)}>Retry loading marking</button></div>}
     <header className="flex flex-wrap gap-3 items-center justify-between border-b pb-3"><div><h1 className="text-xl font-bold">Marking · {context.assessment.title}</h1><p className="text-sm">Draft feedback stays local. Only confirmed finalization changes official marks.</p></div><div className="flex gap-2"><button data-testid="marking-back" className={button} disabled={busy || importBusy} onClick={() => { if (!confirmWorkspaceDeparture()) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Leave marking and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onClose(); }); }}>Back to Organizer</button>{onSwitchTeacher && <button className={button} disabled={busy || importBusy} onClick={() => { if (!confirmWorkspaceDeparture('switch teacher')) return; void action(async () => { if ((!rubricDirty.current && !importDirty.current && !composerDirty.current) || confirm('Switch teacher and discard unsaved rubric, comment-bank or import preparation? Saved marking feedback is retained.')) onSwitchTeacher(); }); }}>Switch teacher</button>}</div></header>
     {error && <div role="alert" className="bg-red-50 border border-red-200 p-3 whitespace-pre-wrap">{error}<button className={`${button} ml-3`} onClick={() => void action(async () => {})}>Retry save</button></div>}
     {exportStatus && <p role="status">{exportStatus}</p>}
     <fieldset disabled={busy} className="space-y-4">
-    <nav className="flex gap-2">{(['queue','rubric','import','archive'] as const).map(t => <button className={button} key={t} disabled={busy || importBusy} aria-pressed={tab === t} onClick={() => void action(async () => setTab(t))}>{t === 'queue' ? 'Marking queue' : t === 'rubric' ? 'Rubric editor' : t === 'archive' ? 'Archive' : 'Add student work'}</button>)}</nav>
-    {!!context.historicalAttempts?.length && <details className="text-sm text-slate-600"><summary>Historical records</summary><button className="underline py-2" disabled={busy || importBusy} aria-pressed={tab === 'history'} onClick={() => void action(async () => setTab('history'))}>Former students</button></details>}
+    <nav className="flex gap-2">{(['queue','rubric','import','archive'] as const).map(t => <button className={button} key={t} disabled={busy || importBusy} aria-pressed={tab === t} onClick={() => { if (allowCropDeparture()) void action(async () => setTab(t)); }}>{t === 'queue' ? 'Marking queue' : t === 'rubric' ? 'Rubric editor' : t === 'archive' ? 'Archive' : 'Add student work'}</button>)}</nav>
+    {!!context.historicalAttempts?.length && <details className="text-sm text-slate-600"><summary>Historical records</summary><button className="underline py-2" disabled={busy || importBusy} aria-pressed={tab === 'history'} onClick={() => { if (allowCropDeparture()) void action(async () => setTab('history')); }}>Former students</button></details>}
     <div hidden={tab !== 'rubric'}>
       {context.rubrics.length > 0 && <section className="bg-white border rounded-xl p-4 space-y-3"><h2 className="font-bold">Choose a confirmed rubric</h2><label>Confirmed rubric<select aria-label="Choose confirmed rubric" className={field} value={rubricId} onChange={e=>setRubricId(e.target.value)}><option value="">Choose a confirmed rubric</option>{context.rubrics.map(r=><option key={r.id} value={r.id}>{r.title} · version {r.version}</option>)}</select></label><p>Using a saved version retains its confirmed criteria and KTCA mappings.</p><button className={button} disabled={!rubricId} onClick={()=>void action(async()=>setTab('import'))}>Continue with confirmed rubric</button></section>}
       <RubricEditor onDirtyChange={dirty => { rubricDirty.current = dirty; }} rubrics={context.rubrics} categories={context.categories.map(c => c.categoryCode as KTAC)} onSave={content => action(async () => { const saved = await service.saveRubric(assessmentId,content,validActor()); validActor(); setRubricId(saved.id); setTab('import'); }, true)} /></div>
@@ -295,16 +351,16 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
           const attempt = fresh.attempts.find(item => item.id === ids[0]);
           if (!attempt) throw new Error('Saved work is unavailable. Reopen it from the marking queue.');
           const opened = await service.openSession(attempt.id, validActor());
-          useSession(opened, attempt); return true;
+          useSession(opened, attempt, fresh.rubrics.find(item => item.id === opened.rubricId)); return true;
         }} /></div>}
     </section>
-    {tab === 'queue' && <fieldset disabled={importBusy}><MarkingModePicker disabled={busy} onSelect={mode=>void action(async()=>{setImportMode(mode);setTab('rubric');})}/><section className="border rounded-xl bg-white p-4 space-y-3">{initialEnrollmentId && <label className="flex gap-2"><input type="checkbox" checked={allStudents} onChange={e=>setAllStudents(e.target.checked)}/>Show entire class queue</label>}<label>Queue filter<select className={field} value={filter} onChange={e=>setFilter(e.target.value)}>{['all','unmatched','ready','draft','finalized','revision'].map(f=><option key={f}>{f}</option>)}</select></label>{!attempts.length && <p>No submissions yet. Confirm a rubric, then import student work.</p>}
-      {attempts.filter(a=>filter==='all'||status(a)===filter).map(a=><div className="border-b py-3 flex flex-wrap gap-3 items-center" key={a.id}><div className="flex-1"><strong>{studentName(context,a.classEnrollmentId)}</strong><p className="text-sm">{a.documents.map(d=>d.name).concat((a.imagePages??[]).map(p=>p.name)).join(', ') || (a.mode==='oral'?'Oral presentation':'Rubric only')} · {a.mode ?? 'written'} · {status(a)} · {a.createdAt}</p></div>{a.classEnrollmentId ? <button data-testid={`marking-session-open-${a.id}`} className={button} disabled={busy} onClick={()=>void open(a,status(a)==='finalized')}>{status(a)==='finalized'?'Reopen as draft revision':'Open marking'}</button> : <label>Match student<select className={field} defaultValue="" onChange={e=>{const id=e.target.value;if(id)void action(async()=>{await service.matchAttempt(a.id,id,a.version,validActor());});}}><option value="">Choose and confirm student</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label>}
+    {tab === 'queue' && <fieldset disabled={importBusy}><MarkingModePicker disabled={busy} onSelect={mode=>{if(allowCropDeparture())void action(async()=>{setImportMode(mode);setTab('rubric');});}}/><section className="border rounded-xl bg-white p-4 space-y-3">{initialEnrollmentId && <label className="flex gap-2"><input type="checkbox" checked={allStudents} onChange={e=>setAllStudents(e.target.checked)}/>Show entire class queue</label>}<label>Queue filter<select className={field} value={filter} onChange={e=>setFilter(e.target.value)}>{['all','unmatched','ready','draft','finalized','revision'].map(f=><option key={f}>{f}</option>)}</select></label>{!attempts.length && <p>No submissions yet. Confirm a rubric, then import student work.</p>}
+      {attempts.filter(a=>filter==='all'||status(a)===filter).map(a=><div className="border-b py-3 flex flex-wrap gap-3 items-center" key={a.id}><div className="flex-1"><strong>{studentName(context,a.classEnrollmentId)}</strong><p className="text-sm">{(Array.isArray(a.documents)?a.documents:[]).map(d=>d?.name).concat((Array.isArray(a.imagePages)?a.imagePages:[]).map(p=>p?.name)).join(', ') || (a.mode==='oral'?'Oral presentation':'Rubric only')} · {a.mode ?? 'written'} · {status(a)} · {a.createdAt}</p></div>{a.classEnrollmentId ? <button data-testid={`marking-session-open-${a.id}`} className={button} disabled={busy} onClick={()=>void open(a,status(a)==='finalized')}>{status(a)==='finalized'?'Reopen as draft revision':'Open marking'}</button> : <label>Match student<select className={field} defaultValue="" onChange={e=>{const id=e.target.value;if(id)void action(async()=>{await service.matchAttempt(a.id,id,a.version,validActor());});}}><option value="">Choose and confirm student</option>{context.enrollments.map(e=><option key={e.id} value={e.id}>{studentName(context,e.id)}</option>)}</select></label>}
       <div className="space-y-2"><label className="flex items-center gap-2 text-sm"><input type="checkbox" aria-label={`Keep student work for ${a.id}`} checked={a.keepStudentWork === true} disabled={busy} onChange={event=>{const checked=event.target.checked;void action(async()=>{await service.setKeepStudentWork(a.id,a.version,checked,validActor());});}} />Keep student work</label><p className="text-xs">When off, archiving removes submitted files, source text and visual markup from this app. Marks, rubric, finalized feedback and final revision records remain. Unpublished drafts are discarded only when you confirm Archive. Exporting does not archive.</p>
       {context.commits.filter(c=>c.attemptId===a.id).map(c=><div className="flex flex-wrap gap-2" key={c.id}><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id))}>Report {c.createdAt}</button><button data-testid={`marking-pdf-${c.id}`} className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id,true))}>{supportsDesktopPdfExport() ? 'Export marked PDF' : 'Download marked report for PDF'}</button></div>)}
-      <button data-testid={`marking-archive-${a.id}`} className={button} disabled={busy} onClick={()=>{if(confirm(a.keepStudentWork ? 'Move this attempt to Archive and keep its submitted work? Only finalized feedback is retained. Unpublished drafts and unfinished edits are discarded. Official marks are unchanged.' : 'Archive this attempt and permanently remove its submitted files, source text and visual markup from this app, including internal history copies? Only finalized feedback, rubric, marks and final revision records remain. Unpublished drafts and unfinished edits are discarded. Existing exported files and older backups are unchanged.'))void action(async()=>{await service.archiveAttempt(a.id,a.version,validActor());if(sessionRef.current?.attemptId===a.id){sessionRef.current=null;draftRef.current=null;setSession(null);setDraft(null);}setTab('archive');});}}>Archive attempt</button></div></div>)}
+      <button data-testid={`marking-archive-${a.id}`} className={button} disabled={busy} onClick={()=>{if(!allowCropDeparture())return;if(confirm(a.keepStudentWork ? 'Move this attempt to Archive and keep its submitted work? Only finalized feedback is retained. Unpublished drafts and unfinished edits are discarded. Official marks are unchanged.' : 'Archive this attempt and permanently remove its submitted files, source text and visual markup from this app, including internal history copies? Only finalized feedback, rubric, marks and final revision records remain. Unpublished drafts and unfinished edits are discarded. Existing exported files and older backups are unchanged.'))void action(async()=>{await service.archiveAttempt(a.id,a.version,validActor());if(sessionRef.current?.attemptId===a.id){sessionRef.current=null;draftRef.current=null;setSession(null);setDraft(null);}setTab('archive');});}}>Archive attempt</button></div></div>)}
     </section>
-    {session && draft && activeAttempt && rubric && <section className="space-y-4" aria-label="Marking session"><div className="sticky top-0 z-10 bg-blue-50 border rounded-lg p-3 flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">{studentName(context,activeAttempt.classEnrollmentId)}</h2><p>Revision {session.revision} · {session.status === 'draft' ? 'Draft — official marks unchanged' : 'Finalized revision — current official results shown below'}</p><span role="status" data-testid="marking-save-status">{saveStatus}</span></div><div className="flex gap-2">{[-1,1].map(step=>{const list=attempts.filter(a=>a.classEnrollmentId);const next=list[list.findIndex(a=>a.id===activeAttempt.id)+step];return <button key={step} className={button} disabled={!next||busy} onClick={()=>next&&void open(next)}>{step<0?'Previous submission':'Next submission'}</button>;})}<button className={button} disabled={busy} onClick={()=>void action(async()=>{})}>Save now</button></div></div>
+    {session && draft && activeAttempt && rubric && <fieldset disabled={Boolean(activeRead.error)}><section className="space-y-4" aria-label="Marking session"><div className="sticky top-0 z-10 bg-blue-50 border rounded-lg p-3 flex flex-wrap gap-3 justify-between"><div><h2 className="font-bold text-lg">{studentName(context,activeAttempt.classEnrollmentId)}</h2><p>Revision {session.revision} · {session.status === 'draft' ? 'Draft — official marks unchanged' : 'Finalized revision — current official results shown below'}</p><span role="status" data-testid="marking-save-status">{saveStatus}</span></div><div className="flex gap-2">{[-1,1].map(step=>{const list=attempts.filter(a=>a.classEnrollmentId);const next=list[list.findIndex(a=>a.id===activeAttempt.id)+step];return <button key={step} className={button} disabled={!next||busy} onClick={()=>next&&void open(next)}>{step<0?'Previous submission':'Next submission'}</button>;})}<button className={button} disabled={busy} onClick={()=>void action(async()=>{})}>Save now</button></div></div>
       {categoriesChanged && <section className="border border-amber-600 bg-amber-50 rounded p-3 space-y-2" aria-label="Category change conflict"><p role="alert">Assessment categories changed. Your pending work stays with the original categories until you review the pinned rubric and reconcile. Official marks are unchanged.</p><p>{saveStatus === 'Saved locally' ? 'Original feedback is saved locally and can be reopened after restart.' : 'Pending feedback is not yet saved. Keep this workspace open until saving succeeds.'}</p><button className={button} disabled={busy} onClick={()=>void action(reviewCategories)}>Review changed categories</button></section>}
       {categoryReview && <CategoryRecoveryReview key={categoryReview.token} review={categoryReview} onCancel={()=>setCategoryReview(null)} onReconcile={mapping=>void action(async()=>{const current=sessionRef.current!;const next=await service.reconcileCategoryChanges(current.id,current.version,categoryReview.token,mapping,validActor());validActor();sessionRef.current=next;draftRef.current=next.draft;setSession(next);setDraft(next.draft);setCategoryReview(null);setConflictReview(false);setPreviewFinal(false);setSaveStatus('Saved locally');})}/>}
       {!!session.retainedCategoryJudgments?.length && <section className="border rounded bg-white p-3 space-y-2" aria-label="Retained category feedback"><h3 className="font-bold">Retained category feedback</h3><p>Original judgments from category recovery are preserved here and in backups. They do not change official marks.</p>{session.retainedCategoryJudgments.map((item,index)=><div className="border rounded p-2" key={index}><p>{item.category.categoryCode} · {item.judgment.assessed ? `${item.judgment.rawScore} (${item.judgment.inputFormat})` : 'Unassessed'} · original maximum {item.category.maxScore}</p><p className="whitespace-pre-wrap">{item.judgment.feedback}</p></div>)}</section>}
@@ -315,7 +371,7 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
       {imageCommentContainer && createPortal(<aside className="bg-white border rounded-xl p-4 space-y-3"><h3 className="font-bold">Passage feedback</h3>{draft.pending && <div className="border rounded-lg p-3 space-y-2"><blockquote className="whitespace-pre-wrap">{draft.pending.quote}</blockquote><label>Criterion<select className={field} value={draft.pending.criterionId} onChange={e=>change({...draft,pending:{...draft.pending!,criterionId:e.target.value}})}>{rubric.criteria.map(c=><option key={c.id} value={c.id}>{c.name} ({c.categoryCode})</option>)}</select></label><label>Evidence level (optional)<select className={field} value={draft.pending.level} onChange={e=>change({...draft,pending:{...draft.pending!,level:e.target.value}})}><option value="">No evidence level</option>{classroomLevelOptions(rubric.levels).map(l=><option key={l}>{l}</option>)}</select></label><label>Comment<textarea data-testid="marking-feedback" className={field} value={draft.pending.text} onChange={e=>change({...draft,pending:{...draft.pending!,text:e.target.value}})} /></label><CommentBankPicker key={composerRevision} actor={actor!} disabled={busy} onDirtyChange={textComposerDirty} onSelect={text=>change({...draft,pending:{...draft.pending!,text:[draft.pending!.text,text].filter(Boolean).join('\n')}})}/><button data-testid="marking-comment-save" className={button} disabled={!draft.pending.text.trim() && !draft.pending.level} onClick={saveComment}>Save comment</button><button className={button} onClick={()=>{if(confirm(composerSources.current.has('text') ? 'Discard this unfinished comment and its unsaved comment-bank import review?' : 'Discard this unfinished comment?'))change({...draft,pending:null});}}>Cancel comment</button></div>}
       {!draft.pending && selectedFeedbackIds.length > 0 && <p className="text-sm">Highlighted passage has {selectedFeedbackIds.length} feedback item(s). Matching feedback is outlined below.</p>}{!draft.pending && draft.annotations.map(a=><div data-selected-feedback={selectedFeedbackIds.includes(a.id) ? 'true' : undefined} key={a.id} className={`border rounded-lg p-3 ${selectedFeedbackIds.includes(a.id) ? 'ring-2 ring-blue-500' : ''}`}><p className="text-xs">{rubric.criteria.find(c=>c.id===a.criterionId)?.name} · {a.level} · {activeAttempt.documents.find(d=>d.id===a.documentId)?.name}</p><blockquote>{a.quote}</blockquote><p className="whitespace-pre-wrap">{a.text}</p><button className={button} disabled={session.status!=='draft'} onClick={()=>{if(draft.pending){setError('Save or cancel your unfinished comment first.');return;}setActiveDocument(a.documentId);change({...draft,pending:{...a}});}}>Edit feedback</button><button className={button} disabled={session.status!=='draft'} onClick={()=>change({...draft,annotations:draft.annotations.filter(item=>item.id!==a.id),pending:draft.pending?.id===a.id?null:draft.pending})}>Delete feedback</button></div>)}
       </aside>, imageCommentContainer)}</div>}
-      {!!activeAttempt.imagePages?.length && <ImageMarkup commentContainer={imageCommentContainer} actor={actor ?? undefined} onComposerDirtyChange={imageComposerDirty} onFeedbackActiveChange={imageFeedbackActiveChanged} key={`image:${activeAttempt.id}:${composerRevision}`} pages={activeAttempt.imagePages} feedback={draft.imageFeedback??[]} rubric={rubric} readOnly={session.status!=='draft'} disabled={busy || session.status!=='draft'} onChange={imageFeedback=>change({...draft,imageFeedback})} onReorder={ids=>change({...draft,imageFeedback:ids.map(id=>draft.imageFeedback!.find(page=>page.pageId===id)!)})}/>}
+      {!!activeAttempt.imagePages?.length && <DocumentErrorBoundary resetKey={`image:${activeAttempt.id}:${composerRevision}`} label="This photo editor"><ImageMarkup onCropEditingChange={imageCropEditingChanged} commentContainer={imageCommentContainer} actor={actor ?? undefined} onComposerDirtyChange={imageComposerDirty} onFeedbackActiveChange={imageFeedbackActiveChanged} key={`image:${activeAttempt.id}:${composerRevision}`} pages={activeAttempt.imagePages} feedback={draft.imageFeedback??[]} rubric={rubric} readOnly={session.status!=='draft'} disabled={busy || Boolean(activeRead.error) || session.status!=='draft'} onChange={imageFeedback=>change({...draft,imageFeedback})} onReorder={ids=>change({...draft,imageFeedback:ids.map(id=>draft.imageFeedback!.find(page=>page.pageId===id)!)})}/></DocumentErrorBoundary>}
       </div>
       <aside className="marking-review-pane space-y-4" data-testid="marking-review-pane" aria-label="Rubric and feedback">
       <div ref={setImageCommentContainer} />
@@ -344,9 +400,9 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
       </section>
       </aside>
       </div>
-    </section>}</fieldset>}
+    </section></fieldset>}</fieldset>}
     {(tab === 'history' || tab === 'archive') && initialEnrollmentId && <label className="flex gap-2"><input type="checkbox" checked={allStudents} onChange={e => setAllStudents(e.target.checked)} />Show entire class history</label>}
-    {tab === 'history' && <section className="space-y-4 rounded-xl border bg-white p-4" aria-label="Former student assessments"><h2 className="font-bold">Former students</h2><p>Historical submissions and saved feedback for students no longer active in this class. Read-only: viewing does not enroll a student, create a revision or change marks.</p>{!(context.historicalAttempts ?? []).length && <p>No former-student submissions for this assessment.</p>}{(context.historicalAttempts ?? []).filter(a => allStudents || !initialEnrollmentId || a.classEnrollmentId === initialEnrollmentId).map(a => <article key={a.id} className="space-y-2 border-t py-3" data-testid={`marking-historical-${a.id}`}><h3 className="font-semibold">{studentName(context, a.classEnrollmentId)}</h3><p>{a.mode ?? 'written'} · Submitted {a.createdAt}</p><ReadOnlyMarkingHistory attempt={a} context={context} />{a.documents.map(doc => <details key={doc.id}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{a.imagePages?.map(page => <details key={page.id}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}{context.commits.filter(c => c.attemptId === a.id).map(c => <button key={c.id} className={button} disabled={busy} onClick={() => void action(() => exportCommit(c.id))}>Report {c.createdAt}</button>)}</article>)}</section>}
+    {tab === 'history' && <section className="space-y-4 rounded-xl border bg-white p-4" aria-label="Former student assessments"><h2 className="font-bold">Former students</h2><p>Historical submissions and saved feedback for students no longer active in this class. Read-only: viewing does not enroll a student, create a revision or change marks.</p>{!(context.historicalAttempts ?? []).length && <p>No former-student submissions for this assessment.</p>}{(context.historicalAttempts ?? []).filter(a => allStudents || !initialEnrollmentId || a.classEnrollmentId === initialEnrollmentId).map(a => <article key={a.id} className="space-y-2 border-t py-3" data-testid={`marking-historical-${a.id}`}><h3 className="font-semibold">{studentName(context, a.classEnrollmentId)}</h3><p>{a.mode ?? 'written'} · Submitted {a.createdAt}</p><ReadOnlyMarkingHistory attempt={a} context={context} /><DocumentErrorBoundary resetKey={`${a.id}:${a.version}`} label="This saved original"><ReadOnlyOriginalWork attempt={a}/></DocumentErrorBoundary>{context.commits.filter(c => c.attemptId === a.id).map(c => <button key={c.id} className={button} disabled={busy} onClick={() => void action(() => exportCommit(c.id))}>Report {c.createdAt}</button>)}</article>)}</section>}
     {tab === 'archive' && <section className="space-y-4 rounded-xl border bg-white p-4" aria-label="Archived assessments"><h2 className="font-bold">Archive</h2><p>Retained assessment records: student, class, assessment and date; final category judgments and marks; rubric version and finalized feedback; final revision history. Archived work is read-only.</p>{!(context.archivedAttempts ?? []).length && <p>No archived attempts for this assessment.</p>}{(context.archivedAttempts ?? []).filter(a=>allStudents || !initialEnrollmentId || a.classEnrollmentId===initialEnrollmentId).map(a=><article key={a.id} className="space-y-2 border-t py-3" data-testid={`marking-archived-${a.id}`}><h3 className="font-semibold">{studentName(context,a.classEnrollmentId)}</h3><p>{context.assessment.title} · Archived {a.archivedAt} · {a.keepStudentWork ? 'Student work retained' : 'Student work removed'}</p><ReadOnlyMarkingHistory attempt={a} context={context} />{context.commits.filter(c=>c.attemptId===a.id).map(c=><div className="flex flex-wrap gap-2" key={c.id}><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id))}>Report {c.createdAt}</button><button className={button} disabled={busy} onClick={()=>void action(()=>exportCommit(c.id,true))}>{supportsDesktopPdfExport() ? 'Export marked PDF' : 'Download marked report for PDF'}</button></div>)}</article>)}</section>}
     </fieldset>
   </div>;

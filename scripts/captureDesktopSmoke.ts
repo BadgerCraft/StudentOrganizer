@@ -66,7 +66,13 @@ try {
   await upload(); await page.getByRole('status').filter({hasText:'3 already saved'}).waitFor();
   assert.equal((await rows('captureAttachments')).length,3); assert.deepEqual(await rows('categoryResults'),beforeResults); assert.equal((await rows('markingAttempts')).length,beforeAttempts.length+3);
   await page.getByRole('button',{name:'Close matching'}).click(); await openMatching(); await page.getByRole('heading',{name:'Saved picture attachments'}).waitFor();
-  await page.getByRole('button',{name:/View saved pages/}).first().click(); await page.locator('canvas').first().waitFor();
+  await page.getByRole('button',{name:/View saved pages/}).first().click();
+  // Saved pages load only near the viewport; bring the stable figure into view
+  // before expecting its initially hidden canvas to finish decoding.
+  const savedPreview = page.getByTestId('capture-page-preview').first();
+  await savedPreview.scrollIntoViewIfNeeded();
+  await savedPreview.locator('canvas').waitFor({ state: 'visible' });
+  assert.deepEqual(await savedPreview.locator('canvas').evaluate(node => { const canvas = node as HTMLCanvasElement; return { width: canvas.width, height: canvas.height }; }), { width: 320, height: 120 });
   if (process.env.CAPTURE_PHONE_ZIP) {
     const phoneBytes = new Uint8Array(await readFile(process.env.CAPTURE_PHONE_ZIP)); const phone = await decodeCapturePackage(phoneBytes);
     await upload(phoneBytes); await page.getByTestId(`capture-set-${phone.submissions[0].id}`).waitFor();

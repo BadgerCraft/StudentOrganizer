@@ -48,6 +48,7 @@ export function App() {
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [selectedEnrollmentIds, setSelectedEnrollmentIds] = useState<UUID[]>([]);
+  const studentSelectionGeneration = useRef(0);
   const [participationMode, setParticipationMode] = useState<'single' | 'group'>('single');
   const participationDraftDirty = useRef(false);
   const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
@@ -77,16 +78,19 @@ export function App() {
 
   // A new classroom context always starts with a deliberate, single-student target.
   useEffect(() => {
+    studentSelectionGeneration.current++;
     setSelectedEnrollmentIds([]);
     setParticipationMode('single');
   }, [activeSectionId, selectedSchoolDate, currentView, appIdentity?.userId, isTeacherSelectorOpen]);
 
   const clearParticipationSelection = () => {
+    studentSelectionGeneration.current++;
     setSelectedEnrollmentIds([]);
     setParticipationMode('single');
   };
 
   const handleOpenStudentSettings = (student: Student) => {
+    setProfileEnrollmentId(null); setSuspendedProfileEnrollmentId(null);
     setEditingStudent(student);
   };
 
@@ -367,9 +371,13 @@ export function App() {
 
   const handleToggleSelectStudent = (enrollmentId: UUID) => {
     if (!confirmParticipationDiscard()) return;
+    const previous = selectedEnrollmentIds;
+    const generation = ++studentSelectionGeneration.current, identityEpoch = getIdentityEpoch();
+    setProfileEnrollmentId(null); setEditingStudent(null); setSuspendedProfileEnrollmentId(null);
     setSelectedEnrollmentIds(ids => ids.includes(enrollmentId)
       ? ids.filter(id => id !== enrollmentId)
       : participationMode === 'group' ? [...ids, enrollmentId] : [enrollmentId]);
+    return () => { if (studentSelectionGeneration.current === generation && identityEpoch === getIdentityEpoch()) { studentSelectionGeneration.current++; setSelectedEnrollmentIds(previous); } };
   };
 
   const handleRecordParticipation = async (params: any) => {
@@ -542,7 +550,7 @@ export function App() {
             deviceId={appIdentity?.deviceId}
             onSelectDate={date => { if (date !== selectedSchoolDate && confirmParticipationDiscard()) setSelectedSchoolDate(date); }}
             onToggleSelectStudent={handleToggleSelectStudent}
-            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setProfileEnrollmentId(id); } }}
+            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setEditingStudent(null); setSuspendedProfileEnrollmentId(null); setProfileEnrollmentId(id); } }}
             onOpenStudentSettings={student => { if (confirmParticipationDiscard()) { clearParticipationSelection(); handleOpenStudentSettings(student); } }}
             onRefresh={() => {}}
           />
@@ -599,7 +607,7 @@ export function App() {
             overrides={activeOverrides}
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
-            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setProfileEnrollmentId(id); } }}
+            onOpenStudentProfile={id => { if (confirmParticipationDiscard()) { clearParticipationSelection(); setEditingStudent(null); setSuspendedProfileEnrollmentId(null); setProfileEnrollmentId(id); } }}
             onOpenMarking={(assessmentId, enrollmentId) => setMarkingTarget({ assessmentId, enrollmentId })}
             onRefresh={() => {}}
           />
@@ -678,6 +686,7 @@ export function App() {
       {/* Student Profile Modal */}
       {profileData && profileData.enr && profileData.std && (
         <StudentProfileModal
+          key={profileData.enr.id}
           enrollmentId={profileData.enr.id}
           enrollment={profileData.enr}
           student={profileData.std}
@@ -701,6 +710,7 @@ export function App() {
       {/* Student Settings Modal */}
       {editingStudent && (
         <StudentSettingsModal
+          key={editingStudent.id}
           isOpen={true}
           onClose={handleCloseStudentSettings}
           student={editingStudent}
