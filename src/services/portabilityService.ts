@@ -130,8 +130,7 @@ export class PortabilityService {
         const nameKey = `${last.toLowerCase()},${first.toLowerCase()}`;
         if (!rowError && studentNameSeen.has(nameKey)) {
           const firstSeenRow = studentNameSeen.get(nameKey)!;
-          status = 'error';
-          rowError = `Duplicate student "${last}, ${first}" in pasted list (already appeared on row ${firstSeenRow}).`;
+          rowWarning = `Same name as row ${firstSeenRow}, with a different student number. Review both identities; they will remain separate students.`;
         } else {
           studentNameSeen.set(nameKey, r.rowNumber);
         }
@@ -159,10 +158,10 @@ export class PortabilityService {
               const existingEnrollment = enrollmentByStudentId.get(existing.id);
               if (existingEnrollment && existingEnrollment.deletedAt === null && existingEnrollment.enrollmentStatus === 'active') {
                 status = 'already_enrolled';
-                rowWarning = 'Already in this class (duplicate enrolment will be skipped safely).';
+                rowWarning = [rowWarning, 'Already in this class (duplicate enrolment will be skipped safely).'].filter(Boolean).join(' ');
               } else if (existingEnrollment && (existingEnrollment.enrollmentStatus === 'dropped' || existingEnrollment.deletedAt !== null)) {
                 status = 'existing_enrolling';
-                rowWarning = 'Re-enrolling previously dropped student (historical attendance and marks preserved).';
+                rowWarning = [rowWarning, 'Re-enrolling previously dropped student (historical attendance and marks preserved).'].filter(Boolean).join(' ');
               } else {
                 status = 'existing_enrolling';
               }
@@ -258,6 +257,8 @@ export class PortabilityService {
           const num = r.studentNumber.trim();
           const last = r.lastName.trim();
           const first = r.firstName.trim();
+
+          if (!num || !last || !first) throw new Error('Transaction aborted: first name, last name and student number are required.');
 
           // Check intra-batch duplicate student number
           if (seenNumbersInTx.has(num)) {

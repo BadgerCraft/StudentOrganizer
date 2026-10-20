@@ -26,6 +26,46 @@ describe('Roster Conflict, In-Transaction Validation & Mutation Sizing Suite', (
     expect(candidates[1].error).toContain('Duplicate student number "0010981"');
   });
 
+  it('warns but imports identical names with different string IDs as separate students', async () => {
+    const section = (await db.classSections.toCollection().first())!;
+    const parsed = parseRosterText('Fictional, Table\t0009901\nFictional, Table\t0009902');
+    const candidates = await portability.validateRosterCandidates(section.id, parsed.rows);
+    expect(candidates.map(row => row.status)).toEqual(['new', 'new']);
+    expect(candidates[1].warning).toContain('remain separate');
+    const result = await portability.importRosterBatch({ classSectionId: section.id, rows: candidates, userId: 'user-tyler', deviceId: 'dev-1' });
+    expect(result.newStudentsCount).toBe(2);
+    const students = await db.students.where('localStudentNumber').anyOf(['0009901', '0009902']).toArray();
+    expect(students).toHaveLength(2);
+    expect(new Set(students.map(student => student.id)).size).toBe(2);
+    expect(students.map(student => student.localStudentNumber).sort()).toEqual(['0009901', '0009902']);
+  });
+
+  it('rejects forged empty edited fields at save without writing any batch records', async () => {
+    const section = (await db.classSections.toCollection().first())!;
+    const candidates = await portability.validateRosterCandidates(section.id, parseRosterText('Fictional, Table\t0009901\nOther, Table\t0009902').rows);
+    const counts = [await db.students.count(), await db.classEnrollments.count(), await db.auditEntries.count(), await db.syncMutations.count()];
+    candidates[1].firstName = ' ';
+    await expect(portability.importRosterBatch({ classSectionId: section.id, rows: candidates, userId: 'user-tyler', deviceId: 'dev-1' })).rejects.toThrow('required');
+    expect([await db.students.count(), await db.classEnrollments.count(), await db.auditEntries.count(), await db.syncMutations.count()]).toEqual(counts);
+  });
+
+  it('retains same-name warnings when the later row is already enrolled', async () => {
+    const section = (await db.classSections.toCollection().first())!;
+    const rows = parseRosterText('Avery, Jordan\t0009901\nAvery, Jordan\tS10482').rows;
+    const candidates = await portability.validateRosterCandidates(section.id, rows);
+    expect(candidates[1].warning).toContain('remain separate');
+    expect(candidates[1].warning).toContain('Already in this class');
+  });
+
+  it('rechecks revoked membership after preview and saves no batch records', async () => {
+    const section = (await db.classSections.toCollection().first())!;
+    const candidates = await portability.validateRosterCandidates(section.id, parseRosterText('Fictional, Table\t0009901').rows);
+    await db.organizationMemberships.where('userId').equals('user-tyler').modify({ deletedAt: new Date().toISOString() });
+    const counts = [await db.students.count(), await db.classEnrollments.count(), await db.auditEntries.count(), await db.syncMutations.count()];
+    await expect(portability.importRosterBatch({ classSectionId: section.id, rows: candidates, userId: 'user-tyler', deviceId: 'dev-1' })).rejects.toThrow('no active organization membership');
+    expect([await db.students.count(), await db.classEnrollments.count(), await db.auditEntries.count(), await db.syncMutations.count()]).toEqual(counts);
+  });
+
   it('flags existing student number with conflicting name as a blocking error', async () => {
     const section = (await db.classSections.toCollection().first())!;
     // Avery Jordan is student S10482 in seed
