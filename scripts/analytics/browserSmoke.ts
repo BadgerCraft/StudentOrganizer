@@ -22,7 +22,7 @@ try{
  assert.equal(await page.getByRole('button',{name:'Run local pipeline',exact:true}).isDisabled(),true);
  assert.equal(await page.getByTestId('analytics-weekly').innerText(),'0');
  await page.getByLabel('I consent to this fictional simulation session only.').check();await page.getByRole('button',{name:'Run local pipeline',exact:true}).click();
- await page.getByText(/Local fictional pipeline completed:/).waitFor();assert.equal(await page.getByTestId('analytics-weekly').innerText(),'6');assert.equal(await page.getByTestId('analytics-activation').innerText(),'6 / 7');
+ await page.getByText(/Local fictional pipeline completed:/).waitFor();assert.equal(await page.getByTestId('analytics-weekly').innerText(),'6');assert.equal(await page.getByTestId('analytics-activation').innerText(),'6');assert.equal(await page.getByTestId('analytics-installations').innerText(),'7');
  await page.getByLabel('Dataset',{exact:true}).selectOption('measured-test');assert.equal(await page.getByTestId('analytics-weekly').innerText(),'0');
  await page.locator('input[type=file]').setInputFiles({name:'events-measured-test.json',mimeType:'application/json',buffer:Buffer.from(fixture)});
  await page.getByText(/Validated local collector export ingested/).waitFor();assert.equal(await page.getByTestId('analytics-weekly').innerText(),'6');
