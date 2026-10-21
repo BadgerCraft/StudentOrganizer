@@ -75,10 +75,10 @@ export function ManualWindowsUpdate({ installationBlocked = false }: { installat
 
   const downloading = installer?.status === 'downloading';
   const ready = installer?.status === 'downloaded';
-  const capable = result?.installationAvailable && bridge.download && bridge.install;
+  const capable = result?.status === 'available' && result.installationAvailable && bridge.download && bridge.install;
   const message = result?.status === 'available' ? `Version ${result.version} is available.${capable ? ' Download it when you are ready.' : ' Installation is unavailable for this build. Your records have not changed.'}`
     : result?.status === 'current' ? 'This version is current for the stable release channel.'
-    : result?.status === 'unpublished' ? 'No stable release is published. Your installed app remains available.'
+    : result?.status === 'unpublished' ? 'No approved stable release is published. Your installed app remains available.'
     : result?.status === 'unsupported' ? 'Update checks require a packaged Windows build.'
     : result?.status === 'error' ? 'The update could not be checked. Try again later. Your installed app and records have not changed.' : '';
   const button = 'px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50';

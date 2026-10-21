@@ -182,8 +182,9 @@ async function boundaryDiagnostics(app: ElectronApplication, page: Page) {
   return { main, renderer };
 }
 
-async function configureFixtureFeed(app: ElectronApplication, feed: string) {
-  return app.evaluate(({ app }, url) => {
+async function configureFixtureFeed(app: ElectronApplication, feed: string, artifact: { name: string; bytes: number; sha512: string }) {
+  return app.evaluate(({ app }, input) => {
+      const url = input.url;
       const { createRequire } = (process as any).getBuiltinModule('module');
       const require = createRequire(app.getAppPath() + '/package.json');
       const updater = require('electron-updater').autoUpdater;
@@ -206,8 +207,18 @@ async function configureFixtureFeed(app: ElectronApplication, feed: string) {
       const https = (process as any).getBuiltinModule('https');
       const { EventEmitter } = (process as any).getBuiltinModule('events');
       (globalThis as any).__upgradeMetadataRequests = [];
+      const approvals = require('./electron/updateApproval.cjs');
+      const delivery = require('./electron/releaseDelivery.cjs');
+      const document = delivery.preparePublication(approvals.approve(approvals.recordTest(approvals.prepare({
+        schemaVersion: 1, product: 'StudentOrganizer', version: '1.0.2', arch: 'x64', sourceCommit: '81058d87d669ff4cd787b06c25fe84217581f2ad', artifact: input.artifact
+      }), 'Fictional installed-update fixture: exact installer, actual native signature and backup/recovery checks.')), { signature: 'unsigned' }, true).document;
+      const release = { tag_name: 'v1.0.2', target_commitish: document.approval.candidate.sourceCommit,
+        html_url: 'https://github.com/BadgerCraft/StudentOrganizer/releases/tag/v1.0.2', draft: false, prerelease: false,
+        assets: [input.artifact.name, 'latest.yml', 'student-organizer-approval-x64.json'].map(name => ({ name, state: 'uploaded', size: name === input.artifact.name ? input.artifact.bytes : 100,
+          browser_download_url: `https://github.com/BadgerCraft/StudentOrganizer/releases/download/v1.0.2/${name}` })) };
       https.get = (destination: string, options: any, respond: any) => {
-        if (destination !== 'https://api.github.com/repos/BadgerCraft/StudentOrganizer/releases/latest') throw new Error('Unexpected release lookup destination');
+        const approvalURL = 'https://github.com/BadgerCraft/StudentOrganizer/releases/download/v1.0.2/student-organizer-approval-x64.json';
+        if (!['https://api.github.com/repos/BadgerCraft/StudentOrganizer/git/ref/tags/v1.0.2', approvalURL, 'https://api.github.com/repos/BadgerCraft/StudentOrganizer/releases/latest', 'https://api.github.com/repos/BadgerCraft/StudentOrganizer/releases/tags/v1.0.2'].includes(destination)) throw new Error('Unexpected release lookup destination');
         (globalThis as any).__upgradeMetadataRequests.push({ destination, headers: options.headers });
         const request = new EventEmitter();
         (request as any).destroy = (error: Error) => { request.emit('error', error); return request; };
@@ -215,13 +226,13 @@ async function configureFixtureFeed(app: ElectronApplication, feed: string) {
         (response as any).statusCode = 200; (response as any).resume = () => {};
         process.nextTick(() => {
           respond(response);
-          response.emit('data', Buffer.from(JSON.stringify({ tag_name: 'v1.0.2', html_url: 'https://github.com/BadgerCraft/StudentOrganizer/releases/tag/v1.0.2', draft: false, prerelease: false })));
+          response.emit('data', Buffer.from(JSON.stringify(destination.includes('/git/ref/') ? { object: { type: 'commit', sha: document.approval.candidate.sourceCommit } } : destination === approvalURL ? document : release)));
           response.emit('end');
         });
         return request;
       };
       return { autoDownload: updater.autoDownload, autoInstallOnAppQuit: updater.autoInstallOnAppQuit };
-  }, feed);
+  }, { url: feed, artifact });
 }
 
 const canonicalPaths = new Map<string, string>();
@@ -499,7 +510,7 @@ async function runInstallRecovery() {
     await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
     const updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
-    assert.deepEqual(await configureFixtureFeed(running.app, feed), { autoDownload: false, autoInstallOnAppQuit: false });
+    assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: failureFilename, bytes: failureBytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
     assert.equal(requests.length, 0, 'Recovery fixture must not check or download before a click');
     await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
     await updates.getByRole('status').filter({ hasText: `Version ${pair.B} is available.` }).waitFor();
@@ -739,7 +750,7 @@ async function main() {
     const initialBoundary = await boundaryDiagnostics(running.app, running.page);
     fs.writeFileSync(path.join(evidenceDir, 'initial-ipc-boundary.json'), JSON.stringify(initialBoundary, null, 2) + '\n');
     await state(running.page); // Reads installed updater state without network.
-    const metadata = await configureFixtureFeed(running.app, feed);
+    const metadata = await configureFixtureFeed(running.app, feed, { name: filename, bytes: bytes.length, sha512 });
     assert.deepEqual(metadata, { autoDownload: false, autoInstallOnAppQuit: false });
     assert.equal(requests.length, 0, 'Startup/opening settings must not check or download');
     await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
@@ -767,7 +778,7 @@ async function main() {
     const ready = await waitState(running.page, ['downloaded']);
     assert.equal(ready.signature, 'unsigned', 'Current free QA binaries require explicit unsigned acknowledgement');
     const metadataBeforeQuit = await running.app.evaluate(() => (globalThis as any).__upgradeMetadataRequests);
-    assert.equal(metadataBeforeQuit.length, 3, 'Three explicit release checks before ordinary quit');
+    assert.equal(metadataBeforeQuit.filter((request: any) => request.destination.endsWith('/latest')).length, 3, 'Three explicit release checks before ordinary quit');
     const beforeOrdinaryQuit = await snapshotAll(running.page);
     const requestsBeforeQuit = requests.length;
     await running.app.close(); running = undefined;
@@ -780,7 +791,7 @@ async function main() {
     await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
     updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
-    assert.deepEqual(await configureFixtureFeed(running.app, feed), { autoDownload: false, autoInstallOnAppQuit: false });
+    assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: filename, bytes: bytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
     await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
     await updates.getByRole('status').filter({ hasText: `Version ${versions.B} is available.` }).waitFor();
     await updates.getByRole('button', { name: 'Download update', exact: true }).click();
@@ -794,7 +805,7 @@ async function main() {
     await weight.fill(previousWeight);
     await waitUntil(async () => await installButton.isEnabled() ? true : undefined, 'restored Settings installation eligibility');
     const metadataRequests = [...metadataBeforeQuit, ...await running.app.evaluate(() => (globalThis as any).__upgradeMetadataRequests)];
-    assert.equal(metadataRequests.length, 4, 'Only four explicit release-check clicks may contact metadata');
+    assert.equal(metadataRequests.filter((request: any) => request.destination.endsWith('/latest')).length, 4, 'Only four explicit release-check clicks may query latest; explicit download verification also reads pinned approval/tag metadata');
     assert.ok(metadataRequests.every((request: any) => Object.keys(request.headers).sort().join(',') === 'Accept,User-Agent'), 'Manual metadata requests contain only static headers');
     assert.ok(requestHeaders.every(headers => !headers.some(header => /^(authorization|cookie|referer|x-user-staging-id)$/i.test(header))), 'Installer transport must strip account/session/staging headers');
     const before = await snapshotAll(running.page);

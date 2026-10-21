@@ -10,7 +10,7 @@ const { CancellationToken } = require('builder-util-runtime');
 const { TABLES, MAX_BACKUP, validateBackup, saveBackup, assertWritableInstallation, inspectSignature, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, installAndReopen, createInstallerUpdate } = require('../../electron/windowsInstallerUpdate.cjs');
 const { NsisUpdater } = require('electron-updater/out/NsisUpdater');
 const sha512 = Buffer.alloc(64, 7).toString('base64');
-const manifest = { version: '1.0.1', files: [{ url: 'OntarioTeacherAssessment-1.0.1-x64-nsis.exe', sha512 }] };
+const manifest = { version: '1.0.1', files: [{ url: 'OntarioTeacherAssessment-1.0.1-x64-nsis.exe', sha512, size: 42 }] };
 const backupJSON = JSON.stringify({ version: 2, schemaVersion: 5, exportedAt: new Date().toISOString(), tables: Object.fromEntries(TABLES.map((name: string) => [name, []])) });
 function setup(options: Record<string, unknown> = {}) {
   const updater = Object.assign(new EventEmitter(), {
@@ -24,6 +24,10 @@ function setup(options: Record<string, unknown> = {}) {
   const hash = vi.fn(async () => sha512);
   const signature = vi.fn(async () => ({ signature: 'unsigned' }));
   const controller = createInstallerUpdate({ supported: true, currentVersion: '1.0.0', userData: '/local/userData', arch: 'x64', updater,
+    approvalLookup: async () => ({ document: require('../../electron/releaseDelivery.cjs').preparePublication(
+      require('../../electron/updateApproval.cjs').approve(require('../../electron/updateApproval.cjs').recordTest(require('../../electron/updateApproval.cjs').prepare({
+        schemaVersion: 1, product: 'StudentOrganizer', version: '1.0.1', arch: 'x64', sourceCommit: '81058d87d669ff4cd787b06c25fe84217581f2ad',
+        artifact: { name: manifest.files[0].url, bytes: 42, sha512 } }), 'Fictional unit test evidence'), new Date().toISOString()), { signature: 'unsigned' }, true).document }),
     tokenFactory: () => new CancellationToken(), backup, hash, signature, canReplace: async () => {}, launch: async () => updater.quitAndInstall(true, true), ...options });
   return { updater, controller, backup, hash, signature };
 }
