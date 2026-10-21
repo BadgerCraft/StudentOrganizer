@@ -12,14 +12,14 @@ npm run control-panel:package:mac     # never publishes
 npm run test:control-panel:browser
 node scripts/audit-control-panel-package.cjs
 # On an appropriate disposable Windows/Mac runner, after packaging:
-node --import tsx scripts/controlPanelNativeSmoke.ts /path/to/packaged/executable
+node --import tsx scripts/controlPanelNativeSmoke.ts /path/to/packaged/executable /path/to/CI-unsigned-NSIS-fixture
 ```
 
 Separate app ID: `ca.badgercraft.studentorganizer.controlpanel`. Default profile: `appData/StudentOrganizer-ControlPanel`; outputs: `release/control-panel`. Only one instance owns a profile. Standard `--user-data-dir` supports disposable test profiles; never point it at a teacher profile. The shell excludes inherited root dependencies and bundles only its UI, built-in-module helpers and shared update contracts. Mac packages remain unsigned/not notarized; automated launch is not Gatekeeper or distribution acceptance.
 
 ## Approve exact tested bytes
 
-1. Build the Student Organizer Windows NSIS installer, then create its descriptor:
+1. Build the Student Organizer Windows NSIS installer for the selected stable version (the real application version and filename must match, e.g. use the existing package command with `--config.extraMetadata.version=1.0.2 --publish never`), then create its descriptor:
 
    ```sh
    node scripts/prepare-update-candidate.cjs \
@@ -73,4 +73,4 @@ Real participation/consent/reporting and account/feature controls remain deferre
 
 ## Evidence and remaining limits
 
-See [the work order](../../docs/work-orders/CONTROL-PANEL-2026-10-20.md) for exact measured heads and CI links. Windows x64 and Mac arm64 baseline packages actually launched with production sandbox and real bridge; restart, second instance, artifact rejection, corrupt-store retention and teacher-profile isolation passed. The delivery extension must be verified on its own head. Automated dialog selections are not physical picker acceptance; unsigned cloud launch does not prove Gatekeeper, UAC, installer shortcuts, managed policy, real publisher setup or live distribution. PR remains draft and unmerged.
+See [the work order](../../docs/work-orders/CONTROL-PANEL-2026-10-20.md) for exact measured heads and CI links. Windows x64 and Mac arm64 baseline packages actually launched with production sandbox and real bridge; restart, second instance, artifact rejection, corrupt-store retention and teacher-profile isolation passed. The expanded delivery implementation passed Windows x64/Mac arm64 native owner smoke at `fb30cefe`; real Windows NSIS replacement/recovery/legacy-bootstrap checks also passed with the approval gate. Exact run links and source heads are in the work order. Automated dialog selections are not physical picker acceptance; unsigned cloud launch does not prove Gatekeeper, UAC, installer shortcuts, managed policy, real publisher setup or live distribution. PR remains draft and unmerged.
