@@ -21,12 +21,21 @@ export interface RosterParseResult {
 /**
  * Tokenizes text according to RFC 4180 rules, supporting specified delimiter.
  */
-export function tokenizeRFC4180(text: string, delimiter: string = ','): string[][] {
+export function tokenizeRFC4180(text: string, delimiter: string = ',', limits?: { maxRows: number; maxColumns: number }): string[][] {
   const clean = text.replace(/^\uFEFF/, '');
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentCell = '';
   let insideQuotes = false;
+  let closedQuote = false;
+  const pushCell = () => {
+    currentRow.push(currentCell.trim());
+    if (limits && currentRow.length > limits.maxColumns) throw new Error(`Too many columns. Limit: ${limits.maxColumns}.`);
+  };
+  const pushRow = () => {
+    rows.push(currentRow);
+    if (limits && rows.length > limits.maxRows) throw new Error(`Too many rows. Limit: ${limits.maxRows}.`);
+  };
 
   for (let i = 0; i < clean.length; i++) {
     const char = clean[i];
@@ -39,36 +48,44 @@ export function tokenizeRFC4180(text: string, delimiter: string = ','): string[]
           i++; // skip escaped quote
         } else {
           insideQuotes = false;
+          closedQuote = true;
         }
       } else {
         currentCell += char;
       }
     } else {
+      if (closedQuote && ![delimiter, '\r', '\n', ' '].includes(char)) throw new Error('Malformed quoted cell: unexpected text after closing quote.');
       if (char === '"') {
+        if (currentCell.trim() || closedQuote) throw new Error('Malformed quoted cell. Quote the entire field and double any quotes inside it.');
         insideQuotes = true;
       } else if (char === delimiter) {
-        currentRow.push(currentCell.trim());
+        pushCell();
         currentCell = '';
+        closedQuote = false;
       } else if (char === '\r') {
         if (next === '\n') i++;
-        currentRow.push(currentCell.trim());
-        rows.push(currentRow);
+        pushCell();
+        pushRow();
         currentRow = [];
         currentCell = '';
+        closedQuote = false;
       } else if (char === '\n') {
-        currentRow.push(currentCell.trim());
-        rows.push(currentRow);
+        pushCell();
+        pushRow();
         currentRow = [];
         currentCell = '';
+        closedQuote = false;
       } else {
         currentCell += char;
       }
     }
   }
 
+  if (insideQuotes) throw new Error('Unclosed quoted cell. Close the quote before previewing.');
+
   if (currentCell.length > 0 || currentRow.length > 0) {
-    currentRow.push(currentCell.trim());
-    rows.push(currentRow);
+    pushCell();
+    pushRow();
   }
 
   return rows;
@@ -135,8 +152,14 @@ function isHeaderCell(text: string, keywords: string[]): boolean {
  * Detects whether input is tab-delimited (spreadsheet paste) or comma-delimited (CSV).
  */
 export function detectDelimiter(text: string): '\t' | ',' {
-  const hasTabs = text.split(/\r?\n/).some(line => line.includes('\t'));
-  return hasTabs ? '\t' : ',';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '"') {
+      if (quoted && text[i + 1] === '"') i++;
+      else quoted = !quoted;
+    } else if (!quoted && text[i] === '\t') return '\t';
+  }
+  return ',';
 }
 
 /**

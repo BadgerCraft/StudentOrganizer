@@ -358,3 +358,12 @@ Deferred learning checks for Tyler's return: (1) Why does an old successful cont
 
 
 October20 publication link: [PR42](https://github.com/BadgerCraft/StudentOrganizer/pull/42), reviewed implementation `50bae0c265a8850eda312da46a6aececee99833e`. Explain Back skill was available and read at publication. The prepared walkthrough above remains pending for Tyler's return; no demonstrated recall or merge/release approval is claimed.
+
+
+## October 20 — copied-table roster review (prepared; review pending)
+
+TUV-ROSTER-TABLE changes the roster entry flow from arranging a fixed spreadsheet layout to selecting columns and checking an editable preview. A column mapping connects each source column to first name, last name or an explicitly interpreted combined name, and student number; extras are ignored. If both OEN and local ID appear, the teacher must choose. Leading zeros stay intact because IDs are text. Multipart names require explicit correction; source rows stay inspectable and uncertain rows can only be omitted through visible exclusions. Duplicate IDs block saving, while same-name/different-ID records warn and remain separate.
+
+The preview is provisional: changing fields/exclusions or switching class requires a fresh check. Saving rechecks authorization and conflicts inside one transaction, so an error leaves the entire batch unsaved. HTML is extracted locally without running pasted markup or loading resources. Existing students/enrollment history remain intact and omitted students are not deleted. Automated evidence belongs in the existing classroom work order; actual teacher acceptance and merge/release remain separate.
+
+Prepared discussion question: If two rows have the same name but different student numbers, what should you check in the preview before saving? Status DEFERRED until the teacher reviews the PR; no answer or understanding is inferred. [PR43](https://github.com/BadgerCraft/StudentOrganizer/pull/43), reviewed implementation `4ba955967c9f83e80c489b9fd7f75af1d0c73f54`; automated verification and independent code review passed. Teacher walkthrough remains pending.
