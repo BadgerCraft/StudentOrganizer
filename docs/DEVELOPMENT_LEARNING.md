@@ -370,3 +370,11 @@ October20 publication link: [PR42](https://github.com/BadgerCraft/StudentOrganiz
 ### DEV-CONTROL-AGGREGATES — adoption versus marks
 - Explanation prepared October20: completing marking work and returning later measure use. An assignment/class average describes marking context; it does not prove use or teacher quality. Mature return cohorts exclude teachers who have not had time to reach the return window. Dashboard values are all fictional and provide no investor evidence.
 - Review/recall: DEFERRED; no actual answer. No additional learning gate blocks authorized engineering work.
+
+## October 20 — copied-table roster review (prepared; review pending)
+
+TUV-ROSTER-TABLE changes the roster entry flow from arranging a fixed spreadsheet layout to selecting columns and checking an editable preview. A column mapping connects each source column to first name, last name or an explicitly interpreted combined name, and student number; extras are ignored. If both OEN and local ID appear, the teacher must choose. Leading zeros stay intact because IDs are text. Multipart names require explicit correction; source rows stay inspectable and uncertain rows can only be omitted through visible exclusions. Duplicate IDs block saving, while same-name/different-ID records warn and remain separate.
+
+The preview is provisional: changing fields/exclusions or switching class requires a fresh check. Saving rechecks authorization and conflicts inside one transaction, so an error leaves the entire batch unsaved. HTML is extracted locally without running pasted markup or loading resources. Existing students/enrollment history remain intact and omitted students are not deleted. Automated evidence belongs in the existing classroom work order; actual teacher acceptance and merge/release remain separate.
+
+Prepared discussion question: If two rows have the same name but different student numbers, what should you check in the preview before saving? Status DEFERRED until the teacher reviews the PR; no answer or understanding is inferred. [PR43](https://github.com/BadgerCraft/StudentOrganizer/pull/43), reviewed implementation `4ba955967c9f83e80c489b9fd7f75af1d0c73f54`; automated verification and independent code review passed. Teacher walkthrough remains pending.

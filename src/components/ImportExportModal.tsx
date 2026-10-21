@@ -19,7 +19,7 @@ import {
   type ImportRosterResult,
   type BackupMetadata
 } from '../services/portabilityService';
-import { parseRosterText } from '../services/rosterParser';
+import { clipboardRosterText, readRosterTable, mapRosterTable, mappingError, validateEditedRosterRow, MAX_ROSTER_CHARS, type RosterTable, type RosterMapping } from '../services/rosterTable';
 import { getAppIdentity } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
@@ -46,6 +46,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   // Add Students workflow state: 'input' | 'preview' | 'success'
   const [importStep, setImportStep] = useState<'input' | 'preview' | 'success'>('input');
   const [rosterText, setRosterText] = useState('');
+  const [previewSectionId, setPreviewSectionId] = useState<UUID | null>(null);
+  const [importTargetTitle, setImportTargetTitle] = useState('');
+  const [sourceErrors, setSourceErrors] = useState<Record<number, string | null>>({});
+  const [table, setTable] = useState<RosterTable | null>(null);
+  const [mapping, setMapping] = useState<RosterMapping | null>(null);
+  const [hasHeader, setHasHeader] = useState(false);
+  const [mappingDirty, setMappingDirty] = useState(false);
+  const [previewDirty, setPreviewDirty] = useState(false);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  const [pasteNotice, setPasteNotice] = useState('');
   const [candidateRows, setCandidateRows] = useState<CandidateStudentRow[]>([]);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -70,21 +80,18 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     setIsProcessing(true);
 
     try {
-      // 1. Parse raw text (tabs or commas, combined or separate names)
-      const parseResult = parseRosterText(rosterText);
-      if (parseResult.rows.length === 0) {
-        setPreviewError('No student rows could be parsed from the provided input.');
-        setIsProcessing(false);
-        return;
-      }
-
-      // 2. Validate against live database records
-      const candidates = await portability.validateRosterCandidates(
-        classSection.id,
-        parseResult.rows
-      );
-
-      setCandidateRows(candidates);
+      const nextTable = readRosterTable(rosterText);
+      setTable(nextTable);
+      setMapping(nextTable.mapping);
+      setHasHeader(nextTable.hasHeader);
+      setExcluded(new Set());
+      setPreviewDirty(false);
+      const needsMapping = !!mappingError(nextTable, nextTable.mapping);
+      setMappingDirty(needsMapping);
+      const rows = needsMapping ? [] : mapRosterTable(nextTable, nextTable.mapping, nextTable.hasHeader);
+      setSourceErrors(Object.fromEntries(rows.map(row => [row.rowNumber, row.error])));
+      setCandidateRows(await portability.validateRosterCandidates(classSection.id, rows));
+      setPreviewSectionId(classSection.id);
       setImportStep('preview');
     } catch (err: any) {
       setPreviewError(err.message || 'Failed to parse class list.');
@@ -95,11 +102,12 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   // Section 1: Confirmed Transactional Import Handler
   const handleConfirmImport = async () => {
-    if (!classSection || candidateRows.length === 0) return;
+    if (!classSection || previewSectionId !== classSection.id || !includedRows.length || mappingDirty || previewDirty || isProcessing) return;
     setIsProcessing(true);
     setPreviewError(null);
 
     try {
+      setImportTargetTitle(classTitleString);
       const currentIdentity = await getAppIdentity(db);
       if (propUserId && propUserId !== currentIdentity.userId) {
         throw new AuthorizationError('Acting teacher has changed since opening this dialog. Please reopen the dialog.');
@@ -107,7 +115,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
       const res = await portability.importRosterBatch({
         classSectionId: classSection.id,
-        rows: candidateRows,
+        rows: includedRows,
         userId: currentIdentity.userId,
         deviceId: currentIdentity.deviceId
       });
@@ -122,16 +130,52 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     }
   };
 
+  const recheckPreview = async () => {
+    if (!classSection || isProcessing) return;
+    setIsProcessing(true);
+    setPreviewError(null);
+    try {
+      const checked = await portability.validateRosterCandidates(classSection.id, candidateRows.filter(row => !excluded.has(row.rowNumber)).map(row => ({ ...row, error: sourceErrors[row.rowNumber] ?? null, warning: null })));
+      setCandidateRows(candidateRows.map(row => checked.find(check => check.rowNumber === row.rowNumber) || row));
+      setPreviewDirty(false);
+      setPreviewSectionId(classSection.id);
+    } catch (err: any) { setPreviewError(err.message || 'Could not validate preview.'); }
+    finally { setIsProcessing(false); }
+  };
+
+  const applyMapping = async () => {
+    if (!table || !mapping || !classSection || isProcessing) return;
+    setIsProcessing(true);
+    setPreviewError(null);
+    try {
+      const rows = mapRosterTable(table, mapping, hasHeader);
+      setSourceErrors(Object.fromEntries(rows.map(row => [row.rowNumber, row.error])));
+      setCandidateRows(await portability.validateRosterCandidates(classSection.id, rows));
+      setExcluded(new Set());
+      setMappingDirty(false);
+      setPreviewDirty(false);
+      setPreviewSectionId(classSection.id);
+    } catch (err: any) { setPreviewError(err.message || 'Could not apply mapping.'); }
+    finally { setIsProcessing(false); }
+  };
+
   // Section 1: File upload helper for roster (.csv, .tsv, .txt)
   const handleRosterFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > MAX_ROSTER_CHARS) {
+      setPreviewError('Class list file is too large. Limit: 1 MB.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = evt => {
       const text = evt.target?.result;
       if (typeof text === 'string') {
         setRosterText(text);
+        setPasteNotice('Using local TSV/CSV text file.');
+        setPreviewError(null);
       }
     };
     reader.onerror = () => alert('The selected file could not be read. Try a local copy in Files.');
@@ -248,11 +292,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     }
   };
 
-  const hasBlockingErrors = candidateRows.some(r => r.status === 'error' || r.error !== null);
-  const errorCount = candidateRows.filter(r => r.status === 'error' || r.error !== null).length;
-  const newCount = candidateRows.filter(r => r.status === 'new').length;
-  const existingEnrollingCount = candidateRows.filter(r => r.status === 'existing_enrolling').length;
-  const alreadyEnrolledCount = candidateRows.filter(r => r.status === 'already_enrolled').length;
+  const includedRows = candidateRows.filter(row => !excluded.has(row.rowNumber));
+  const targetChanged = previewSectionId !== classSection?.id;
+  const hasBlockingErrors = targetChanged || mappingDirty || previewDirty || !includedRows.length || includedRows.some(r => r.status === 'error' || r.error !== null);
+  const errorCount = includedRows.filter(r => r.status === 'error' || r.error !== null).length;
+  const newCount = includedRows.filter(r => r.status === 'new').length;
+  const existingEnrollingCount = includedRows.filter(r => r.status === 'existing_enrolling').length;
+  const alreadyEnrolledCount = includedRows.filter(r => r.status === 'already_enrolled').length;
 
   const classTitleString = course
     ? `${course.code} - Sec ${classSection?.sectionNumber || '01'}: ${course.title}`
@@ -284,7 +330,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               </span>
             </div>
           </div>
-          <span className="text-xs text-slate-400 font-medium">Step 1 of 2: Paste or Upload</span>
+          <span className="text-xs text-slate-400 font-medium">{importStep === 'input' ? 'Paste or Upload' : importStep === 'preview' ? 'Map, Review & Confirm' : 'Complete'}</span>
         </div>
 
         {importStep === 'input' && (
@@ -292,7 +338,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             {/* Spreadsheet Instructions & Visual Example */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3">
               <p className="text-slate-700 leading-relaxed font-medium">
-                Copy two columns directly from your school spreadsheet (Excel or Google Sheets) and paste them below:
+                Copy a table from your school spreadsheet or web page and paste it below. Extra columns and any column order are supported. Choose your name and student-number columns in the preview.
               </p>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left font-mono text-[11px] bg-white rounded-xl border border-slate-200 shadow-xs">
@@ -315,7 +361,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 </table>
               </div>
               <p className="text-[11px] text-slate-500">
-                You can include or omit the header row. Existing CSV files with separate First Name and Last Name columns are also supported.
+                You can include or omit the header row. Parsing stays on this device. CSV/TSV files still work; direct PDF, OCR and XLSX import are not supported.
               </p>
             </div>
 
@@ -325,6 +371,19 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 Paste Class List
               </label>
               <textarea
+                disabled={isProcessing}
+                onPaste={event => {
+                  event.preventDefault();
+                  try {
+                    const pasted = clipboardRosterText(event.clipboardData.getData('text/html'), event.clipboardData.getData('text/plain'));
+                    const target = event.currentTarget;
+                    const nextText = rosterText.slice(0, target.selectionStart) + pasted.text + rosterText.slice(target.selectionEnd);
+                    if (nextText.length > MAX_ROSTER_CHARS) throw new Error('Class list is too large. Limit: 1,000,000 characters.');
+                    setRosterText(nextText);
+                    setPasteNotice(pasted.notice);
+                    setPreviewError(null);
+                  } catch (err: any) { setPreviewError(err.message || 'Could not read copied table.'); }
+                }}
                 rows={6}
                 data-testid="roster-csv-textarea"
                 value={rosterText}
@@ -337,6 +396,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               />
             </div>
 
+            {pasteNotice && <p role="status" className="text-xs text-slate-600">{pasteNotice}</p>}
             {previewError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -382,6 +442,32 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         {/* STEP 2: Preview & Confirmation Table */}
         {importStep === 'preview' && (
           <div className="space-y-5" data-testid="roster-preview-step">
+            {table && mapping && <fieldset disabled={isProcessing} className="space-y-3 border rounded-xl p-4" data-testid="roster-mapping">
+              <legend className="font-bold text-sm">Column mapping</legend>
+              <p className="text-xs">Check each suggestion. Unselected columns are ignored. Choose OEN or local student ID explicitly if both are present. Applying mapping replaces preview edits and exclusions.</p>
+              <label className="block text-sm"><input type="checkbox" checked={hasHeader} onChange={e => { setHasHeader(e.target.checked); setMappingDirty(true); }} /> First nonblank row is a header (exclude it)</label>
+              <label className="block text-sm">Name interpretation <select aria-label="Name interpretation" value={mapping.nameOrder} onChange={e => { setMapping({ ...mapping, nameOrder: e.target.value as RosterMapping['nameOrder'] }); setMappingDirty(true); }}>
+                <option value="separate">Separate first and last name columns</option>
+                <option value="last_comma_first">Combined: Last name, First name</option>
+                <option value="first_last">Combined: First Last (exactly two parts; edit multipart names)</option>
+              </select></label>
+              <div className="flex flex-wrap gap-3">
+                {(mapping.nameOrder === 'separate' ? ['first', 'last', 'number'] as const : ['name', 'number'] as const).map(field => <label key={field} className="text-sm">
+                  {{ first: 'First name', last: 'Last name', name: 'Combined name', number: 'Student number' }[field]}
+                  <select aria-label={`Column for ${field}`} value={mapping[field]} onChange={e => { setMapping({ ...mapping, [field]: Number(e.target.value) }); setMappingDirty(true); }} className="block border rounded p-1 max-w-64">
+                    <option value={-1}>Choose column…</option>
+                    {Array.from({ length: table.columnCount }, (_, index) => <option key={index} value={index}>Column {index + 1}: {table.rows[0]?.cells[index]?.slice(0, 60) || '(blank)'}</option>)}
+                  </select>
+                </label>)}
+              </div>
+              <div className="overflow-auto max-h-40 text-xs"><table><tbody>{table.rows.slice(0, 4).map(row => <tr key={row.rowNumber}>{row.cells.map((cell, index) => <td key={index} className="border p-1 whitespace-pre-wrap">{cell}</td>)}</tr>)}</tbody></table></div>
+              {mappingDirty && <p role="status" className="text-amber-800 text-xs">Apply the mapping before importing. Review the header checkbox; no uncertain data row is automatically excluded.</p>}
+              <button type="button" onClick={applyMapping} data-testid="apply-roster-mapping" className="px-3 py-2 border rounded">Apply mapping</button>
+            </fieldset>}
+            <p className="text-xs">Edit fields below, or explicitly exclude a row. Excluded rows stay visible and are never saved. Omitted students are not removed from this class. Same-name students with different IDs stay separate.</p>
+            <p className="text-sm" data-testid="roster-exclusions">{excluded.size} explicitly excluded · {includedRows.length} included</p>
+            {targetChanged && <p role="alert" className="text-amber-800 text-sm">The selected class changed. Recheck this preview against the selected class before saving. Your edits and exclusions are retained.</p>}
+            {(previewDirty || targetChanged) && <button type="button" disabled={isProcessing || mappingDirty} onClick={recheckPreview} data-testid="recheck-roster-preview" className="border rounded px-3 py-2">Recheck edited preview</button>}
             {/* Summary Bar */}
             <div className="flex flex-wrap items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs gap-3">
               <div className="flex items-center space-x-3">
@@ -415,9 +501,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-800 flex items-start space-x-2.5">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
                 <div>
-                  <div className="font-bold">Blocking errors detected</div>
+                  <div className="font-bold">Review required before import</div>
                   <p className="mt-0.5 text-red-700">
-                    Please correct the highlighted issues below before importing. Click &ldquo;Edit pasted list&rdquo; to modify your records.
+                    Correct or explicitly exclude affected rows, then recheck the preview. Apply any changed mapping before importing.
                   </p>
                 </div>
               </div>
@@ -435,6 +521,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 <thead className="bg-slate-50 text-slate-700 font-bold sticky top-0 z-10 border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3 w-14">#</th>
+                    <th className="py-2.5 px-3">Include</th>
                     <th className="py-2.5 px-3">Last Name</th>
                     <th className="py-2.5 px-3">First Name</th>
                     <th className="py-2.5 px-3">Student Number</th>
@@ -456,33 +543,44 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                       }
                     >
                       <td className="py-2 px-3 font-mono text-slate-400">{row.rowNumber}</td>
-                      <td className="py-2 px-3 font-semibold text-slate-900">{row.lastName || '—'}</td>
-                      <td className="py-2 px-3 font-semibold text-slate-900">{row.firstName || '—'}</td>
-                      <td className="py-2 px-3 font-mono font-bold text-slate-800">{row.studentNumber || '—'}</td>
+                      <td className="py-2 px-3"><input type="checkbox" aria-label={`Include row ${row.rowNumber}`} checked={!excluded.has(row.rowNumber)} disabled={isProcessing || mappingDirty} onChange={e => {
+                        const next = new Set(excluded);
+                        if (e.target.checked) next.delete(row.rowNumber); else next.add(row.rowNumber);
+                        setExcluded(next); setPreviewDirty(true);
+                      }} />{excluded.has(row.rowNumber) && <span>Excluded</span>}</td>
+                      {(['lastName', 'firstName', 'studentNumber'] as const).map(field => <td key={field} className="py-2 px-3">
+                        <input type="text" aria-label={`Row ${row.rowNumber} ${field}`} value={row[field]} disabled={isProcessing || mappingDirty || excluded.has(row.rowNumber)} className="border rounded p-1 w-36" onChange={e => {
+                          setCandidateRows(candidateRows.map(current => current.rowNumber === row.rowNumber ? { ...validateEditedRosterRow({ ...current, [field]: e.target.value }), status: 'new' } : current));
+                          setSourceErrors({ ...sourceErrors, [row.rowNumber]: validateEditedRosterRow({ ...row, [field]: e.target.value }).error });
+                          setPreviewDirty(true);
+                        }} />
+                      </td>)}
                       <td className="py-2 px-3">
-                        {row.status === 'new' && (
+                        {excluded.has(row.rowNumber) && <span className="text-slate-500">Excluded</span>}
+                        {row.status === 'new' && !excluded.has(row.rowNumber) && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                             New Student
                           </span>
                         )}
-                        {row.status === 'existing_enrolling' && (
+                        {row.status === 'existing_enrolling' && !excluded.has(row.rowNumber) && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
                             Existing Student
                           </span>
                         )}
-                        {row.status === 'already_enrolled' && (
+                        {row.status === 'already_enrolled' && !excluded.has(row.rowNumber) && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                             Already in Class
                           </span>
                         )}
-                        {row.status === 'error' && (
+                        {row.status === 'error' && !excluded.has(row.rowNumber) && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800">
                             Needs Correction
                           </span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-[11px]">
-                        {row.error ? (
+                        <details><summary>Source row</summary><span className="whitespace-pre-wrap">{row.rawText}</span></details>
+                        {excluded.has(row.rowNumber) ? <span>Explicitly excluded — will not be imported. {row.error}</span> : row.error ? (
                           <span className="text-red-700 font-medium">{row.error}</span>
                         ) : row.warning ? (
                           <span className="text-amber-700">{row.warning}</span>
@@ -500,6 +598,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <button
                 type="button"
+                disabled={isProcessing}
                 onClick={() => setImportStep('input')}
                 data-testid="edit-pasted-list-btn"
                 className="inline-flex items-center space-x-1.5 px-4 py-2 text-slate-700 hover:bg-slate-100 text-xs font-semibold rounded-xl transition"
@@ -511,10 +610,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <div className="flex items-center space-x-3">
                 <button
                   type="button"
+                  disabled={isProcessing}
                   onClick={() => {
                     setImportStep('input');
                     setRosterText('');
                     setCandidateRows([]);
+                    setExcluded(new Set());
+                    setPasteNotice('');
+                    setPreviewError(null);
                   }}
                   className="px-4 py-2 text-slate-500 hover:bg-slate-100 text-xs font-semibold rounded-xl transition"
                 >
@@ -544,7 +647,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   Roster Imported Successfully
                 </h3>
                 <p className="text-xs text-emerald-800">
-                  Students have been enrolled into <strong>{classTitleString}</strong>.
+                  Students have been enrolled into <strong>{importTargetTitle}</strong>.
                 </p>
               </div>
             </div>
