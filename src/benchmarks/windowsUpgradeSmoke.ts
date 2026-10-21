@@ -805,7 +805,7 @@ async function main() {
     await weight.fill(previousWeight);
     await waitUntil(async () => await installButton.isEnabled() ? true : undefined, 'restored Settings installation eligibility');
     const metadataRequests = [...metadataBeforeQuit, ...await running.app.evaluate(() => (globalThis as any).__upgradeMetadataRequests)];
-    assert.equal(metadataRequests.length, 4, 'Only four explicit release-check clicks may contact metadata');
+    assert.equal(metadataRequests.filter((request: any) => request.destination.endsWith('/latest')).length, 4, 'Only four explicit release-check clicks may query latest; explicit download verification also reads pinned approval/tag metadata');
     assert.ok(metadataRequests.every((request: any) => Object.keys(request.headers).sort().join(',') === 'Accept,User-Agent'), 'Manual metadata requests contain only static headers');
     assert.ok(requestHeaders.every(headers => !headers.some(header => /^(authorization|cookie|referer|x-user-staging-id)$/i.test(header))), 'Installer transport must strip account/session/staging headers');
     const before = await snapshotAll(running.page);
