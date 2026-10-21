@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, session, dialog, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, dialog, systemPreferences, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
 const { existsSync } = require('node:fs');
@@ -12,6 +12,19 @@ const { createManualCheck, trustedCaller } = require('./manualUpdater.cjs');
 const manualCheck = createManualCheck({ platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion() });
 let updateWindow;
 let installerUpdates;
+const { createCaptureDrive, DriveError } = require('./captureDrive.cjs');
+const { readConfig, authorizeDesktop } = require('./captureDriveAuth.cjs');
+const driveConfig = () => readConfig(path.join(app.getPath('userData'), 'desktop-drive-oauth.json'));
+const captureDrive = createCaptureDrive({ configured: () => !!driveConfig(),
+  authorize: signal => authorizeDesktop({ config: driveConfig(), openExternal: url => shell.openExternal(url), signal }) });
+for (const method of ['status', 'connect', 'list', 'download', 'cancel', 'disconnect']) {
+  ipcMain.handle(`capture-drive:${method}`, async (event, ...args) => {
+    requireUpdateCaller(event, args, method === 'download' ? 1 : 0);
+    try { return { ok: true, value: await captureDrive[method](...args) }; }
+    catch (error) { return { ok: false, message: error instanceof DriveError ? error.message : 'Drive action failed. Retry or use a local ZIP.' }; }
+  });
+}
+app.on('before-quit', () => captureDrive.disconnect());
 const exportReportPdf = require('./reportPdf.cjs').createReportPdfExporter({ BrowserWindow, dialog, session, parent: () => updateWindow });
 ipcMain.handle('assessment-report:pdf', (event, ...args) => {
   requireUpdateCaller(event, args, 2);
@@ -61,6 +74,9 @@ function createWindow() {
 
   updateWindow = mainWindow;
   require('./dictationIpc.cjs').attachDictation({ app, window: mainWindow, ipcMain, dialog, systemPreferences });
+  mainWindow.on('closed', () => captureDrive.disconnect());
+  mainWindow.webContents.on('render-process-gone', () => captureDrive.disconnect());
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) captureDrive.disconnect(); });
 
   // Remove default menu bar for clean teacher desktop experience
   if (process.env.NODE_ENV !== 'development') {

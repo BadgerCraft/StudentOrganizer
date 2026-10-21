@@ -24,3 +24,12 @@ contextBridge.exposeInMainWorld('desktopDictation', Object.freeze({
     return () => ipcRenderer.removeListener('dictation:interrupted', listener);
   }
 }));
+
+contextBridge.exposeInMainWorld('desktopCaptureDrive', Object.freeze({
+  status: () => ipcRenderer.invoke('capture-drive:status'),
+  connect: () => ipcRenderer.invoke('capture-drive:connect'),
+  list: () => ipcRenderer.invoke('capture-drive:list'),
+  download: id => ipcRenderer.invoke('capture-drive:download', id),
+  cancel: () => ipcRenderer.invoke('capture-drive:cancel'),
+  disconnect: () => ipcRenderer.invoke('capture-drive:disconnect')
+}));
