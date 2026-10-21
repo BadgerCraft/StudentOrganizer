@@ -5,6 +5,7 @@ import { getActiveTeacherId, getAppIdentity, getIdentityEpoch, subscribeIdentity
 import { CaptureAttachmentService, base64ToBytes } from './attachmentService';
 import type { CaptureImportReceipt } from './types';
 import { CAPTURE_LIMITS, decodeCapturePackage, type ParsedCapturePackage } from '../../shared/capturePackage';
+import { DriveCapturePicker } from './DriveCapturePicker';
 import { CapturePagePreview } from './CapturePagePreview';
 import { AuthorizationError } from '../services/authHelper';
 
@@ -95,25 +96,36 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
     const row = context?.roster.find(row => row.enrollment.id === id);
     return row ? `${row.student.firstName} ${row.student.lastName} (${row.student.localStudentNumber})` : 'Saved student attachment';
   };
-  async function read(file?: File) {
-    if (!file || !actor || lock.current || stale) return;
+  async function read(source?: File | (() => Promise<File>), signal?: AbortSignal) {
+    if (!source || !actor || lock.current || stale) return;
     if (pkg && pkg.submissions.some(submission => !matched.has(submission.id)) && !window.confirm('Choose another package? Confirmed attachments stay saved. Unmatched sets can be recovered by reopening this ZIP.')) return;
     lock.current = true; setBusy(true); setError('');
     try {
+      signal?.throwIfAborted();
+      setStatus(typeof source === 'function' ? 'Retrieving private Drive upload…' : 'Reading local ZIP…');
+      const file = typeof source === 'function' ? await source() : source;
+      signal?.throwIfAborted();
+      if (!valid(actor)) return;
       if (!file.name.toLowerCase().endsWith('.zip') || !file.size || file.size > CAPTURE_LIMITS.archiveBytes) throw new Error('Choose a completed phone ZIP, at most 256 MB.');
       setStatus('Validating package and photos locally…');
-      const next = await decodeCapturePackage(new Uint8Array(await file.arrayBuffer()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      signal?.throwIfAborted();
+      const next = await decodeCapturePackage(bytes);
+      signal?.throwIfAborted();
       if (!valid(actor)) throw new Error('Teacher context changed. Reopen under the intended teacher.');
       const saved = await service.reconcile(assessmentId, next, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       const current = await service.context(assessmentId, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       const life = await service.lifecycle(assessmentId, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       setLifecycle(life); setAppendRoot('');
       setPackage(next); setReceipts(saved); setContext(current); setSubmissionId(''); setEnrollmentId('');
       setStatus(`${next.submissions.length} page sets ready; ${saved.length} already saved. Select a page set and a student, then Confirm match.`);
-    } catch (error) { quarantineDenied(error); if (mounted.current) { setError(error instanceof Error ? error.message : String(error)); setStatus('Import failed. Your previous package and saved attachments are retained.'); } }
+    } catch (error) { quarantineDenied(error); if (mounted.current) { setError(signal?.aborted ? 'Drive import cancelled. Your previous package and saved attachments are retained.' : error instanceof Error ? error.message : String(error)); setStatus('Import failed. Your previous package and saved attachments are retained.'); } }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   async function confirmMatch() {
@@ -206,8 +218,9 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
     {loadState === 'loading' && <p role="status">Loading authorized picture attachments…</p>}
     {loadState === 'error' && <div role="alert" className="rounded bg-red-50 p-3 text-red-800"><p>{loadError}</p><p>Saved attachments and matches are retained.</p><button type="button" className={button} disabled={busy} onClick={() => setLoadAttempt(value => value + 1)}>Retry loading picture attachments</button></div>}
     {showImport && <><header className="flex flex-wrap justify-between gap-3 items-start"><div><h2 className="text-xl font-bold">Match phone-photo work</h2><p>{context?.assessment.title ?? 'Loading assignment…'}</p></div><div className="flex gap-2">{!embedded && <button className={button} disabled={busy} onClick={onSwitchTeacher}>Switch teacher</button>}<button className={button} disabled={busy} onClick={close}>Close matching</button></div></header>
-    <p>Choose the completed ZIP downloaded from your phone or private Drive. Student-name labels help you choose; they never assign a student automatically. Confirm saves the entire page set locally. Then start marking the saved submission below.</p>
+    <p>Choose an uploaded assignment from private Drive, or a completed ZIP from local files. Student-name labels help you choose; they never assign a student automatically. Confirm saves the entire page set locally. Then start marking the saved submission below.</p>
     {loadState === 'ready' && stale && <p role="alert">{actor ? 'Teacher context changed. Close and reopen this assignment.' : 'Loading authorized class roster…'}</p>}
+    {actor && !stale && <DriveCapturePicker key={`${assessmentId}:${userId}:${epoch}`} disabled={busy || stale} onLoad={read} />}
     <label className="block">Completed phone package (.zip)<input className="block mt-1" data-testid="capture-zip" type="file" accept=".zip,application/zip" disabled={busy || stale} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void read(file); }} /></label>
     {pkg && <><h2 className="text-xl font-semibold">{pkg.manifest.assignmentName}</h2><div className="grid md:grid-cols-2 gap-5">
       <section aria-label="Phone page sets"><h3 className="font-semibold mb-2">Page sets</h3><div className="space-y-2">

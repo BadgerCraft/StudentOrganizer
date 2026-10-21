@@ -10,6 +10,8 @@ on:
       - 'src/db/**'
       - 'src/services/**'
       - 'scripts/captureDesktopSmoke.ts'
+      - 'scripts/captureDriveSmoke.ts'
+      - 'electron/captureDrive*.cjs'
       - 'scripts/unifiedMarkingSmoke.ts'
       - 'scripts/helpers/unifiedMarking.ts'
       - 'src/components/AssessmentHubView.tsx'
@@ -55,6 +57,7 @@ jobs:
           npm run test:browser --prefix apps/phone-capture
           npm run test:native-browser --prefix apps/phone-capture
           CAPTURE_PHONE_ZIP=/tmp/capture-phone-e2e.zip node --import tsx scripts/captureDesktopSmoke.ts
+          node --import tsx scripts/captureDriveSmoke.ts
           npm run test:capture:late-work
           npm run test:capture:large-photo
           npm run test:marking:unified

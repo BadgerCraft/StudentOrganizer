@@ -37,3 +37,6 @@ ios/App/build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# Operator-approved desktop OAuth client configuration (never commit).
+desktop-drive-oauth.json
