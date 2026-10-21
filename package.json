@@ -144,6 +144,8 @@
           "manifest.json"
         ]
       }
-    ]
+    ],
+    "afterPack": "scripts/dictationAfterPack.cjs",
+    "afterSign": "scripts/dictationAfterSign.cjs"
   }
 }

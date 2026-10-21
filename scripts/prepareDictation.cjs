@@ -3,6 +3,7 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { fingerprint } = require('./dictationRuntimeIntegrity.cjs');
 const REVISION = 'a8d002cfd879315632a579e73f0148d06959de36';
 const root = path.resolve(__dirname, '..'), destination = path.join(root, 'dictation-runtime');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'student-dictation-build-'));
@@ -22,6 +23,6 @@ try {
   const binary = path.join(build, 'bin', ...(process.platform === 'win32' ? ['Release'] : []), filename);
   fs.copyFileSync(binary, path.join(destination, filename));
   fs.copyFileSync(path.join(source, 'LICENSE'), path.join(destination, 'LICENSE'));
-  fs.writeFileSync(path.join(destination, 'manifest.json'), JSON.stringify({ engine: 'whisper.cpp', version: '1.7.6', revision: REVISION, platform: process.platform, architecture, bytes: fs.statSync(binary).size, modelBundled: false }, null, 2));
+  fs.writeFileSync(path.join(destination, 'manifest.json'), JSON.stringify({ engine: 'whisper.cpp', version: '1.7.6', revision: REVISION, platform: process.platform, architecture, ...fingerprint(binary), modelBundled: false }, null, 2));
   console.log(`Local runtime prepared (${fs.statSync(binary).size} bytes); no model downloaded or bundled.`);
 } finally { fs.rmSync(directory, { recursive: true, force: true }); }

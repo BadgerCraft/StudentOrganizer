@@ -47,7 +47,7 @@ jobs:
           # No certificate, keychain secret, publishing token or notarization credential is supplied.
           CSC_FOR_PULL_REQUEST: 'true'
       - name: Check packaged local speech runtime without audio
-        run: node scripts/dictationRuntimeSmoke.cjs "release/mac${{ matrix.arch == 'arm64' && '-arm64' || '' }}/Ontario Teacher Assessment.app/Contents/Resources/dictation-runtime"
+        run: node scripts/dictationRuntimeSmoke.cjs "release/mac${{ matrix.arch == 'arm64' && '-arm64' || '' }}/Ontario Teacher Assessment.app/Contents/Resources/dictation-runtime" "release/dictation-runtime-${{ matrix.arch }}.json"
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
       - name: Compile bundled iOS app without credentials
@@ -87,6 +87,7 @@ jobs:
             release/*.dmg
             release/*.zip
             release/mac-smoke/**
+            release/dictation-runtime-*.json
             release/ios-build.log
           if-no-files-found: error
           retention-days: 90
