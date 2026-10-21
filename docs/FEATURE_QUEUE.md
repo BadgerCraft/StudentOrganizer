@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October21 — approved fictional analytics pipeline
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| F-ANALYTICS-PIPELINE | Tyler approved working analytics using simulated teachers: bounded consent-controlled instrumentation/outbox, privacy validation, explicit local transport/export, persistent local collector/aggregation and queried owner dashboard. Commits, ordinary safe push, separate PR and necessary tests authorized. Real collection/transmission, production activation, services/credentials/permissions, merge/release/deploy excluded. | Independent modules implemented from PR43 main `90054e9`; stable PR44 `2cab3d8` integrated only on own branch `codex/analytics-pipeline-20261021`. No PR44 branch write. Query-backed adapter, default denial, title omission/fixed approved labels, separate demo/measured-test sources, mature calendar cohorts and academic suppression implemented. Implemented and independently reviewed;765 full-suite tests,26 focused privacy/persistence/metric regressions, both builds/types and production Chromium pipeline/update regressions PASS. No remaining concrete source finding; native analytics-renderer/user acceptance unverified. Separate stacked PR publication checkpoint follows in [work order](work-orders/ANALYTICS-2026-10-21.md). Real activation remains unavailable pending destination/consent/privacy approval and separate production implementation. |
+
+
 ## October 20 — approved separate owner Control Panel increment
 
 | Stable ID | Disposition | Next action / gate |

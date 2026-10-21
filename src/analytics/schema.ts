@@ -47,7 +47,7 @@ export function validateEvent(input: unknown): Event {
     }
   } else if (!['save_failed', 'import_failed', 'retry'].includes(String(e.code)) || !Number.isInteger(e.count) || Number(e.count) < 1 || Number(e.count) > 100) throw new Error('Invalid reliability summary');
   if (new TextEncoder().encode(JSON.stringify(e)).length > LIMITS.eventBytes) throw new Error('Oversize analytics event');
-  return structuredClone(e) as Event;
+  return JSON.parse(JSON.stringify(e, (_key, value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]])) : value)) as Event;
 }
 export function localDay(at: string, timezone: string) {
   const p = new Intl.DateTimeFormat('en', {timeZone: timezone, year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(at));

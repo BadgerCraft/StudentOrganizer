@@ -3,14 +3,18 @@ export type QueryPolicy = { minimumTeachers: number; allowAcademic: boolean; min
 export const conservativePolicy: QueryPolicy = {minimumTeachers:5, allowAcademic:false, minimumSamples:10};
 const dayNumber = (day: string) => Date.parse(`${day}T00:00:00Z`) / 86400000;
 export function queryDashboard(events: Event[], namespace: Namespace, asOf: string, observedSince: string, policy = conservativePolicy) {
-  if (!Number.isFinite(Date.parse(asOf)) || !Number.isFinite(Date.parse(observedSince)) || observedSince > asOf || !Number.isInteger(policy.minimumTeachers) || policy.minimumTeachers < 2 || !Number.isInteger(policy.minimumSamples) || policy.minimumSamples < 10) throw new Error('Invalid query policy/window');
+  const validTime=(s:string)=>Number.isFinite(Date.parse(s)) && new Date(s).toISOString()===s;
+  if (!validTime(asOf) || !validTime(observedSince) || typeof policy.allowAcademic!=='boolean' || observedSince > asOf || !Number.isInteger(policy.minimumTeachers) || policy.minimumTeachers < 2 || !Number.isInteger(policy.minimumSamples) || policy.minimumSamples < 10) throw new Error('Invalid query policy/window');
   const source = events.filter(e => e.namespace === namespace && e.at >= observedSince && e.at <= asOf);
   const workflows = source.filter((e): e is Extract<Event,{kind:'workflow_completed'}> => e.kind === 'workflow_completed');
   const teachers = new Set(workflows.map(e => e.teacher));
   const elapsed = (e: Event) => dayNumber(localDay(asOf,e.timezone)) - dayNumber(localDay(e.at,e.timezone));
   const active = (days: number) => new Set(workflows.filter(e => elapsed(e) >= 0 && elapsed(e) < days).map(e => e.teacher));
   const weekly = active(7), monthly = active(30);
-  const first = [...teachers].map(teacher => workflows.filter(e => e.teacher === teacher).sort((a,b)=>a.at.localeCompare(b.at))[0]);
+  const history = events.filter((e): e is Extract<Event,{kind:'workflow_completed'}> => e.namespace===namespace && e.kind==='workflow_completed' && e.at<=asOf);
+  const firstKnown = [...teachers].map(teacher => history.filter(e=>e.teacher===teacher).sort((a,b)=>a.at.localeCompare(b.at))[0]);
+  const first = firstKnown.filter(e=>e.at>=observedSince);
+
   const retention = (days: number) => {
     // Activation cohort is observable only with the full return window [d, 2d).
     const mature = first.filter(e => elapsed(e) >= days * 2);
@@ -25,13 +29,13 @@ export function queryDashboard(events: Event[], namespace: Namespace, asOf: stri
   });
   const academic = new Map<string, typeof workflows>();
   for (const e of workflows) {
-    const key = `${e.teacher}:${e.course}:${e.assignment}`;
+    const key = `${e.teacher}:${e.course}:${e.assignment}:${e.summary?.scale??'none'}:${e.summary?.category??'none'}:${e.summary?.basis??'none'}`;
     academic.set(key,[...(academic.get(key)??[]),e]);
   }
   const assignmentRows = [...academic.values()].map(rows => {
     const e = rows.sort((a,b)=>b.at.localeCompare(a.at))[0];
     const s = e.summary;
-    return {teacher:e.teacher, course:e.course, assignment:e.assignment, label:e.label ?? 'Title omitted', workflows:rows.length,
+    return {teacher:e.teacher, course:e.course, assignment:e.assignment, label:e.label ?? 'Title omitted', workflows:workflows.filter(w=>w.teacher===e.teacher && w.course===e.course && w.assignment===e.assignment).length, snapshotAt:e.at,
       academic: policy.allowAcademic && teachers.size >= policy.minimumTeachers && s && s.sampleSize >= policy.minimumSamples ? s : null,
       academicWithheld: !(policy.allowAcademic && teachers.size >= policy.minimumTeachers && s && s.sampleSize >= policy.minimumSamples)};
   });
@@ -40,7 +44,8 @@ export function queryDashboard(events: Event[], namespace: Namespace, asOf: stri
   const assignments = workflows.filter(e=>monthly.has(e.teacher) && elapsed(e)<30);
   const distinctAssignments = new Set(assignments.map(e=>`${e.teacher}:${e.course}:${e.assignment}`)).size;
   return {schema:1, namespace, asOf, observedSince, identityNotice:'Fictional teacher tokens; installations are not unique teachers. No identity verification.',
-    adoption:{activated:teachers.size, installations:new Set(workflows.map(e=>e.install)).size, weeklyActive:weekly.size, monthlyActive:monthly.size,
+    activationNotice:'Activation is first observed completion within declared continuous observation coverage; earlier/unknown history is not a new signup. Retention is limited to retained observed cohorts.',
+    adoption:{activated:first.length,knownPreviouslyActivated:firstKnown.length-first.length, installations:new Set(workflows.map(e=>e.install)).size, weeklyActive:weekly.size, monthlyActive:monthly.size,
       assignmentsPerMonthlyActive:monthly.size >= policy.minimumTeachers ? distinctAssignments/monthly.size:null,
       repeatingTeachers:usage.filter(u=>u.repeatAssignments>0).length, weeklyRetention:retention(7), monthlyRetention:retention(30), suppressed:teachers.size<policy.minimumTeachers},
     // Academic rows are intentionally separate from adoption, never a ranking.

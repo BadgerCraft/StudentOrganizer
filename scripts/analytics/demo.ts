@@ -8,6 +8,8 @@ await simulate(collector,'demo'); await simulate(collector,'measured-test');
 const demo=await collector.query('demo',AS_OF,OBSERVED);
 const measured=await collector.query('measured-test',AS_OF,OBSERVED);
 await mkdir(directory,{recursive:true});
+await writeFile(join(directory,'events-demo.json'),JSON.stringify(await collector.export('demo')));
+await writeFile(join(directory,'events-measured-test.json'),JSON.stringify(await collector.export('measured-test')));
 await writeFile(join(directory,'dashboard-demo.json'),JSON.stringify(demo,null,2));
 await writeFile(join(directory,'dashboard-measured-test.json'),JSON.stringify(measured,null,2));
 console.log(JSON.stringify({directory,truth,demo:demo.adoption,measuredTest:measured.adoption,externalTraffic:0},null,2));

@@ -1,14 +1,16 @@
-import { mkdir, readFile, rename, writeFile, open, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile, open, unlink, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Event, LIMITS, Namespace, validateEvent } from '../../src/analytics/schema';
+import { ingestEvents, CollectorState } from '../../src/analytics/collector';
 import { queryDashboard, QueryPolicy } from '../../src/analytics/query';
-type Store = {schema:1; events:Event[]; withdrawn:string[]};
+type Store = CollectorState;
 /** Disposable local fictional collector. No listener, credentials, account or network transport. */
 export class LocalCollector {
   private pending: Promise<unknown> = Promise.resolve();
   constructor(private directory: string, private now = () => Date.now()) {}
   private async load(): Promise<Store> {
     try {
+      if((await stat(join(this.directory,'collector.json'))).size>LIMITS.collectorEvents*LIMITS.eventBytes) throw new Error('Collector capacity');
       const raw = await readFile(join(this.directory,'collector.json'),'utf8');
       if (Buffer.byteLength(raw)>LIMITS.collectorEvents*LIMITS.eventBytes) throw new Error('Collector capacity');
       const s = JSON.parse(raw);
@@ -35,16 +37,7 @@ export class LocalCollector {
   }
   ingest(input: unknown) {
     return this.transaction(s=>{
-      if(!Array.isArray(input)||input.length>LIMITS.batch) throw new Error('Invalid batch');
-      const events=input.map(validateEvent); // Validate whole batch before mutation.
-      const cutoff=this.now()-LIMITS.retentionDays*86400000;
-      if(events.some(e=>Date.parse(e.at)<cutoff||Date.parse(e.at)>this.now()||s.withdrawn.includes(`${e.namespace}:${e.teacher}`))) throw new Error('Expired/future/withdrawn event');
-      const retained=s.events.filter(e=>Date.parse(e.at)>=cutoff);
-      const seen=new Map(retained.map(e=>[`${e.namespace}:${e.id}`,JSON.stringify(e)]));
-      let inserted=0;
-      for(const e of events) { const key=`${e.namespace}:${e.id}`; if(seen.has(key)) { if(seen.get(key)!==JSON.stringify(e)) throw new Error('Conflicting replay'); continue; } seen.set(key,JSON.stringify(e)); retained.push(e); inserted++; }
-      if(retained.length>LIMITS.collectorEvents) throw new Error('Collector capacity');
-      s.events=retained; return {inserted};
+      return ingestEvents(s,input,this.now());
     });
   }
   withdraw(namespace:Namespace,teacher:string) {
@@ -53,6 +46,7 @@ export class LocalCollector {
   query(namespace:Namespace,asOf:string,observedSince:string,policy?:QueryPolicy) {
     return this.transaction(s=>queryDashboard(s.events.filter(e=>Date.parse(e.at)>=this.now()-LIMITS.retentionDays*86400000),namespace,asOf,observedSince,policy),false);
   }
+  export(namespace:Namespace) { return this.transaction(s=>({schema:1 as const,events:s.events.filter(e=>e.namespace===namespace && !s.withdrawn.includes(`${e.namespace}:${e.teacher}`) && Date.parse(e.at)>=this.now()-LIMITS.retentionDays*86400000)}),false); }
   retain() { return this.transaction(s=>{s.events=s.events.filter(e=>Date.parse(e.at)>=this.now()-LIMITS.retentionDays*86400000);}); }
 }
 /** Explicit local export: validated payload only, never a teacher database dump. */

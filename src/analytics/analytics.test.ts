@@ -27,5 +27,36 @@ describe('real local collector pipeline',()=>{
  it('serializes concurrent ingestion, rejects another process lock, purges withdrawn teacher and rejects replay',()=>temporary(async dir=>{const c=new LocalCollector(dir,()=>now);await Promise.all(Array.from({length:15},()=>c.ingest([event()])));expect((await c.query('measured-test',AS_OF,OBSERVED)).teacherCourseAssignments[0].workflows).toBe(1);const lock=await open(join(dir,'collector.lock'),'wx');await expect(new LocalCollector(dir,()=>now).ingest([event()])).rejects.toMatchObject({code:'EEXIST'});await lock.close();await rm(join(dir,'collector.lock'));await c.withdraw('measured-test','sim_teacher_a');expect((await c.query('measured-test',AS_OF,OBSERVED)).adoption.activated).toBe(0);await expect(new LocalCollector(dir,()=>now).ingest([event()])).rejects.toThrow('withdrawn');}));
  it('preserves corrupt/future collector bytes and safely expires retained events',()=>temporary(async dir=>{const path=join(dir,'collector.json');await writeFile(path,'{"schema":2}');await expect(new LocalCollector(dir,()=>now).ingest([event()])).rejects.toThrow();expect(await readFile(path,'utf8')).toBe('{"schema":2}');await rm(path);const c=new LocalCollector(dir,()=>now);await c.ingest([event()]);const later=new LocalCollector(dir,()=>now+401*86400000);await later.retain();expect(JSON.parse(await readFile(path,'utf8')).events).toEqual([]);await expect(later.ingest([event()])).rejects.toThrow('Expired');}));
  it('uses local calendar boundaries, mature windows and conservative suppression',()=>{const e={...event(),at:'2026-10-15T01:00:00.000Z'};const q=queryDashboard([e],'measured-test','2026-10-21T12:00:00.000Z',OBSERVED);expect(q.adoption.weeklyActive).toBe(0);expect(q.adoption.weeklyRetention).toMatchObject({eligible:0,rate:null,withheld:true});expect(q.adoption.assignmentsPerMonthlyActive).toBeNull();expect(q.adoption.installations).toBe(1);});
- it('keeps unlike academic contexts separate and requires opt-in plus cohort/sample policy',()=>temporary(async dir=>{const c=new LocalCollector(dir,()=>now);await simulate(c,'measured-test');const q=await c.query('measured-test',AS_OF,OBSERVED,{allowAcademic:true,minimumTeachers:5,minimumSamples:10});expect(q.teacherCourseAssignments.filter(r=>r.academic).length).toBe(3);expect(q.teacherCourseAssignments.find(r=>r.academic)?.academic).toMatchObject({scale:'percentage-v1',category:'K',basis:'assignment',average:75});const hidden=await c.query('measured-test',AS_OF,OBSERVED,{allowAcademic:true,minimumTeachers:7,minimumSamples:10});expect(hidden.teacherCourseAssignments.every(r=>r.academic===null)).toBe(true);}));
+ it('keeps unlike academic contexts separate and requires opt-in plus cohort/sample policy',()=>temporary(async dir=>{const c=new LocalCollector(dir,()=>now);await simulate(c,'measured-test');const q=await c.query('measured-test',AS_OF,OBSERVED,{allowAcademic:true,minimumTeachers:5,minimumSamples:10});expect(q.teacherCourseAssignments.filter(r=>r.academic).length).toBe(6);expect(q.teacherCourseAssignments.find(r=>r.academic?.basis==='assignment')?.academic).toMatchObject({scale:'percentage-v1',category:'K',basis:'assignment',average:75});const hidden=await c.query('measured-test',AS_OF,OBSERVED,{allowAcademic:true,minimumTeachers:7,minimumSamples:10});expect(hidden.teacherCourseAssignments.every(r=>r.academic===null)).toBe(true);}));
+});
+
+describe('independent-review regression cases',()=>{
+ it('recognizes known pre-window activation without inventing a new cohort',()=>{
+   const old={...event(),id:'sim_old',at:'2026-07-01T12:00:00.000Z'};
+   const q=queryDashboard([old,event()],'measured-test',AS_OF,'2026-10-01T00:00:00.000Z');
+   expect(q.adoption.activated).toBe(0);expect(q.adoption.knownPreviouslyActivated).toBe(1);expect(q.adoption.monthlyActive).toBe(1);
+   expect(q.adoption.monthlyRetention.eligible).toBe(0);
+ });
+ it('reordered JSON is an idempotent replay',()=>temporary(async dir=>{
+   const c=new LocalCollector(dir,()=>now);await c.ingest([event()]);
+   const reordered=Object.fromEntries(Object.entries(event()).reverse());expect(await c.ingest([reordered])).toEqual({inserted:0});
+ }));
+ it('preserves distinct academic category, scale and class/assignment contexts',()=>{
+   const variants=[{scale:'percentage-v1',category:'K',basis:'assignment',average:70},{scale:'level-1-4-v1',category:'T',basis:'assignment',average:3},{scale:'percentage-v1',category:'K',basis:'class',average:75}];
+   const rows=variants.map((v,i)=>validateEvent({...event(`sim_event_${i}`),summary:{...v,sampleSize:20}}));
+   const q=queryDashboard(rows,'measured-test',AS_OF,OBSERVED,{allowAcademic:true,minimumTeachers:2,minimumSamples:10});
+   expect(q.teacherCourseAssignments.length).toBe(3);expect(q.teacherCourseAssignments.every(r=>r.academic===null)).toBe(true);
+ });
+ it('bounds hung transport attempts and signals withdrawal cancellation',async()=>{
+   const b=new FictionalOutbox(memory(),'measured-test',()=>now,5);b.consent(true);b.capture(event());
+   let signal:AbortSignal|undefined;await b.flush({send:async(_events,s)=>{signal=s;await new Promise<void>(()=>{});}});expect(signal?.aborted).toBe(true);expect(b.status().queued).toBe(1);
+   const c=new FictionalOutbox(memory(),'measured-test',()=>now);c.consent(true);c.capture(event());const flushing=c.flush({send:async(_events,s)=>{signal=s;await new Promise<void>(()=>{});}});c.withdraw();await flushing;expect(signal?.aborted).toBe(true);expect(c.status().queued).toBe(0);
+ });
+ it('failed withdrawal is surfaced and restart never resumes the retained granted queue',async()=>{
+   let raw:string|null=null,fail=false;const storage={read:()=>raw,write:(v:string)=>{if(fail)throw Error();raw=v;}};
+   const b=new FictionalOutbox(storage,'measured-test',()=>now);b.consent(true);b.capture(event());fail=true;
+   expect(b.withdraw()).toBe(false);expect(b.status().healthy).toBe(false);expect(raw).toContain('granted');
+   const restarted=new FictionalOutbox(storage,'measured-test',()=>now);const send=vi.fn();await restarted.flush({send});expect(send).not.toHaveBeenCalled();
+   fail=false;const recovered=new FictionalOutbox(storage,'measured-test',()=>now);expect(recovered.status().consent).toBe('denied');expect(recovered.status().queued).toBe(0);expect(recovered.consent(true)).toBe(true);await recovered.flush({send});expect(send).not.toHaveBeenCalled();
+ });
 });

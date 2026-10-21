@@ -29,12 +29,15 @@ try {
   await page.goto(origin);
   await page.getByRole('heading', { name: 'Approve a tested candidate locally' }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Import candidate + verify installer' }).isDisabled(), true);
-  await page.getByRole('button', { name: 'Fictional dashboard' }).click();
-  await page.getByRole('heading', { name: 'Adoption & reliability demonstration' }).waitFor();
-  assert.match(await page.locator('main').innerText(), /Every teacher, assignment use, mark and operation below is invented/);
-  assert.match(await page.locator('main').innerText(), /4\/5 \(80%\)/);
-  assert.equal(await page.locator('table').count(), 4);
-  assert.equal(await page.getByRole('cell', { name: 'Argument essay', exact: true }).count(), 3);
+  await page.getByRole('button', { name: 'Analytics pipeline', exact: true }).click();
+  await page.getByRole('heading', { name: 'Queried adoption & reliability' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Run local pipeline', exact: true }).isDisabled(), true);
+  await page.getByLabel('I consent to this fictional simulation session only.').check();
+  await page.getByRole('button', { name: 'Run local pipeline', exact: true }).click();
+  await page.getByText(/Local fictional pipeline completed:/).waitFor();
+  assert.equal(await page.getByTestId('analytics-weekly').innerText(), '6');
+  assert.match(await page.locator('main').innerText(), /5 \/ 6/);
+  assert.equal(await page.locator('table').count(), 3);
   await page.setViewportSize({ width: 820, height: 1000 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   // Exercise UI actions with the real pure contract behind a fictional native-bridge double.
