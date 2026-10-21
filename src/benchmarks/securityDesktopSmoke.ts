@@ -89,10 +89,11 @@ async function main() {
     assert.deepEqual(await app.evaluate(() => (globalThis as any).__manualUpdateRequests), [], 'Opening Settings must not check for updates');
     const check = updates.getByRole('button', { name: 'Check for updates', exact: true });
     await check.click();
-    await updates.getByRole('status').filter({ hasText: 'No stable release is published.' }).waitFor();
+    await updates.getByRole('status').filter({ hasText: 'No approved stable release is published.' }).waitFor();
     assert.equal((await app.evaluate(() => (globalThis as any).__manualUpdateRequests)).length, 1);
     await check.click();
-    await updates.getByRole('status').filter({ hasText: 'Version 2.0.0 is available. Installation is unavailable' }).waitFor();
+    await updates.getByRole('status').filter({ hasText: 'No approved stable release is published.' }).waitFor();
+    assert.equal(await updates.getByRole('button', { name: 'Download update', exact: true }).count(), 0, 'Unapproved stable release must not be offered');
     assert.equal((await app.evaluate(() => (globalThis as any).__manualUpdateRequests)).length, 2);
     await check.click();
     await updates.getByRole('status').filter({ hasText: 'The update could not be checked. Try again later.' }).waitFor();
@@ -112,7 +113,7 @@ async function main() {
     await page.locator('[data-testid="save-student-settings-btn"]').click();
     await page.locator('[data-testid="student-settings-modal"]').waitFor({ state: 'hidden' });
     assert.equal(errors.length, 0, errors.join('; '));
-    console.log('PASS: Packaged app loads with CSP, preserves renderer protections, blocks remote images at both page/session layers with zero collector requests, permits an authorized profile save, and exercises the real manual-update preload/IPC with deterministic absent/available/error responses and no external update traffic.');
+    console.log('PASS: Packaged app loads with CSP, preserves renderer protections, blocks remote images at both page/session layers with zero collector requests, permits an authorized profile save, and exercises the real manual-update preload/IPC with deterministic absent/unapproved/error responses and no external update traffic.');
   } finally {
     if (app) await app.evaluate(async () => {
       const https = (process as any).getBuiltinModule('https');

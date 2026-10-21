@@ -47,4 +47,4 @@ The isolated implementation adds assessment-linked local marking. See [the check
 
 ## Separate owner Control Panel
 
-Stage1 is a separate executable with local update-approval preparation and a clearly fictional aggregate dashboard. It has no analytics collection or live publishing connection. See [its guide](apps/control-panel/README.md) for commands, boundaries and native verification limits. Local approval does not affect Student Organizer’s live Check for updates.
+The Control Panel is a separate executable with tested update approval and exact-file delivery preparation and a clearly fictional aggregate dashboard. It has no analytics collection or live publishing connection. See [its guide](apps/control-panel/README.md) for commands, boundaries and native verification limits. Student Organizer offers only approval-bearing exact-match releases; publishing those prepared files remains a separate authorized action. No real release was published here.

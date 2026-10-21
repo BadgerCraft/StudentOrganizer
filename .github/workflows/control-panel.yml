@@ -4,6 +4,7 @@ on:
     paths:
       - 'apps/control-panel/**'
       - 'electron/updateApproval.cjs'
+      - 'electron/releaseDelivery.cjs'
       - 'electron/manualUpdater.cjs'
       - 'electron/windowsInstallerUpdate.cjs'
       - 'scripts/audit-control-panel-package.cjs'
@@ -45,6 +46,8 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Typecheck native verification harness
+        run: npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --lib es2022,dom --types node --skipLibCheck --strict scripts/controlPanelNativeSmoke.ts
       - name: Build the separate owner executable (never publish)
         run: npm run control-panel:package:${{ matrix.platform }} -- ${{ matrix.architecture }}
       - name: Audit actual packaged entry and shared contract bytes

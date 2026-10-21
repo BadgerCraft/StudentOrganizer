@@ -85,7 +85,7 @@ function requestLatest() {
     } catch (error) { finish(error); }
   });
 }
-function createManualCheck({ platform, packaged, currentVersion, lookup = requestLatest }) {
+function createManualCheck({ platform, packaged, currentVersion, arch = process.arch, lookup = async () => { const value = await require('./releaseDelivery.cjs').lookupLatestApproved(arch); return value?.release || null; } }) {
   let pending;
   return () => {
     if (platform !== 'win32' || !packaged) return Promise.resolve({ status: 'unsupported' });
@@ -98,4 +98,4 @@ function createManualCheck({ platform, packaged, currentVersion, lookup = reques
     return pending;
   };
 }
-module.exports = { ENDPOINT, version, isNewer, releaseUrl, parseRelease, trustedCaller, createManualCheck };
+module.exports = { ENDPOINT, version, isNewer, releaseUrl, parseRelease, trustedCaller, createManualCheck, requestLatest };

@@ -19,7 +19,7 @@ const storeFile = path.join(profile, 'local-approval.json');
 const evidencePath = path.resolve(`release/control-panel/native-smoke-${process.platform}-${process.arch}.json`);
 const steps: string[] = [];
 let runtime: ElectronApplication | undefined;
-let page: Page;
+let page!: Page;
 const originalBytes = Buffer.from('FICTIONAL NON-EXECUTABLE INSTALLER FIXTURE\n');
 const artifact = path.join(fixtures, 'OntarioTeacherAssessment-1.0.2-x64-nsis.exe');
 const descriptor = path.join(fixtures, 'candidate.json');
@@ -101,6 +101,24 @@ try {
   assert.equal(preview.approval.status, 'approved');
   assert.equal(JSON.stringify(preview).includes(temporary), false);
   steps.push('Real bridge import/hash/state/test/approve/export; automatic dialog-result selection only; no fixture execution');
+
+  if (process.platform === 'win32') {
+    const refused = await page.evaluate(() => (window as any).ownerConsole.preparePublication(false));
+    assert.match(refused.error, /acknowledgement/);
+    await chooseFiles([temporary]);
+    const prepared = await page.evaluate(() => (window as any).ownerConsole.preparePublication(true));
+    assert.match(prepared.message, /No release was published/);
+    const folder = (await readdir(temporary)).find(name => name.startsWith('StudentOrganizer-release-'));
+    assert.ok(folder);
+    const record = JSON.parse(await readFile(path.join(temporary, folder, 'student-organizer-approval-x64.json'), 'utf8'));
+    assert.equal(record.mode, 'approved-release'); assert.equal(record.signature.signature, 'unsigned');
+    assert.deepEqual(await readFile(path.join(temporary, folder, candidate.artifact.name)), originalBytes);
+    steps.push('Actual Windows native signature inspection, unsigned owner acknowledgement and exact publication preparation; no publication');
+  } else {
+    const refused = await page.evaluate(() => (window as any).ownerConsole.preparePublication(true));
+    assert.match(refused.error, /Prepare delivery on Windows/);
+    steps.push('Mac publication preparation refuses unavailable Windows signature inspection');
+  }
 
   const approvedStore = await readFile(storeFile, 'utf8');
   await close(); await launch();

@@ -4,9 +4,10 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const contractRoot = app.isPackaged ? path.join(process.resourcesPath, 'owner-update-contract') : path.join(__dirname, '../../../electron');
 const approval = require(path.join(contractRoot, 'updateApproval.cjs'));
-const { hashFile } = require(path.join(contractRoot, 'windowsInstallerUpdate.cjs'));
+const { preparePublication } = require(path.join(contractRoot, 'releaseDelivery.cjs'));
+const { hashFile, inspectSignature } = require(path.join(contractRoot, 'windowsInstallerUpdate.cjs'));
 const { trustedCaller } = require(path.join(contractRoot, 'manualUpdater.cjs'));
-const { atomicJSON, verifyArtifact, assertPreviewDestination } = require('./store.cjs');
+const { atomicJSON, verifyArtifact, assertPreviewDestination, preparePublicationBundle } = require('./store.cjs');
 // This app never opens the teacher profile, IndexedDB, settings, exports or backups.
 app.setName('Student Organizer Control Panel');
 const isolatedProfile = app.commandLine.getSwitchValue('user-data-dir');
@@ -63,6 +64,17 @@ const handlers = {
     await save({ ...stored, approval: approval.revoke(stored.approval) });
     return snapshot('Local approval revoked. Previously exported preview files are independent snapshots.');
   },
+  publication: async acknowledgeUnsigned => {
+    if (typeof acknowledgeUnsigned !== 'boolean') throw new Error('Explicit unsigned policy choice required.');
+    if (process.platform !== 'win32') throw new Error('Prepare delivery on Windows so the real NSIS publisher signature can be inspected.');
+    await verify();
+    const native = await inspectSignature(stored.artifactPath);
+    const preparation = preparePublication(stored.approval, native, acknowledgeUnsigned);
+    const selected = await dialog.showOpenDialog(window, { title: 'Choose folder for LOCAL publication preparation — nothing is published', properties: ['openDirectory', 'createDirectory'] });
+    if (selected.canceled) return snapshot('Publication preparation cancelled.');
+    const destination = await preparePublicationBundle(selected.filePaths[0], preparation, stored.artifactPath, hashFile);
+    return snapshot(`Publication preparation saved to ${destination}. No release was published. Inspect the instructions; publication still needs separate approval.`);
+  },
   export: async () => {
     await verify();
     if (stored.approval.status !== 'approved') throw new Error('Only an approved candidate can be exported as a preview.');
@@ -74,7 +86,7 @@ const handlers = {
   }
 };
 for (const [name, handler] of Object.entries(handlers)) ipcMain.handle(`owner:${name}`, async (event, ...args) => {
-  if (!window || !trustedCaller(event, window.webContents, index) || args.length !== (name === 'test' ? 1 : 0)) throw new Error('Owner action denied.');
+  if (!window || !trustedCaller(event, window.webContents, index) || args.length !== (['test', 'publication'].includes(name) ? 1 : 0)) throw new Error('Owner action denied.');
   if (name === 'status') return snapshot();
   if (busy) throw new Error('Another local approval action is in progress.');
   busy = true;

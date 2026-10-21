@@ -165,9 +165,10 @@ async function installAndReopen(updater, { launchProcess = spawn, timeout = 1500
   }
 }
 function createInstallerUpdate({ supported, currentVersion, userData, installationDirectory, arch = process.arch, updater, tokenFactory, signature = inspectSignature,
+  approvalLookup = (value, targetArch) => require('./releaseDelivery.cjs').lookupVersionApproved(value, targetArch),
   backup = saveBackup, hash = hashFile, canReplace = () => assertWritableInstallation(installationDirectory), launch = installAndReopen, metadataTimeout = 10000, downloadTimeout = 15 * 60 * 1000 }) {
   let state = { status: supported ? 'idle' : 'unsupported', installationAvailable: supported };
-  let active = false, cancellation, timedOut = false, downloaded;
+  let active = false, cancellation, timedOut = false, downloaded, approvedRelease;
   const snapshot = () => ({ ...state });
   const fail = (message) => { state = { status: 'error', installationAvailable: supported, error: message }; return snapshot(); };
   if (supported) {
@@ -194,13 +195,14 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
     });
   }
   async function cleanDownload() {
-    downloaded = undefined;
+    downloaded = undefined; approvedRelease = undefined;
     if (updater?.downloadedUpdateHelper) await updater.downloadedUpdateHelper.clear();
   }
   async function verifyDownloaded(token) {
     if (!downloaded || updater.installerPath !== downloaded.file || (await hash(downloaded.file)) !== downloaded.sha512) throw new Error('The downloaded installer changed or its checksum is invalid. Download it again.');
     if (token?.cancelled) throw new Error('cancelled');
     const inspected = await signature(downloaded.file);
+    require('./releaseDelivery.cjs').assertSignature(approvedRelease, inspected);
     if (token?.cancelled) throw new Error('cancelled');
     return inspected;
   }
@@ -219,6 +221,10 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
       clearTimeout(timer);
       timer = setTimeout(() => { timedOut = true; cancellation.cancel(); }, downloadTimeout);
       const info = result.updateInfo;
+      const published = await approvalLookup(info.version, arch);
+      if (!published) throw new Error('Version has no published owner approval.');
+      approvedRelease = require('./releaseDelivery.cjs').assertManifest(published.document, info, arch);
+      if (cancellation.cancelled) throw new Error('cancelled');
       state = { status: 'downloading', installationAvailable: true, version: info.version, percent: 0 };
       const files = await updater.downloadUpdate(cancellation);
       if (cancellation.cancelled || !Array.isArray(files) || files.length !== 1) throw new Error('Installer download interrupted.');

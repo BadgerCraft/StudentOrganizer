@@ -1,65 +1,76 @@
-# Student Organizer Control Panel — Stage 1
+# Student Organizer Control Panel
 
-Separate owner-facing Electron executable for Tyler. Teacher settings remain teacher-controlled. This is a **local preparation prototype**, with a permanently labelled **fictional-data dashboard**. Nothing is collected from an installation. No student records, individual marks, essays, photos or authentication controls are included.
+A separate owner-facing Electron executable for Tyler, with update approval/delivery preparation and a permanently labelled fictional dashboard. Teacher settings remain teacher-controlled. There is no telemetry collector, teacher database access, student record payload, account management or publishing client.
 
 From the repository root (Node24, `npm ci`):
 
 ```sh
-npm run control-panel:build
 npm run control-panel:start
-# Browser-only layout preview; native approval actions are unavailable:
-npm run control-panel:dev
-# Local installers, never publication:
-npm run control-panel:package:win
-npm run control-panel:package:mac
-node scripts/audit-control-panel-package.cjs
+npm run control-panel:dev             # browser layout; native actions are inert
+npm run control-panel:package:win     # never publishes
+npm run control-panel:package:mac     # never publishes
 npm run test:control-panel:browser
+node scripts/audit-control-panel-package.cjs
+# On an appropriate disposable Windows/Mac runner, after packaging:
+node --import tsx scripts/controlPanelNativeSmoke.ts /path/to/packaged/executable
 ```
 
-Separate app ID: `ca.badgercraft.studentorganizer.controlpanel`. Default profile: `appData/StudentOrganizer-ControlPanel`; outputs: `release/control-panel`. It never opens Student Organizer's teacher profile, IndexedDB or settings. Only one instance may own its profile. Standard `--user-data-dir` supports disposable test profiles; do not point it at an existing teacher profile. Windows NSIS identity and Mac bundle identity differ from Student Organizer. Mac builds are unsigned (`identity: null`), not notarized, and may be blocked by macOS. No publisher credentials or keys are configured. Package configuration checks do not prove actual native launch.
+Separate app ID: `ca.badgercraft.studentorganizer.controlpanel`. Default profile: `appData/StudentOrganizer-ControlPanel`; outputs: `release/control-panel`. Only one instance owns a profile. Standard `--user-data-dir` supports disposable test profiles; never point it at a teacher profile. The shell excludes inherited root dependencies and bundles only its UI, built-in-module helpers and shared update contracts. Mac packages remain unsigned/not notarized; automated launch is not Gatekeeper or distribution acceptance.
 
-## Local approval workflow
+## Approve exact tested bytes
 
-1. Prepare a descriptor for an already built **Student Organizer Windows NSIS installer**, with its exact stable version, architecture (`x64` or `arm64`) and source commit. The helper reads bytes, computes SHA-512 and exclusively creates a new JSON file; it never runs or uploads the executable:
+1. Build the Student Organizer Windows NSIS installer, then create its descriptor:
 
    ```sh
    node scripts/prepare-update-candidate.cjs \
      /path/to/OntarioTeacherAssessment-1.0.2-x64-nsis.exe \
-     1.0.2 x64 SOURCE_COMMIT_40_LOWERCASE_HEX /path/to/candidate.json
+     1.0.2 x64 SOURCE_COMMIT_40_LOWERCASE_HEX /path/to/new-candidate.json
    ```
 
-2. Launch the separate console. Import the descriptor, then select the installer. Filename, byte count and SHA-512 must match. Unexpected fields (including URLs) are rejected. Importing another candidate resets verification/approval. Cancelling or failed validation preserves the previous record.
-3. Actually test those bytes on a disposable machine, including package identity, deliberate update/backup, reopen and recovery. Record specific evidence and attest it was performed. The console rechecks the file, then saves **tested** state. Source commit and notes are owner attestations, not cryptographic proof of build provenance or automated test execution.
-4. Choose **Approve locally**. The exact bytes are rechecked and the owner profile stores **approved** state atomically. This records preparation only; it does not publish, download or execute anything. Signature/publisher remains **unverified**.
-5. **Export local preview feed** saves a JSON snapshot marked `mode: local-preview-only` and `publicationReady: false`. It includes metadata and test evidence, no executable path, executable URL, credentials or installation data. Keep notes free of personal data. Export does not change the live update source.
-6. **Revoke local approval** prevents subsequent local preview offers/exports. Old exported files are independent snapshots and must be discarded manually. This is not remote revocation. Reimport to retest after approval/revocation.
+   The helper hashes the file and exclusively creates a new descriptor. It never runs or uploads anything. Stable versions and x64/arm64 identities are validated; arbitrary executable URLs are rejected.
+2. Import the descriptor and select that installer in the separate console. Filename, size and SHA-512 must match. Failed/cancelled import preserves the previous record. New import resets verification/approval.
+3. Actually test the exact bytes, including package identity, backup, deliberate install, reopen and recovery. Enter specific evidence and attest it was performed. Recording a note does not run these tests or establish reproducible build provenance. The file is rechecked before storing **tested** state.
+4. Choose **Approve locally**. The exact file is rechecked and the **approved** record is saved atomically. State transitions are candidate → tested → approved → revoked. Reimport to retest after approval/revocation.
+5. **Export local preview feed** is a separate diagnostic option. These snapshots say `local-preview-only` / `publicationReady: false`, cannot authorize live discovery, and contain no executable paths or URLs.
 
-Approval states: candidate → tested → approved → revoked. Candidate/tested/revoked, wrong-architecture and non-newer versions are not offered by the **local adapter**. Approved records and artifact metadata are strictly validated on reload and transitions. Artifact contents are rechecked before test evidence, approval and export. Files missing or changed after restart cannot be approved/exported. This owner-local record is editable by the machine owner and is deliberately **not** a distribution trust root.
+Hashes identify bytes; they do not establish publisher identity or prove the binary was built from the declared source. Source/test notes remain owner attestations. Keep them free of personal data.
 
-## Update integration and unavailable live setup
+## Prepare delivery, without publishing
 
-`electron/updateApproval.cjs` is the shared preparation contract. `previewOffer` translates an approved snapshot into the existing checker's GitHub release shape and the existing NSIS validator's single-file manifest shape. Only fixed repository release-page destinations and expected NSIS filenames are generated. It rejects live mode; there is no production feed toggle, localhost server or arbitrary executable URL setting. Unit integration uses local fixture metadata and updater doubles, including a failed backup that never invokes the installer launcher.
+On **Windows**, choose **Prepare publication folder** after local approval. The production main process:
 
-**Student Organizer's live updater is unchanged and does not read or enforce these local approvals.** Its manual check still uses the fixed `BadgerCraft/StudentOrganizer` latest stable release, while installation keeps the existing SHA-512, native signature inspection, backup/recheck and explicit user confirmation path. Existing unsigned handling is not weakened or changed. Approval in this console will **not** make a teacher's Check for updates discover anything. Tests of “unapproved not offered” apply to the local preview adapter only.
+- Rechecks the original file, performs real Windows Authenticode inspection and rejects invalid signatures. Signed installers record their exact verified publisher. Existing unsigned-install support is preserved: unsigned preparation requires a fresh explicit owner acknowledgement, and teachers must still explicitly acknowledge unsigned installation. Neither console nor updater calls unsigned files publisher-verified.
+- Copies the exact installer into a new local folder, verifies the copy, and writes matching `latest.yml`, `student-organizer-approval-ARCH.json`, and publication instructions. Failure removes its own staging directory, preserves source/state and produces no ready folder.
+- Includes the approved artifact identity, source commit, verification notes and approval time. It uses no token, release API, server, signing key or upload. On Mac it refuses preparation because Windows signature inspection is unavailable there; local approval/dashboard still work.
 
-Observed October20: the latest stable GitHub endpoint returned404. There is no approved stable feed/publisher/signing setup in this batch. Before live updating can be claimed, a separately authorized design must bind owner approval to publication of tested, signed artifact bytes and update metadata, define trusted publisher/signature enforcement and rollback/revocation policy, and test discovery → backup → deliberate install → reopen/recovery on real Windows. Host/account/signing-key choices remain reserved. No server, new credentials, release or deployment is created here. Mac update installation is outside this increment; the existing checker is Windows-only.
+This produces a **publication preparation**, not a published release. After separate authorization, a publisher must create a stable release in **BadgerCraft/StudentOrganizer**, tag `vVERSION` at the exact approved source commit, and attach the exact installer, `latest.yml` and approval JSON from that folder. Do not rebuild or substitute the installer afterward. This bounded single-file Windows channel supports one architecture per release; publishing both architectures needs a separate channel design. This PR does not publish any release or add publishing credentials.
 
-## Fictional dashboard definitions
+## Student Organizer discovery and installation connection
 
-The fixed as-of date and every number are displayed as fictional. There is no data importer, analytics sender, server endpoint or collection SDK. The renderer's CSP blocks connections; Electron's isolated owner session blocks network requests independently. The only native inputs are owner-selected candidate metadata/installer and evidence notes.
+The existing explicit **Check for updates** now checks the fixed GitHub repository for an approval-bearing stable release. Missing approval means no offer; malformed or mismatched approval fails closed. The lookup validates repository/asset origins, stable tag, source metadata and asset size, resolves the actual lightweight/annotated Git tag to the approved commit, and rejects candidate/tested/revoked/preview records. Approval transport is fixed-origin, GET-only, credential-free, byte-limited and time-bounded; asset redirects are limited to GitHub's HTTPS release CDNs. No local records or device identifiers are sent.
 
-- **Meaningful active teachers:** at least one completed marking workflow in the trailing28 calendar days, including as-of day. Merely opening the app is excluded.
-- **Activation:** first completed marking workflow; all fictional starts by as-of date form the cumulative denominator. No claim about real installations/conversion.
-- **Return/cohorts:** month of activation; completion on days7–13 and28–34 after activation. Only fully elapsed windows contribute to denominators, so recent teachers are not treated as churned. Counts represent teachers.
-- **Repeat assignment adoption:** active teachers with at least two distinct course/title pairs used since starting. Title reuse adds workflow uses without adding another assignment identity. There is no stable assignment ID in this intentionally small fictional model; real title changes would need an agreed identifier design.
-- **Assignment use:** completed marking-workflow counts by fictional teacher/course/title in the28-day window, not student counts.
-- **Reliability:** initial save operations, failed initial operations, operations retried once and successful retries, by version, for the same fictional28-day period. Failure-rate denominator is initial attempts.
-- **Marks:** workflow-weighted means of fictional assignment aggregates, plus latest class aggregate per teacher/course. They are not student-weighted comparisons, teacher rankings or proof of adoption. No student-level payload is present.
+Before downloading an installer, the existing updater independently obtains approval for the exact version reported by electron-updater and compares version, architecture, filename, size and SHA-512. A manual-check/download race therefore cannot substitute a different artifact. After download and again immediately before execution, the native signature must match the approved unsigned/signed policy and, if signed, the approved publisher. Existing hash checks, backup validation/readback, deliberate unsigned acknowledgement, explicit installation, cancellation and failed-launch preservation remain active. No renderer-selected executable URL or silent installation is added. The Download button is offered only for an available approved version.
 
-Real participation/consent/reporting and account/feature access are deliberately deferred until actual-account and privacy design are authorized.
+The connection is implemented and testable without publishing: local integration prepares actual files, serves an isolated fixture release, exercises approval/tag/manifest lookup, checks real downloaded bytes, writes a real recovery backup and invokes a controlled launcher double. Fixture executables are never run. Native owner smoke uses the actual package, preload and IPC, with automated file-dialog result selection. The Windows replacement harness retains real downloader/hash/signature/backup/installer behavior while its test-side transport supplies matching approval/tag fixtures.
 
-## Verification limits
+**Activation still pending:** no real stable release has been published here; the latest endpoint was404 at the initial checkpoint. The new checker will not offer legacy releases lacking approval metadata. An already installed old binary cannot acquire the new gate until updated. Real source/test approval, distribution choice, signed publisher setup if desired, final release publication and physical OS acceptance remain separate. No new credentials/permissions/services are created. There is no live end-to-end distribution claim.
 
-The browser smoke uses the production UI, first without a bridge (inert native actions), then with a fictional native-bridge double backed by the real pure state contract. It verifies labels, tables, metric denominators, approval transitions and zero external requests; it does not prove native dialogs or installed executable behavior.
+Local revocation stops further preparation/offers from that local state. Old exported/prepared folders are independent snapshots; discard them after revocation. For a published release, removal/withdrawal of approval assets is an explicit separate publication operation, not a remote action performed by this console. Already downloaded bytes do not acquire automatic remote revocation. No automatic rollback or downgrade is introduced.
 
-The package audit resolves electron-builder configuration and optionally inspects actual packaged `app.asar` plus byte-exact shared contract resources. The PR-only Windows/Mac workflow builds without publishing and audits these files; a configured job is not a measured pass. Physical Windows installer/shortcuts, isolated profile/restart, second-launch lock, native dialogs, macOS launch/Gatekeeper and installer preservation remain native acceptance checks. See the work order for actual measured results and blockers.
+## Fictional dashboard
+
+Every teacher, use count, mark and operation is invented, with a fixed displayed as-of date. No importer, SDK, ingestion endpoint or collection path exists. Renderer CSP blocks connections; the separate Electron session also blocks network access.
+
+- Meaningful active teachers: at least one completed marking workflow in trailing28 calendar days, including as-of day. App opens are excluded.
+- Activation: first completed marking workflow; denominator is all fictional starts by as-of date.
+- Return cohorts: activation month; another completion on days7–13 or28–34. Only fully elapsed windows enter denominators. Counts are teachers, not sessions.
+- Repeat adoption: active teachers with at least two distinct course/title pairs since starting. Title reuse increases workflow use, not distinct assignment identity. Real title changes would need an agreed stable identifier.
+- Assignment usage: completed workflows by fictional teacher/course/title in the28-day window, not student counts.
+- Reliability: initial save attempts, failed initial operations, once-retried operations and successful retries by version for the same fictional period.
+- Marks: workflow-weighted assignment aggregate means and latest class aggregate per teacher/course. These are context, not student-weighted comparisons, teacher rankings or investor evidence.
+
+Real participation/consent/reporting and account/feature controls remain deferred.
+
+## Evidence and remaining limits
+
+See [the work order](../../docs/work-orders/CONTROL-PANEL-2026-10-20.md) for exact measured heads and CI links. Windows x64 and Mac arm64 baseline packages actually launched with production sandbox and real bridge; restart, second instance, artifact rejection, corrupt-store retention and teacher-profile isolation passed. The delivery extension must be verified on its own head. Automated dialog selections are not physical picker acceptance; unsigned cloud launch does not prove Gatekeeper, UAC, installer shortcuts, managed policy, real publisher setup or live distribution. PR remains draft and unmerged.

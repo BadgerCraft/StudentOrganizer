@@ -85,6 +85,7 @@ describe('owner-local release preparation', () => {
     const launch = vi.fn();
     const controller = createInstallerUpdate({ supported: true, currentVersion: '1.0.0', userData: '/fixture/profile', arch: 'x64', updater,
       tokenFactory: () => ({ cancelled: false, cancel() { this.cancelled = true; } }), hash: async () => sample().artifact.sha512,
+      approvalLookup: async () => ({ document: require('../../electron/releaseDelivery.cjs').preparePublication(approved(), { signature: 'valid', publisher: 'FICTIONAL TEST DOUBLE' }).document }),
       signature: async () => ({ signature: 'valid', publisher: 'FICTIONAL TEST DOUBLE' }), backup: async () => { throw new Error('disk full'); }, canReplace: async () => {}, launch });
     expect(await controller.download()).toMatchObject({ status: 'downloaded', version: '1.0.2' });
     expect(launch).not.toHaveBeenCalled();

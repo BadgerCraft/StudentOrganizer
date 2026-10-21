@@ -28,4 +28,19 @@ async function assertPreviewDestination(destination, protectedFiles, platform = 
   const target = await canonical(destination);
   for (const file of protectedFiles) if (target === await canonical(file)) throw new Error('Choose a separate .json preview file.');
 }
-module.exports = { atomicJSON, verifyArtifact, assertPreviewDestination };
+async function preparePublicationBundle(root, preparation, source, hash) {
+  const candidate = preparation.document.approval.candidate;
+  const staging = await fs.mkdtemp(path.join(root, '.owner-release-preparation-'));
+  const destination = path.join(root, `StudentOrganizer-release-${candidate.version}-${candidate.arch}-${crypto.randomUUID()}`);
+  try {
+    const copied = path.join(staging, candidate.artifact.name);
+    await fs.copyFile(source, copied, require('node:fs').constants.COPYFILE_EXCL);
+    await verifyArtifact(preparation.document.approval, copied, hash);
+    for (const [name, contents] of Object.entries(preparation.files)) await fs.writeFile(path.join(staging, name), contents, { flag: 'wx', mode: 0o600 });
+    const instructions = `LOCAL PUBLICATION PREPARATION ONLY — NOTHING PUBLISHED\n\nApproved version ${candidate.version}, Windows ${candidate.arch}.\nExact source commit: ${candidate.sourceCommit}\nCreate a stable GitHub release in BadgerCraft/StudentOrganizer with tag v${candidate.version}, target_commitish set to that exact commit, and these exact three assets: ${candidate.artifact.name}, latest.yml, ${preparation.approvalFilename}.\nDo not replace or regenerate the approved installer. Publishing requires separate owner approval. Only one Windows architecture is supported by this single-file latest.yml.\nSignature policy: ${JSON.stringify(preparation.document.signature)}. Unsigned packages still require explicit teacher acknowledgement; this is not publisher verification.\nRevoking locally cannot retract already published assets; do not publish a revoked preparation. Recheck current local approval and these bytes immediately before any separately authorized publication.\n`;
+    await fs.writeFile(path.join(staging, 'PUBLICATION-INSTRUCTIONS.txt'), instructions, { flag: 'wx', mode: 0o600 });
+    await fs.rename(staging, destination);
+    return destination;
+  } catch (error) { await fs.rm(staging, { recursive: true, force: true }); throw error; }
+}
+module.exports = { atomicJSON, verifyArtifact, assertPreviewDestination, preparePublicationBundle };

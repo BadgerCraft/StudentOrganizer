@@ -6,7 +6,7 @@ module.exports = {
   // electron-builder searches parent dependencies when the app has none.
   // This dependency-free shell uses built-ins plus its prebundled renderer only.
   files: ['dist/**/*', 'electron/**/*', 'package.json', '!**/node_modules/**/*'],
-  extraResources: [{ from: 'electron', to: 'owner-update-contract', filter: ['updateApproval.cjs', 'manualUpdater.cjs', 'windowsInstallerUpdate.cjs'] }],
+  extraResources: [{ from: 'electron', to: 'owner-update-contract', filter: ['updateApproval.cjs', 'releaseDelivery.cjs', 'manualUpdater.cjs', 'windowsInstallerUpdate.cjs'] }],
   publish: null,
   win: { target: ['nsis'], artifactName: 'StudentOrganizerControlPanel-${version}-${arch}.${ext}' },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true, deleteAppDataOnUninstall: false },
