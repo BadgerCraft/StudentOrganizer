@@ -11,3 +11,12 @@ contextBridge.exposeInMainWorld('desktopUpdates', Object.freeze({
 contextBridge.exposeInMainWorld('desktopReports', Object.freeze({
   exportPdf: (filename, html) => ipcRenderer.invoke('assessment-report:pdf', filename, html)
 }));
+
+contextBridge.exposeInMainWorld('desktopCaptureDrive', Object.freeze({
+  status: () => ipcRenderer.invoke('capture-drive:status'),
+  connect: () => ipcRenderer.invoke('capture-drive:connect'),
+  list: () => ipcRenderer.invoke('capture-drive:list'),
+  download: id => ipcRenderer.invoke('capture-drive:download', id),
+  cancel: () => ipcRenderer.invoke('capture-drive:cancel'),
+  disconnect: () => ipcRenderer.invoke('capture-drive:disconnect')
+}));
