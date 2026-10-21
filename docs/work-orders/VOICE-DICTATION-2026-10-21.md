@@ -53,3 +53,9 @@ The tradeoff is a separate optional ~75 MiB English model and some CPU delay. Th
 ## Publication readback
 
 Implementation `acb7a4ffd363c51dd87d1318f81320dafc9b20d0` pushed normally and verified against remote branch. [PR47](https://github.com/BadgerCraft/StudentOrganizer/pull/47) created open/non-draft against `bcaa741`; not merged. Implementation-head native runs: Windows `39652836646` and Mac/shared browser `39652836645` queued on readback, not passing evidence. This documentation-only publication checkpoint follows on the same branch; final-head CI must be checked independently. No main merge, release, deployment, credential/grant, real audio/student data or Drive integration performed. Parent owns shared queue reconciliation and reserved merge decision; walkthrough is prepared above, review pending.
+
+## Parent review repair — Mac permission test
+
+Parent's independent GitHub review of `c3dea48` identified that the IPC test supplied an empty `systemPreferences`, so its approved begin path would fail on a native Darwin runner. Existing authorized workspace availability was verified with successful reads/execution; no environment switch or access-denial bypass. Added an affirmative `askForMediaAccess` mock and run the actual IPC module with Windows, Darwin and Linux platform contexts on every host. Darwin denial now proves no recording token is created; a later affirmative retry succeeds, and other platforms never call the Mac API. App-level cancellation is also verified to avoid the OS request. No production code changed.
+
+PASS: `npx vitest run src/dictation` **17/17 tests** (9 session + 8 desktop); `npx tsc --noEmit`; `git diff --check`. Remote feature head fetched into FETCH_HEAD and verified exactly `c3dea48188b90eddb5f8c17dd6d1909d648fdd13` before normal fast-forward publication. Native OS microphone acceptance remains separate from these simulated platform-branch tests.

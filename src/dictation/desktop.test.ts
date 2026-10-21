@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { encodeWav } from './audio';
@@ -77,8 +78,16 @@ describe('desktop local process boundary', () => {
 });
 
 describe('IPC ownership and microphone consent', () => {
-  it('allows only owning main frame, explicit consent and audio; invalidates capture on blur/close', async () => {
-    const { attachDictation } = require('../../electron/dictationIpc.cjs');
+  it.each(['win32', 'darwin', 'linux'])('enforces consent and owning-frame lifecycle on %s', async platform => {
+    // Execute the actual IPC module's platform branch on every CI host.
+    const ipcModule = { exports: {} as any };
+    vm.runInNewContext(readFileSync(new URL('../../electron/dictationIpc.cjs', import.meta.url), 'utf8'), {
+      module: ipcModule,
+      require: createRequire(new URL('../../electron/dictationIpc.cjs', import.meta.url)),
+      __dirname: path.dirname(fileURLToPath(new URL('../../electron/dictationIpc.cjs', import.meta.url))),
+      process: { platform }
+    });
+    const { attachDictation } = ipcModule.exports;
     const handlers: Record<string, (...args: any[]) => any> = {};
     const frame = { url: new URL('../../dist/index.html', import.meta.url).href };
     const permissions: any = {};
@@ -86,13 +95,27 @@ describe('IPC ownership and microphone consent', () => {
     const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false, isFocused: () => true });
     const app = Object.assign(new EventEmitter(), { isPackaged: false, getPath: () => '/tmp/fictional-dictation-profile' });
     const dialog = { showMessageBox: vi.fn(async () => ({ response: 0 })) };
-    const service = attachDictation({ app, window, ipcMain: { removeHandler: () => {}, handle: (name: string, fn: any) => handlers[name] = fn }, dialog, systemPreferences: {} });
+    const systemPreferences = { askForMediaAccess: vi.fn(async () => true) };
+    const service = attachDictation({ app, window, ipcMain: { removeHandler: () => {}, handle: (name: string, fn: any) => handlers[name] = fn }, dialog, systemPreferences });
     vi.spyOn(service, 'status').mockResolvedValue({ ready: true }); vi.spyOn(service, 'begin').mockResolvedValue('granted');
     const capture = vi.spyOn(service, 'canCapture').mockReturnValue(false), cancel = vi.spyOn(service, 'cancel');
     const event = { sender: contents, senderFrame: frame };
     await expect(handlers['dictation:begin']({ ...event, senderFrame: { url: frame.url } })).rejects.toThrow('denied');
     await expect(handlers['dictation:begin'](event)).rejects.toThrow('not granted'); expect(service.begin).not.toHaveBeenCalled();
-    dialog.showMessageBox.mockResolvedValue({ response: 1 }); expect(await handlers['dictation:begin'](event)).toBe('granted');
+    expect(systemPreferences.askForMediaAccess).not.toHaveBeenCalled();
+    dialog.showMessageBox.mockResolvedValue({ response: 1 });
+    if (platform === 'darwin') {
+      systemPreferences.askForMediaAccess.mockResolvedValueOnce(false);
+      await expect(handlers['dictation:begin'](event)).rejects.toThrow('Microphone permission denied');
+      expect(service.begin).not.toHaveBeenCalled();
+      expect(service.canCapture()).toBe(false);
+    }
+    expect(await handlers['dictation:begin'](event)).toBe('granted');
+    if (platform === 'darwin') {
+      expect(systemPreferences.askForMediaAccess).toHaveBeenCalledTimes(2);
+      expect(systemPreferences.askForMediaAccess).toHaveBeenNthCalledWith(1, 'microphone');
+      expect(systemPreferences.askForMediaAccess).toHaveBeenNthCalledWith(2, 'microphone');
+    } else expect(systemPreferences.askForMediaAccess).not.toHaveBeenCalled();
     expect(permissions.check(contents, 'media', '', { mediaType: 'audio', isMainFrame: true })).toBe(false);
     expect(permissions.check(contents, 'clipboard-sanitized-write', '', { isMainFrame: true })).toBe(true);
     expect(permissions.check(contents, 'media', '', { mediaType: 'audio' })).toBe(false);
