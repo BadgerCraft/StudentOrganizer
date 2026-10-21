@@ -1,0 +1,38 @@
+# Analytics pipeline — approved fictional implementation
+
+Authority: October21 delegated user instruction approves coherent analytics implementation, testing, commits, safe feature push and separate PR. No merge/release/deploy, real collection/transmission, credentials, permissions or production activation. Fixed stack dependency: PR44 `2cab3d8b5fdcc2807beb8dcd88ca19ce867c9014`, parent confirmed delivery/native work stable. Analytics branch `codex/analytics-pipeline-20261021` began on PR43 main `90054e9`; independent modules committed before merging that exact dependency. Only a narrow renderer adapter is planned against PR44; updater, release and native-test files are reserved.
+
+Deliverable: bounded consent-controlled summary instrumentation, persistent local fictional collector, validated explicit transport/export, deterministic simulator, queried dashboard in separate owner console. Acceptance: known simulation truth matches queried values; default disabled/denied and withdrawal, student-field/title rejection, replay/conflict/concurrency, retries, corruption, restart, retention and mature/timezone windows tested; browser exercises real generated collector events. No student database reads/writes or network transport. Relevant full unit/build checks once, affected checks after repairs; independent source review and strict script types. Native packaging is inherited PR44 evidence, not new analytics native acceptance.
+
+Current checkpoint: core modules and21 targeted tests initially passed. Initial build exposed stale saved dependencies and one new test type; type repaired. npm ci default cache was inaccessible (`/home/agent/.npm/_cacache` ENOENT); one targeted recovery uses writable `/tmp` cache. Independent review running, including cohort left-censoring and canonical replay improvements. Finish adapter, verification, documentation and publication before ending unless demonstrably blocked.
+
+Shared component lessons: skill read, authoritative component index inaccessible (`failed to read skill resource`). No dated snapshot treated as current; direct atomic write/restart/corruption/concurrency tests substitute evidence for this batch. No shared lesson update claimed.
+
+## Prepared educational walkthrough (pending owner review)
+
+The separate executable will query actual summary events from a local fictional collector, rather than display manually typed dashboard totals. An outbox is a bounded queue waiting for explicit delivery; granting consent in the fictional test creates no production permission. Withdrawal purges that queue, and local collector withdrawal erases received teacher summaries and rejects replays. Already exported copies remain independent. A pseudonymous teacher token is a reporting identity, not authentication or proof of a unique person; installations are shown separately.
+
+Pending comprehension prompt: If a fictional teacher withdraws after an export, which local copies can this pipeline erase, and which require deliberate removal? No response or understanding claimed. This review is nonblocking for approved implementation; merge/release and real analytics activation remain reserved.
+
+## Verified implementation checkpoint
+
+Implemented independent core plus narrow query-backed PR44 renderer adapter. Final source review by independent worker found and verified repairs for: observation-window activation reset, dropped grading contexts, property-order replay conflict, failed-withdrawal restart replay, async import/withdraw/reset races, corrupt-store overwrite and pending import across dashboard unmount. Final independent verdict: no remaining concrete blocker in fictional-only scope;26/26 focused tests independently passed. No live/security-hosting, merge or release verdict is inferred.
+
+Observed verification:
+
+- PASS `npm test`:765/765 tests, full suite34.59s. After final canonical-window/adapter guards,26/26 affected analytics tests reran successfully; broad suite was not repeated without a code reason.
+- PASS teacher production build and owner production build/typecheck; only existing teacher chunk/dynamic-import warnings. Final renderer rebuild and both actual production Chromium scripts pass.
+- PASS strict standalone TypeScript for all `scripts/analytics/*.ts`.
+- PASS local simulator known truth, persistent collector restart, export/replay/concurrent ingestion, privacy rejection, default-disabled/denied, withdrawal/purge/failure/restart, bounded retries/hung timeout/abort, corruption/unknown schema, retention, timezone/mature denominators and academic suppression/context tests.
+- PASS new browser integration imports a real persistent collector export, tests consent/source separation, known metrics, default suppression/opt-in class and assignment summaries, reload, delayed-import withdrawal, replay rejection, tab-away/remount/reset race, corrupt-state preservation/deliberate reset, responsive viewport and zero external requests. Existing Control Panel browser test also passes; only its obsolete dashboard expectations changed, preserving approval/update action assertions.
+- PASS protected-path comparison against PR44 `2cab3d8`: updater/release/native harness/packaging/security paths byte-identical. No PR44 branch write. No network listener/sender, teacher startup import, student database write, new dependency/service/credential/permission, release or deploy.
+
+Reproducible artifacts: `npm run analytics:demo -- /tmp/student-organizer-analytics-final` writes local collector/event/query JSON. Final Chromium screenshot is `/tmp/student-organizer-analytics-final/dashboard.png`; generated artifacts are fictional and not committed. User-facing guide: `docs/analytics/README.md`. Production collection is deliberately unavailable, with exact gates and observation/identity/export/retention limits documented. Physical Windows/Mac analytics-renderer acceptance remains UNVERIFIED; PR44 native results cover the unchanged bridge/packaging, not this new renderer. No real hosting/authentication, collection, user acceptance or production privacy approval claimed.
+
+Publication: next ordinary commit/push and separate stacked PR against PR44 branch. Refresh expected stable dependency before push; preserve no-force-push/no-merge boundary. Educational walkthrough remains prepared/pending, not accepted. Failed default npm cache recovery was resolved once using writable `/tmp` cache; no remaining execution blocker.
+
+## Publication readback
+
+Normal feature pushes succeeded with no force update. Implementation head `277a2a8a55e110d909a912092da10e26db2d30fd` was verified remotely. [Draft PR45](https://github.com/BadgerCraft/StudentOrganizer/pull/45) is open, stacked on PR44 branch at exact stable base `2cab3d8b5fdcc2807beb8dcd88ca19ce867c9014`; provider readback confirms19 changed files / analytics-only delta and both PRs unmerged. Final visual inspection separated activation6 and installation7 into independent cards to avoid implying a conversion denominator; final owner build and both browser flows pass after that display-only correction. Protected release/native paths remain untouched. No automatic approval rejection or remaining execution blocker occurred. CLI/default npm cache issue was an ordinary unavailable-cache error, resolved through the writable cache, not an authorization denial.
+
+Current next gate: parent/owner review of PR45's fictional analytics and prepared walkthrough; separately authorized PR44 integration determines later base retargeting. Physical analytics-renderer acceptance and exact-head remote CI are unverified. Do not merge, release, deploy or activate collection. Documentation-only publication record follows the tested source; it does not invalidate source checks.

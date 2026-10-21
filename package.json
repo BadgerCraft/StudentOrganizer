@@ -46,7 +46,10 @@
     "control-panel:start": "npm run control-panel:build && electron apps/control-panel",
     "control-panel:package:win": "npm run control-panel:build && electron-builder --config apps/control-panel/electron-builder.cjs --win nsis --publish never",
     "control-panel:package:mac": "npm run control-panel:build && electron-builder --config apps/control-panel/electron-builder.cjs --mac dmg zip --publish never",
-    "test:control-panel:browser": "node --import tsx scripts/controlPanelSmoke.ts"
+    "test:control-panel:browser": "node --import tsx scripts/controlPanelSmoke.ts",
+    "analytics:demo": "node --import tsx scripts/analytics/demo.ts",
+    "test:analytics": "vitest run src/analytics/analytics.test.ts",
+    "test:analytics:browser": "node --import tsx scripts/analytics/browserSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
