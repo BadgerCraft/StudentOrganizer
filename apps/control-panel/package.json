@@ -1,0 +1,10 @@
+{
+  "name": "student-organizer-control-panel",
+  "productName": "Student Organizer Control Panel",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "description": "Owner-only local release preparation and fictional dashboard",
+  "author": "BadgerCraft",
+  "type": "module"
+}

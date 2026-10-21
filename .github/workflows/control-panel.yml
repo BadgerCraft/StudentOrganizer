@@ -1,0 +1,64 @@
+name: Control Panel packages (no publication)
+on:
+  pull_request:
+    paths:
+      - 'apps/control-panel/**'
+      - 'electron/updateApproval.cjs'
+      - 'electron/releaseDelivery.cjs'
+      - 'electron/manualUpdater.cjs'
+      - 'electron/windowsInstallerUpdate.cjs'
+      - 'scripts/audit-control-panel-package.cjs'
+      - 'scripts/controlPanelNativeSmoke.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/control-panel.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: owner-console-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win
+            executable: release/control-panel/win-unpacked/Student Organizer Control Panel.exe
+            candidate: release/control-panel/StudentOrganizerControlPanel-0.1.0-x64.exe
+            architecture: --x64
+            resources: release/control-panel/win-unpacked/resources
+          - runner: macos-15
+            platform: mac
+            executable: release/control-panel/mac-arm64/Student Organizer Control Panel.app/Contents/MacOS/Student Organizer Control Panel
+            architecture: --arm64
+            resources: release/control-panel/mac-arm64/Student Organizer Control Panel.app/Contents/Resources
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck native verification harness
+        run: npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --lib es2022,dom --types node --skipLibCheck --strict scripts/controlPanelNativeSmoke.ts
+      - name: Build the separate owner executable (never publish)
+        run: npm run control-panel:package:${{ matrix.platform }} -- ${{ matrix.architecture }}
+      - name: Audit actual packaged entry and shared contract bytes
+        run: node scripts/audit-control-panel-package.cjs "${{ matrix.resources }}"
+      - name: Launch actual owner package with disposable fictional profile
+        run: node --import tsx scripts/controlPanelNativeSmoke.ts "${{ matrix.executable }}" "${{ matrix.candidate }}"
+      - name: Preserve native verification report only (no installers or private data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControlPanel-native-smoke-${{ matrix.platform }}
+          path: release/control-panel/native-smoke-*.json
+          if-no-files-found: ignore

@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 20 — approved separate owner Control Panel increment
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| FUTURE-CONTROL | Approved separate owner executable plus same-PR approval→delivery connection (“Okay get on with it then”). Implemented strict artifact/test approval, exact-file Windows publication preparation with real signature inspection, fixed-origin approval/source-tag/manifest/signature gates in Student Organizer, and fictional aggregate dashboard. No publishing client, telemetry, accounts or teacher settings control. Main refreshed through PR43 merge90054e9; reserved roster files match main. | [Draft PR44](https://github.com/BadgerCraft/StudentOrganizer/pull/44), unmerged.739 tests/both builds/browser/strict harness checks and independent re-review PASS. Actual Windows x64/Mac arm64 owner package/native flow incl. Windows preparation PASS atfb30cefe; actual Windows NSIS replacement/recovery/bootstrap PASS at04a5ed7 with identical production updater/harness, also successful replacement steps onfb30cefe. [Exact evidence](work-orders/CONTROL-PANEL-2026-10-20.md). Save/read final documentation checkpoint and inspect its CI. Separate gates: actual owner/user acceptance, physical OS/picker/installer acceptance and explicit publication of exact approved real assets; latest stable endpoint remains404. No merge/release/deployment/credential/data access authorized. |
+
+
 ## October 20 — approved desktop photo reliability repairs
 
 | Stable ID | Disposition | Next action / gate |
@@ -157,7 +164,6 @@ Tyler explicitly authorized implementation, relevant tests/build/interaction che
 | F-008-EXT | File-based rubric import, PDF input/OCR, legacy JSON, scratch marking | Annotated PDF output moved to approved F-008-PDF October 14. OCR remains shelved; remaining input/extensions require separate scope approval. |
 | F-006 | Installed iPad application | Explicitly shelved October 14; [resume map](SHELVED_FEATURES.md). Preserve ios/config/scripts; resume only on Tyler’s request. |
 | FUTURE-CLOUD | Live sync/cloud backup, AI/voice, redo, retained-file purge | Separate user decision and privacy design |
-| FUTURE-CONTROL | Control Panel release/update management | After bug intake; separate scope |
 | FUTURE-STORE | Microsoft Store/signing/publisher distribution | Shelved until explicitly requested; no spending or service adoption |
 
 ## Rules and supporting evidence

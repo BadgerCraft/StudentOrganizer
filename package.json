@@ -40,7 +40,13 @@
     "test:capture:capacity": "node --import tsx scripts/captureCapacitySmoke.ts",
     "test:capture:late-work": "node --import tsx scripts/captureLateWorkSmoke.ts",
     "test:capture:large-photo": "node --import tsx scripts/captureLargePhotoSmoke.ts",
-    "test:desktop:photo-reliability": "node --import tsx scripts/desktopPhotoRecoverySmoke.ts && node --import tsx scripts/desktopChicletPressSmoke.ts && node --import tsx scripts/desktopCropSmoke.ts && node --import tsx scripts/capturePreviewSchedulingSmoke.ts && node --import tsx scripts/captureLoadingRetrySmoke.ts && node --import tsx scripts/studentChicletNamesSmoke.ts"
+    "test:desktop:photo-reliability": "node --import tsx scripts/desktopPhotoRecoverySmoke.ts && node --import tsx scripts/desktopChicletPressSmoke.ts && node --import tsx scripts/desktopCropSmoke.ts && node --import tsx scripts/capturePreviewSchedulingSmoke.ts && node --import tsx scripts/captureLoadingRetrySmoke.ts && node --import tsx scripts/studentChicletNamesSmoke.ts",
+    "control-panel:build": "tsc -p apps/control-panel/tsconfig.json && vite build --config apps/control-panel/vite.config.ts",
+    "control-panel:dev": "vite --config apps/control-panel/vite.config.ts",
+    "control-panel:start": "npm run control-panel:build && electron apps/control-panel",
+    "control-panel:package:win": "npm run control-panel:build && electron-builder --config apps/control-panel/electron-builder.cjs --win nsis --publish never",
+    "control-panel:package:mac": "npm run control-panel:build && electron-builder --config apps/control-panel/electron-builder.cjs --mac dmg zip --publish never",
+    "test:control-panel:browser": "node --import tsx scripts/controlPanelSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

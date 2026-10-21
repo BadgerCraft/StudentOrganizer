@@ -19,6 +19,7 @@ The Vite development server runs at `http://localhost:3000`. Other useful comman
 | `npm run build` | Type-check and build the web app into `dist/` |
 | `npm run electron:dev` | Run the desktop shell locally |
 | `npm run package:win` | Build Windows installer and portable packages |
+| `npm run control-panel:start` | Build/run the separate owner-only local preparation console |
 | `npm run benchmark:node` | Run the synthetic Node benchmark |
 | `npm run benchmark:browser` | Run the browser benchmark |
 
@@ -43,3 +44,7 @@ See [our coding workflow](docs/CODING_WORKFLOW.md) for feature plans, review bou
 ## Markinator integration checkpoint
 
 The isolated implementation adds assessment-linked local marking. See [the checkpoint and next actions](docs/markinator/CHECKPOINT.md), [connection map](docs/markinator/CONNECTIONS.md), and [authorized work order](docs/markinator/APPROVED_WORK_ORDER.md). After `npm ci` and `npm run build`, `npm run test:marking:browser` runs a fictional Chromium workflow (set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Chromium is not `/usr/bin/chromium`). This development checkpoint is not platform pilot or release acceptance.
+
+## Separate owner Control Panel
+
+The Control Panel is a separate executable with tested update approval and exact-file delivery preparation and a clearly fictional aggregate dashboard. It has no analytics collection or live publishing connection. See [its guide](apps/control-panel/README.md) for commands, boundaries and native verification limits. Student Organizer offers only approval-bearing exact-match releases; publishing those prepared files remains a separate authorized action. No real release was published here.

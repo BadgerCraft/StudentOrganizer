@@ -360,6 +360,17 @@ Deferred learning checks for Tyler's return: (1) Why does an old successful cont
 October20 publication link: [PR42](https://github.com/BadgerCraft/StudentOrganizer/pull/42), reviewed implementation `50bae0c265a8850eda312da46a6aececee99833e`. Explain Back skill was available and read at publication. The prepared walkthrough above remains pending for Tyler's return; no demonstrated recall or merge/release approval is claimed.
 
 
+### DEV-CONTROL-LOCAL-APPROVAL — preparation versus publication
+- Date/source: October20,2026; approved Stage1 Control Panel increment.
+- Explanation prepared for review: a candidate binds the intended version and source claim to a filename, byte count and SHA-512 fingerprint. Recording test evidence and approving stores a local owner decision. Publishing would separately distribute those tested bytes and trusted metadata so installed apps can discover them. The initial checkpoint stopped at local preparation. Tyler then approved connecting delivery in this same PR: a separate approved-release record, exact-file preparation, fixed-repository approval checks and actual Git-tag commit resolution now connect it to discovery. Preview-only snapshots still cannot authorize live discovery.
+- Tradeoff: preparation is testable without distribution, while making it available still requires separately authorized release publication. Real publisher/signature/host choices and OS install acceptance are still needed. Hashes identify bytes, not a trusted publisher; source/test notes are owner attestations.
+- Prepared review question (deferred to Tyler's return): What additional step would make an approved local version discoverable by teachers, and why does the fingerprint alone not verify its publisher?
+- Review/recall: DEFERRED; no answer or understanding claimed. PR/revision is recorded in the work order; no merge/release approval implied.
+
+### DEV-CONTROL-AGGREGATES — adoption versus marks
+- Explanation prepared October20: completing marking work and returning later measure use. An assignment/class average describes marking context; it does not prove use or teacher quality. Mature return cohorts exclude teachers who have not had time to reach the return window. Dashboard values are all fictional and provide no investor evidence.
+- Review/recall: DEFERRED; no actual answer. No additional learning gate blocks authorized engineering work.
+
 ## October 20 — copied-table roster review (prepared; review pending)
 
 TUV-ROSTER-TABLE changes the roster entry flow from arranging a fixed spreadsheet layout to selecting columns and checking an editable preview. A column mapping connects each source column to first name, last name or an explicitly interpreted combined name, and student number; extras are ignored. If both OEN and local ID appear, the teacher must choose. Leading zeros stay intact because IDs are text. Multipart names require explicit correction; source rows stay inspectable and uncertain rows can only be omitted through visible exclusions. Duplicate IDs block saving, while same-name/different-ID records warn and remain separate.
