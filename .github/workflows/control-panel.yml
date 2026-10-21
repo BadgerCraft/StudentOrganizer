@@ -7,6 +7,7 @@ on:
       - 'electron/manualUpdater.cjs'
       - 'electron/windowsInstallerUpdate.cjs'
       - 'scripts/audit-control-panel-package.cjs'
+      - 'scripts/controlPanelNativeSmoke.ts'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/control-panel.yml'
@@ -24,16 +25,19 @@ jobs:
         include:
           - runner: windows-latest
             platform: win
+            executable: release/control-panel/win-unpacked/Student Organizer Control Panel.exe
             architecture: --x64
             resources: release/control-panel/win-unpacked/resources
           - runner: macos-15
             platform: mac
+            executable: release/control-panel/mac-arm64/Student Organizer Control Panel.app/Contents/MacOS/Student Organizer Control Panel
             architecture: --arm64
             resources: release/control-panel/mac-arm64/Student Organizer Control Panel.app/Contents/Resources
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,3 +49,12 @@ jobs:
         run: npm run control-panel:package:${{ matrix.platform }} -- ${{ matrix.architecture }}
       - name: Audit actual packaged entry and shared contract bytes
         run: node scripts/audit-control-panel-package.cjs "${{ matrix.resources }}"
+      - name: Launch actual owner package with disposable fictional profile
+        run: node --import tsx scripts/controlPanelNativeSmoke.ts "${{ matrix.executable }}"
+      - name: Preserve native verification report only (no installers or private data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControlPanel-native-smoke-${{ matrix.platform }}
+          path: release/control-panel/native-smoke-*.json
+          if-no-files-found: ignore

@@ -28,7 +28,7 @@ async function main() {
     assert.equal(packaged.name, metadata.name); assert.equal(packaged.main, metadata.main);
     for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/store.cjs', 'dist/index.html']) assert.ok(asar.extractFile(archive, file).length > 0);
     const entries = asar.listPackage(archive);
-    assert.ok(!entries.some(file => /(?:dexie|portabilityService|rosterParser)/i.test(file)), 'Teacher database code must not enter the owner package');
+    assert.ok(!entries.some(file => /(?:node_modules[\\/]|dexie|portabilityService|rosterParser)/i.test(file)), 'Teacher database code must not enter the owner package');
     for (const file of config.extraResources[0].filter) assert.deepEqual(await fs.readFile(path.join(resources, 'owner-update-contract', file)), await fs.readFile(path.join(root, 'electron', file)));
     console.log('PASS: actual packaged owner entry, UI, storage helper and byte-exact shared contracts; no teacher database modules. Native launch remains separate.');
   } else console.log('PASS: resolved separate-executable packaging configuration. Actual native packages/runtime UNVERIFIED by this configuration check.');
