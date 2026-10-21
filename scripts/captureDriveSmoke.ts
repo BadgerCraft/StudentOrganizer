@@ -67,6 +67,34 @@ try {
   await openUnifiedMarking(page); await connect(); await download();
   await page.getByTestId('capture-set-set-0').getByText(/^Saved to /).waitFor(); assert.equal(await page.getByTestId('capture-set-set-1').isDisabled(),false);
   assert.equal((await rows('captureAttachments')).length,1);
+  // Pause the real local decoder after download, then cancel. Its result must never replace the open package.
+  await page.getByTestId('capture-set-set-1').click();
+  const receiptsBeforeCancel = await rows('captureImportReceipts');
+  payload = Buffer.from(await encodeCapturePackage({ ...manifest, packageId: 'fictional-cancelled-package', assignmentName: 'Fictional cancelled replacement' }, files));
+  await page.evaluate(`(() => {
+    const original = crypto.subtle.digest.bind(crypto.subtle);
+    window.captureValidationWaiting = false;
+    crypto.subtle.digest = async (...args) => {
+      crypto.subtle.digest = original;
+      window.captureValidationWaiting = true;
+      await new Promise(resolve => { window.resumeCaptureValidation = resolve; });
+      return original(...args);
+    };
+  })()`);
+  await download();
+  await page.waitForFunction(() => (window as any).captureValidationWaiting === true);
+  await page.getByRole('status').filter({hasText:'Validating package and photos locally'}).waitFor();
+  await page.getByRole('button',{name:'Cancel Drive action',exact:true}).click();
+  await page.evaluate('window.resumeCaptureValidation()');
+  await page.getByRole('alert').filter({hasText:'Drive import cancelled'}).waitFor();
+  await page.waitForFunction(() => document.querySelector<HTMLInputElement>('[data-testid="capture-zip"]')?.disabled === false);
+  assert.equal(await page.getByRole('heading',{name:'Fictional cancelled replacement',exact:true}).count(),0);
+  assert.equal(await page.getByRole('heading',{name:'Fictional river assignment',exact:true}).count(),1);
+  assert.equal(await page.getByTestId('capture-set-set-1').getAttribute('aria-pressed'),'true');
+  assert.deepEqual(await rows('captureAttachments'),saved); assert.deepEqual(await rows('captureImportReceipts'),receiptsBeforeCancel);
+  // A deliberate retry after cancellation may import normally.
+  await download(); await page.getByRole('heading',{name:'Fictional cancelled replacement',exact:true}).waitFor();
+  payload = valid; await download(); await page.getByTestId('capture-set-set-0').getByText(/^Saved to /).waitFor();
   failure = 'offline'; await download(); await page.getByRole('alert').filter({hasText:'connection'}).waitFor();
   failure = 'expired'; await download(); await page.getByRole('alert').filter({hasText:'expired'}).waitFor();
   failure = ''; await connect();
@@ -90,5 +118,5 @@ try {
   await page.waitForFunction(() => !document.querySelector('[data-testid="capture-set-set-0"]'));
   assert.equal(client.status().connected,false); assert.deepEqual(await rows('captureAttachments'),saved);
   assert.deepEqual(errors,[]); assert.deepEqual(external,[]);
-  console.log('PASS real main transport with isolated Drive responses -> Chromium written workflow -> ZIP validation -> explicit partial match -> durable exact pages/receipt -> repeated download; offline/expired/malformed/cancel recovery; disconnect; reload/local fallback; mid-download teacher switch; unchanged official grades; no external requests.');
+  console.log('PASS real main transport with isolated Drive responses -> Chromium written workflow -> ZIP validation -> explicit partial match -> durable exact pages/receipt -> repeated download; offline/expired/malformed/cancel recovery; cancelled local validation preserves prior package/selection/receipts and permits retry; disconnect; reload/local fallback; mid-download teacher switch; unchanged official grades; no external requests.');
 } finally { await browser.close(); await server.close(); }

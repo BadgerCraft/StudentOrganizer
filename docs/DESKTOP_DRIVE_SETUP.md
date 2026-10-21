@@ -35,7 +35,7 @@ The app checks the file and assignment folder are owned solely by that account a
 
 ## Recovery and limits
 
-- Cancel closes a pending sign-in listener or aborts the current request. Operations time out after five minutes. Downloads are serial and have no persistent partial file. Retry starts again and must verify the complete bytes.
+- Cancel closes a pending sign-in listener or aborts the current request, and invalidates the whole local import. If a local validation step is already running, the app waits for it to settle and discards its result; the previous package, selection and saved receipts stay intact. Operations time out after five minutes. Downloads are serial and have no persistent partial file. Retry starts again and must verify the complete bytes.
 - Offline, rate-limit, denied-access and stale-upload failures retain the previous local package and all confirmed matches. No automatic polling or retry loop runs.
 - ZIP validation retains the existing 256 MiB archive/expanded cap, per-image/page/pixel limits, CRC/hash checks and unsafe-path/unsupported-layout rejection. A full 256 MiB download can temporarily consume multiple copies in memory through IPC; native device capacity needs acceptance testing.
 - Drive cannot atomically lock external sharing changes. Before/after checks detect observed changes; they cannot guarantee no transient sharing change occurred between checks.

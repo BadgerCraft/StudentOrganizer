@@ -96,28 +96,36 @@ export function CaptureMatchingWorkspace({ assessmentId, userId, onClose, onSwit
     const row = context?.roster.find(row => row.enrollment.id === id);
     return row ? `${row.student.firstName} ${row.student.lastName} (${row.student.localStudentNumber})` : 'Saved student attachment';
   };
-  async function read(source?: File | (() => Promise<File>)) {
+  async function read(source?: File | (() => Promise<File>), signal?: AbortSignal) {
     if (!source || !actor || lock.current || stale) return;
     if (pkg && pkg.submissions.some(submission => !matched.has(submission.id)) && !window.confirm('Choose another package? Confirmed attachments stay saved. Unmatched sets can be recovered by reopening this ZIP.')) return;
     lock.current = true; setBusy(true); setError('');
     try {
+      signal?.throwIfAborted();
       setStatus(typeof source === 'function' ? 'Retrieving private Drive upload…' : 'Reading local ZIP…');
       const file = typeof source === 'function' ? await source() : source;
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       if (!file.name.toLowerCase().endsWith('.zip') || !file.size || file.size > CAPTURE_LIMITS.archiveBytes) throw new Error('Choose a completed phone ZIP, at most 256 MB.');
       setStatus('Validating package and photos locally…');
-      const next = await decodeCapturePackage(new Uint8Array(await file.arrayBuffer()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      signal?.throwIfAborted();
+      const next = await decodeCapturePackage(bytes);
+      signal?.throwIfAborted();
       if (!valid(actor)) throw new Error('Teacher context changed. Reopen under the intended teacher.');
       const saved = await service.reconcile(assessmentId, next, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       const current = await service.context(assessmentId, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       const life = await service.lifecycle(assessmentId, actor);
+      signal?.throwIfAborted();
       if (!valid(actor)) return;
       setLifecycle(life); setAppendRoot('');
       setPackage(next); setReceipts(saved); setContext(current); setSubmissionId(''); setEnrollmentId('');
       setStatus(`${next.submissions.length} page sets ready; ${saved.length} already saved. Select a page set and a student, then Confirm match.`);
-    } catch (error) { quarantineDenied(error); if (mounted.current) { setError(error instanceof Error ? error.message : String(error)); setStatus('Import failed. Your previous package and saved attachments are retained.'); } }
+    } catch (error) { quarantineDenied(error); if (mounted.current) { setError(signal?.aborted ? 'Drive import cancelled. Your previous package and saved attachments are retained.' : error instanceof Error ? error.message : String(error)); setStatus('Import failed. Your previous package and saved attachments are retained.'); } }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   async function confirmMatch() {
