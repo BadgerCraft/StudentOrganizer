@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, session, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, dialog, systemPreferences } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
 const { existsSync } = require('node:fs');
@@ -60,6 +60,7 @@ function createWindow() {
   });
 
   updateWindow = mainWindow;
+  require('./dictationIpc.cjs').attachDictation({ app, window: mainWindow, ipcMain, dialog, systemPreferences });
 
   // Remove default menu bar for clean teacher desktop experience
   if (process.env.NODE_ENV !== 'development') {

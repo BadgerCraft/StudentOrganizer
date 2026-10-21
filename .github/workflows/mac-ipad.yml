@@ -38,12 +38,16 @@ jobs:
       - run: npm test
       - name: Require credential-free test signature
         run: node -e "if (require('./package.json').build.mac.identity !== '-') throw new Error('This PR job only allows an ad-hoc test signature')"
+      - name: Prepare pinned local speech runtime (no model)
+        run: npm run dictation:prepare -- --arch=${{ matrix.arch }}
       - name: Package Mac disk image and archive
         run: npm run package:mac -- --${{ matrix.arch }} --publish never
         env:
           # v26 otherwise skips even ad-hoc signatures on pull requests.
           # No certificate, keychain secret, publishing token or notarization credential is supplied.
           CSC_FOR_PULL_REQUEST: 'true'
+      - name: Check packaged local speech runtime without audio
+        run: node scripts/dictationRuntimeSmoke.cjs "release/mac${{ matrix.arch == 'arm64' && '-arm64' || '' }}/Ontario Teacher Assessment.app/Contents/Resources/dictation-runtime"
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
       - name: Compile bundled iOS app without credentials
@@ -121,6 +125,7 @@ jobs:
       - name: Check classroom-use setup, matching, saved results and popup
         run: |
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          npm run test:dictation:browser
           npm run test:classroom
           npm run test:desktop:photo-reliability
       - name: Check WebKit browser compatibility

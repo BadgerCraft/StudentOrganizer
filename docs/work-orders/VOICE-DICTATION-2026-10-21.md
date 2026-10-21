@@ -1,0 +1,51 @@
+# Local feedback dictation — October 21, 2026
+
+## Authorization and preservation
+
+Parent delegated voice-to-text feedback, separately from concurrent Drive transfer, from current main. Trusted user evidence: ordered items “2. Seamless Drive transfer: remove the manual download/import steps. 3. Voice-to-text marking: dictate feedback, then review and save.” Tyler: “Start on 2 and 3 concurrently as they're different systems.” Implementation, fictional tests, isolated branch, commit/push and review-ready PR authorized. No merge, release, deployment, credentials, persistent access grants, email, real audio or real student data.
+
+Base refreshed safely: `bcaa7417a3313cf64a18717db283d8ab2b2a0f79`; branch `codex/local-feedback-dictation-20261021`. Initial working tree clean. CLI PR read returned Forbidden; connected GitHub read succeeded and reported no open PRs. Shared queue/learning records deliberately left to parent integration to avoid concurrent document churn. Relevant queue annotation feedback row, Markinator approved work order, current AGENTS.md and learning record read. Shared component skill loaded, but index/reference reads failed through the provider (including exact resource path); no claim of current lesson consultation. Repository evidence governs preservation checks.
+
+## Completion criteria / connection map
+
+- Existing ImageMarkup selected annotation and MarkingWorkspace passage draft → bounded local capture → local whisper CLI → editable transcript review → explicit insertion in same feedback target. Existing Save/Cancel, teacher checks, local draft persistence, history and backups remain authoritative; no schema or service mutation.
+- Electron preload exposes only narrow status/install-model/begin/cancel/transcribe operations; main validates owning window/main frame. Audio stays in memory and enters pinned CLI via stdin; no recording/transcript file, cloud service or network call.
+- Explicit microphone consent for each recording, visible state, stop/cancel, timeout, stale-operation guards on teacher/student/annotation/unmount/window change. Never apply to a new target, never replace existing text, retain normal editing and undo where supported.
+- Optional tiny.en model, verified against upstream identity, installed by file chooser; no bundled large model or automatic downloads. Missing engine/model/microphone/errors leave typing available.
+- Required checks: unit lifecycle/IPC/process boundary, build, real Chromium fictional UI interaction/regressions, local engine synthetic fixture where feasible, independent review. Windows/Mac physical microphone and packaged acceptance must be reported separately.
+
+## Engine decision / checkpoint
+
+Pinned [whisper.cpp v1.7.6](https://github.com/ggml-org/whisper.cpp/tree/v1.7.6), actual checkout `a8d002cfd879315632a579e73f0148d06959de36`. [README](https://github.com/ggml-org/whisper.cpp/blob/v1.7.6/README.md) documents CPU inference, Windows MSVC/MinGW, Mac, tiny disk ~75 MiB/runtime ~273 MB. [Model list](https://github.com/ggml-org/whisper.cpp/blob/v1.7.6/models/README.md) provides tiny.en SHA1 `c78c86eb1a8faa21b369bcd33207cc90d64ae9df`. [CLI source](https://github.com/ggml-org/whisper.cpp/blob/v1.7.6/examples/cli/cli.cpp) and common-whisper.cpp support WAV stdin, plain-text stdout, CPU-only arguments; selected flow uses no server or downloader. Runtime [MIT license](https://github.com/ggml-org/whisper.cpp/blob/v1.7.6/LICENSE); original [Whisper code/model MIT license](https://github.com/openai/whisper#license). English tiny trades accuracy for small optional download and CPU footprint; every result requires teacher review. No production accuracy claim.
+
+Alternative: [Vosk small English](https://alphacephei.com/vosk/models), ~40–50 MB, Apache-2.0 for the selected small English model, documented offline support. Chosen whisper.cpp avoids an additional Node native-binding compatibility path and uses auditable stdin/stdout CPU execution. Web Speech/OS/cloud transcription rejected because they do not establish this app's offline boundary. Native runtime is prepared separately for packaging; model remains optional. No unresolved consequential decision blocks this bounded implementation.
+
+Checkpoint: main refreshed, architecture inspected, source researched; local process service and memory-only capture implemented. Remaining: consent/IPC/UI integration, tests, synthetic runtime check, review and publication. No real audio collected. Physical microphone and native Windows/Mac packaging acceptance pending.
+
+## Implemented and measured review checkpoint
+
+- UI: selected photo mark and passage draft expose explicit Start/Stop/Cancel, editable transcript review and explicit append. Target includes teacher identity epoch, session/revision, page/document and annotation. Existing text and native undo retained; image 4,000/passages 20,000 limits preserved. No direct database writes, schemas, backup formats, finalization or Drive intake changes.
+- Audio/runtime: memory-only MediaRecorder → Web Audio mono 16 kHz PCM → bounded owning-frame IPC → CPU-only pinned whisper CLI via stdin/stdout. No file-output flags, temporary capture, network call, credential or OS speech-service fallback. Cancel kills runtime and closes tracks; late capture/results are discarded. Fixed output basename is deliberately non-`-`: upstream otherwise disables stdout callbacks for stdin, and Windows `-otxt -of -` writes to CON rather than the pipe.
+- Setup/packaging: explicit build-time source compilation; binary/license/provenance copied outside asar; optional model installed from file after upstream checksum check. Main frame/audio-only per-recording consent and Mac usage description. Preserve the existing deliberate Copy bug-report clipboard action.
+- PASS: `npm ci --cache /workspace/.npm-cache --no-audit --no-fund` repaired missing preinstalled dependencies. No dependency/lockfile changes.
+- PASS: full `npm test`: **780/780 tests, 75 files**. Focused latest dictation suites **15/15** rerun after review repairs; include process cancel/timeout/retry, malformed/stale requests, permission, no-model/no-runtime, late capture/transcription, real checksum rejection and no temporary files.
+- PASS: `npm run build`, with existing mixed-import/large-chunk warnings; latest source build repeated after lifecycle/limits repairs.
+- PASS: `npm run test:dictation:browser` in real Chromium, using synthetic oscillator audio only: review/add/Save, append without overwriting, native Ctrl-Z, length refusal, no-model, repeated use, Cancel, target switch, delayed capture + blur, missing microphone and disabled editor; **zero external requests**, no page errors.
+- PASS: `npm run test:annotation-feedback`: actual photo selection, 17 levels, criterion, Save/Cancel, switching guards and retained feedback/image bytes. Rerun after session-scoping refinement.
+- PASS: pinned CPU runtime compiled locally, 2,375,064 bytes. `node scripts/dictationRuntimeSmoke.cjs` executes `--help` and checks manifest/license/binary size. Synthetic sine-wave WAV accepted through stdin using upstream dummy test model, exit 0, no recording/transcript files; **not recognition accuracy evidence** (dummy model emits no words).
+- Independent read-only review found three concrete issues: stdin output callback, acquisition/blur race, and passage limit regression. All repaired; independent re-review confirmed resolved, 15 focused tests/browser flow/diff check pass, no further concrete blocker.
+- Windows and Mac primary CI jobs now prepare the runtime and check the packaged executable without microphone/model. Shared browser CI includes the synthetic dictation flow. Exact-head remote results remain to inspect after publication.
+
+## Limits / blockers / overlap
+
+Official model download at `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin` returned HTTP 403; genuine-model recognition could not be exercised here. This is an observed network restriction, not an approval denial. No repeated identical download retries or substitute cloud/audio transmission. Windows/Mac physical microphone, OS prompts, CPU timing and offline device acceptance remain UNVERIFIED. Linux packaged-resource check initially failed because the selected environment lacks `node_modules/electron/dist`; `ELECTRON_CACHE=/workspace/.electron-cache node node_modules/electron/install.js` then failed with `TypeError: fetch failed`. Local packaged-app verification is therefore UNVERIFIED; no repeated setup attempts. Primary native CI provides the remaining packaging route. No real audio was collected.
+
+Parent reported Drive PR46 at `66879167e10267e0cc06238b273629cef99a5e83`, unmerged. Shared overlap: additive `electron/main.cjs`, `electron/preload.cjs`, `.gitignore`; no Drive files or shared queue/learning-document changes. Main refreshed again, still `bcaa741`. Environment remained executable after the parent's disconnection notice: actual build, tests and runtime compilation completed.
+
+## Concise educational walkthrough (prepared; user review pending, no quiz)
+
+Dictation produces an editable preview first. Only **Add transcript to feedback** puts those words into the selected draft, where existing Save/Cancel and local draft recovery work as before. This extra review step matters because small speech models can mishear feedback; speech never grades or finalizes work.
+
+Each recording is tied to one teacher, session and mark. A generation token identifies that one attempt; changing the target or cancelling invalidates it, so a late result cannot land in another student's feedback. Audio stays in memory and passes directly to a local CPU process, rather than a cloud speech service or a temporary recording file.
+
+The tradeoff is a separate optional ~75 MiB English model and some CPU delay. The application stays usable without it. Automated synthetic tests and source review pass, but those do not prove real microphone permissions or transcription quality on Windows/Mac; that fictional-data device acceptance is the next gate. Merge/release remain reserved.
