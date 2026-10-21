@@ -1,0 +1,13 @@
+import { resolve, join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { LocalCollector } from './collector';
+import { AS_OF, OBSERVED, simulate, truth } from './simulator';
+const directory=resolve(process.argv[2]??'/tmp/student-organizer-analytics-demo');
+const collector=new LocalCollector(directory,()=>Date.parse(AS_OF));
+await simulate(collector,'demo'); await simulate(collector,'measured-test');
+const demo=await collector.query('demo',AS_OF,OBSERVED);
+const measured=await collector.query('measured-test',AS_OF,OBSERVED);
+await mkdir(directory,{recursive:true});
+await writeFile(join(directory,'dashboard-demo.json'),JSON.stringify(demo,null,2));
+await writeFile(join(directory,'dashboard-measured-test.json'),JSON.stringify(measured,null,2));
+console.log(JSON.stringify({directory,truth,demo:demo.adoption,measuredTest:measured.adoption,externalTraffic:0},null,2));
