@@ -27,6 +27,7 @@ jobs:
           - runner: windows-latest
             platform: win
             executable: release/control-panel/win-unpacked/Student Organizer Control Panel.exe
+            candidate: release/control-panel/StudentOrganizerControlPanel-0.1.0-x64.exe
             architecture: --x64
             resources: release/control-panel/win-unpacked/resources
           - runner: macos-15
@@ -53,7 +54,7 @@ jobs:
       - name: Audit actual packaged entry and shared contract bytes
         run: node scripts/audit-control-panel-package.cjs "${{ matrix.resources }}"
       - name: Launch actual owner package with disposable fictional profile
-        run: node --import tsx scripts/controlPanelNativeSmoke.ts "${{ matrix.executable }}"
+        run: node --import tsx scripts/controlPanelNativeSmoke.ts "${{ matrix.executable }}" "${{ matrix.candidate }}"
       - name: Preserve native verification report only (no installers or private data)
         if: always()
         uses: actions/upload-artifact@v4

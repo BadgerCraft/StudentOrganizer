@@ -20,7 +20,10 @@ const evidencePath = path.resolve(`release/control-panel/native-smoke-${process.
 const steps: string[] = [];
 let runtime: ElectronApplication | undefined;
 let page!: Page;
-const originalBytes = Buffer.from('FICTIONAL NON-EXECUTABLE INSTALLER FIXTURE\n');
+// Windows preparation must inspect a real valid PE/NSIS file. A text .exe is
+// correctly rejected as an invalid signature; never weaken inspection for fixtures.
+assert.ok(process.platform !== 'win32' || process.argv[3], 'Windows native smoke requires the CI-produced unsigned NSIS fixture path.');
+const originalBytes = process.argv[3] ? await readFile(path.resolve(process.argv[3])) : Buffer.from('FICTIONAL NON-EXECUTABLE INSTALLER FIXTURE\n');
 const artifact = path.join(fixtures, 'OntarioTeacherAssessment-1.0.2-x64-nsis.exe');
 const descriptor = path.join(fixtures, 'candidate.json');
 const candidate = { schemaVersion: 1, product: 'StudentOrganizer', version: '1.0.2', arch: 'x64',
@@ -113,7 +116,7 @@ try {
     const record = JSON.parse(await readFile(path.join(temporary, folder, 'student-organizer-approval-x64.json'), 'utf8'));
     assert.equal(record.mode, 'approved-release'); assert.equal(record.signature.signature, 'unsigned');
     assert.deepEqual(await readFile(path.join(temporary, folder, candidate.artifact.name)), originalBytes);
-    steps.push('Actual Windows native signature inspection, unsigned owner acknowledgement and exact publication preparation; no publication');
+    steps.push('Actual Windows native signature inspection of CI-built unsigned NSIS bytes, owner acknowledgement and exact publication preparation; fixture never executed or published');
   } else {
     const refused = await page.evaluate(() => (window as any).ownerConsole.preparePublication(true));
     assert.match(refused.error, /Prepare delivery on Windows/);
