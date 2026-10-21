@@ -3,8 +3,9 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
-const { fingerprint, equal, inspect, verifyFinal } = require('../../scripts/dictationRuntimeIntegrity.cjs');
+const { fingerprint, equal, inspect, verifyFinal, compareMacCode } = require('../../scripts/dictationRuntimeIntegrity.cjs');
 const afterPack = require('../../scripts/dictationAfterPack.cjs');
 const afterSign = require('../../scripts/dictationAfterSign.cjs');
 const { Arch } = require('builder-util');
@@ -60,5 +61,54 @@ describe('packaged speech runtime integrity', () => {
     expect(() => verifyFinal(f.root, 'arm64', { ...receipt, source: { ...f.manifest, bytes: 1 } })).toThrow('receipt');
     expect(() => verifyFinal(f.root, 'arm64', receipt, () => 'x86_64')).toThrow('architecture');
     expect(() => verifyFinal(f.root, 'arm64', receipt, (cmd: string) => { if (cmd.endsWith('codesign')) throw new Error('invalid signature'); return 'arm64'; })).toThrow('invalid signature');
+  });
+});
+
+
+describe('prepared code binding', () => {
+  it('compares every normalized byte and never rewrites its inputs', () => {
+    const source = Buffer.from('prepared executable');
+    const commands: string[][] = [];
+    const run = (_cmd: string, args: string[]) => { commands.push(args.slice(0, -1)); };
+    expect(compareMacCode(source, Buffer.from(source), run).sha256).toHaveLength(64);
+    expect(commands).toEqual([
+      ['--force', '--sign', '-', '--identifier', 'ca.on.teacher.dictation-integrity', '--timestamp=none'], ['--remove-signature'],
+      ['--force', '--sign', '-', '--identifier', 'ca.on.teacher.dictation-integrity', '--timestamp=none'], ['--remove-signature'],
+    ]);
+    expect(() => compareMacCode(source, Buffer.from('replaced executable'), run)).toThrow('bytes/hash');
+    expect(source.toString()).toBe('prepared executable');
+  });
+  it('fails closed if normalization fails', () => {
+    expect(() => compareMacCode(Buffer.from('a'), Buffer.from('a'), () => { throw new Error('signing failed'); })).toThrow('signing failed');
+  });
+  it.skipIf(process.platform !== 'darwin')('native hooks accept re-signing but reject another validly signed same-architecture program', async () => {
+    const architecture = process.arch;
+    const f = fixture('darwin', architecture);
+    const c = path.join(f.context.appOutDir, 'fixture.c');
+    const compile = (result: number) => {
+      fs.writeFileSync(c, `int main(void) { return ${result}; }\n`);
+      execFileSync('/usr/bin/clang', [c, '-o', f.binary]);
+    };
+    const sign = () => execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', '--identifier', 'different.packaging.identifier', '--timestamp=none', f.binary]);
+    compile(0);
+    // Include unsigned input on Intel and linker-signed input on ARM.
+    const manifest = { ...f.manifest, ...fingerprint(f.binary) };
+    fs.writeFileSync(path.join(f.root, 'manifest.json'), JSON.stringify(manifest));
+    await afterPack(f.context);
+    sign();
+    await afterSign(f.context);
+    const receiptPath = path.join(f.context.outDir, `dictation-runtime-${architecture}.json`);
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+    verifyFinal(f.root, architecture, receipt);
+    expect(receipt.code.method).toBe('apple-codesign-normalize-remove-v1');
+    fs.unlinkSync(receiptPath);
+    compile(0);
+    fs.writeFileSync(path.join(f.root, 'manifest.json'), JSON.stringify({ ...manifest, ...fingerprint(f.binary) }));
+    await afterPack(f.context);
+    compile(1); sign();
+    // Prove the substituted executable itself passes native signature validation.
+    execFileSync('/usr/bin/codesign', ['--verify', '--strict', f.binary]);
+    await expect(afterSign(f.context)).rejects.toThrow('bytes/hash');
+    expect(fs.existsSync(receiptPath)).toBe(false);
   });
 });

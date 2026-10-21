@@ -1,10 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const REVISION = 'a8d002cfd879315632a579e73f0148d06959de36';
 function fingerprint(file) {
-  const bytes = fs.readFileSync(file);
+  const bytes = Buffer.isBuffer(file) ? file : fs.readFileSync(file);
   return { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 function equal(actual, expected) {
@@ -23,6 +24,28 @@ function verifyMac(executable, architecture, run = execFileSync) {
   if (actual !== expected) throw new Error('Wrong signed speech runtime architecture.');
   run('/usr/bin/codesign', ['--verify', '--strict', '--verbose=2', executable], { stdio: 'pipe' });
 }
+// Delegate Mach-O rewriting to Apple's signing tool, not a permissive custom
+// parser. On disposable copies, first give BOTH inputs the same signature policy
+// (also handles unsigned x64 input), then remove it. Compare ALL remaining bytes,
+// including load commands, instructions, constants and link-edit data. Fail closed
+// if Apple's normalization ever leaves different padding/layout. Never mutate the
+// packaged executable or infer identity from a valid signature/architecture alone.
+function compareMacCode(prepared, signed, run = execFileSync) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dictation-code-'));
+  try {
+    const normalized = [prepared, signed].map((bytes, index) => {
+      const file = path.join(dir, `runtime-${index}`);
+      fs.writeFileSync(file, bytes, { mode: 0o700 });
+      run('/usr/bin/codesign', ['--force', '--sign', '-', '--identifier', 'ca.on.teacher.dictation-integrity', '--timestamp=none', file], { stdio: 'pipe' });
+      run('/usr/bin/codesign', ['--remove-signature', file], { stdio: 'pipe' });
+      return fingerprint(file);
+    });
+    equal(normalized[0], normalized[1]);
+    return { method: 'apple-codesign-normalize-remove-v1', ...normalized[0] };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 function verifyFinal(root, architecture, receipt, run = execFileSync) {
   const { manifest, executable } = inspect(root, 'darwin', architecture);
   if (!receipt || receipt.stage !== 'afterSign' || JSON.stringify(receipt.source) !== JSON.stringify(manifest)) throw new Error('Missing or mismatched signing receipt.');
@@ -30,4 +53,4 @@ function verifyFinal(root, architecture, receipt, run = execFileSync) {
   verifyMac(executable, architecture, run);
   return { manifest, executable };
 }
-module.exports = { fingerprint, equal, inspect, verifyMac, verifyFinal };
+module.exports = { fingerprint, equal, inspect, verifyMac, verifyFinal, compareMacCode };

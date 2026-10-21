@@ -11,8 +11,9 @@ module.exports = async function afterPack(context) {
   const root = rootFor(context);
   if (!fs.existsSync(root)) return; // Existing upgrade fixtures intentionally omit optional runtime.
   const { manifest, executable } = inspect(root, context.electronPlatformName, Arch[context.arch]);
-  equal(fingerprint(executable), manifest);
-  pending.set(root, manifest);
+  const bytes = fs.readFileSync(executable);
+  equal(fingerprint(bytes), manifest);
+  pending.set(root, { manifest, bytes });
   console.log('Speech runtime before signing:', JSON.stringify(manifest));
 };
 module.exports.pending = pending;
