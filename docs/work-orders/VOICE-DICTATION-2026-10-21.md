@@ -49,3 +49,7 @@ Dictation produces an editable preview first. Only **Add transcript to feedback*
 Each recording is tied to one teacher, session and mark. A generation token identifies that one attempt; changing the target or cancelling invalidates it, so a late result cannot land in another student's feedback. Audio stays in memory and passes directly to a local CPU process, rather than a cloud speech service or a temporary recording file.
 
 The tradeoff is a separate optional ~75 MiB English model and some CPU delay. The application stays usable without it. Automated synthetic tests and source review pass, but those do not prove real microphone permissions or transcription quality on Windows/Mac; that fictional-data device acceptance is the next gate. Merge/release remain reserved.
+
+## Publication readback
+
+Implementation `acb7a4ffd363c51dd87d1318f81320dafc9b20d0` pushed normally and verified against remote branch. [PR47](https://github.com/BadgerCraft/StudentOrganizer/pull/47) created open/non-draft against `bcaa741`; not merged. Implementation-head native runs: Windows `39652836646` and Mac/shared browser `39652836645` queued on readback, not passing evidence. This documentation-only publication checkpoint follows on the same branch; final-head CI must be checked independently. No main merge, release, deployment, credential/grant, real audio/student data or Drive integration performed. Parent owns shared queue reconciliation and reserved merge decision; walkthrough is prepared above, review pending.
