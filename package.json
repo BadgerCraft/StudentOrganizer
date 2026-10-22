@@ -49,7 +49,9 @@
     "test:control-panel:browser": "node --import tsx scripts/controlPanelSmoke.ts",
     "analytics:demo": "node --import tsx scripts/analytics/demo.ts",
     "test:analytics": "vitest run src/analytics/analytics.test.ts",
-    "test:analytics:browser": "node --import tsx scripts/analytics/browserSmoke.ts"
+    "test:analytics:browser": "node --import tsx scripts/analytics/browserSmoke.ts",
+    "dictation:prepare": "node scripts/prepareDictation.cjs",
+    "test:dictation:browser": "node --import tsx scripts/dictationSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
@@ -126,7 +128,24 @@
       "minimumSystemVersion": "13.0",
       "identity": "-",
       "hardenedRuntime": false,
-      "artifactName": "OntarioTeacherAssessment-${version}-mac-${arch}.${ext}"
-    }
+      "artifactName": "OntarioTeacherAssessment-${version}-mac-${arch}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Optional local feedback dictation. Audio stays on this computer and is discarded after transcription or cancellation."
+      }
+    },
+    "extraResources": [
+      {
+        "from": "dictation-runtime",
+        "to": "dictation-runtime",
+        "filter": [
+          "whisper-cli",
+          "whisper-cli.exe",
+          "LICENSE",
+          "manifest.json"
+        ]
+      }
+    ],
+    "afterPack": "scripts/dictationAfterPack.cjs",
+    "afterSign": "scripts/dictationAfterSign.cjs"
   }
 }

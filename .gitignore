@@ -38,5 +38,8 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 
+# Generated CPU-only local speech runtime; never commit model weights.
+dictation-runtime/*
+!dictation-runtime/README.md
 # Operator-approved desktop OAuth client configuration (never commit).
 desktop-drive-oauth.json

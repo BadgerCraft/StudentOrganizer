@@ -1,0 +1,1 @@
+Generated optional speech runtime goes here via `npm run dictation:prepare` (requires Git, CMake and a C++ toolchain). Generated binaries are ignored by Git and copied outside app.asar by electron-builder. No model is bundled. See docs/LOCAL_DICTATION.md.

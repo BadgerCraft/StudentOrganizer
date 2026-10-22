@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, session, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session, dialog, systemPreferences, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
 const { existsSync } = require('node:fs');
@@ -73,6 +73,7 @@ function createWindow() {
   });
 
   updateWindow = mainWindow;
+  require('./dictationIpc.cjs').attachDictation({ app, window: mainWindow, ipcMain, dialog, systemPreferences });
   mainWindow.on('closed', () => captureDrive.disconnect());
   mainWindow.webContents.on('render-process-gone', () => captureDrive.disconnect());
   mainWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) captureDrive.disconnect(); });

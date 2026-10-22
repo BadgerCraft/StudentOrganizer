@@ -1,3 +1,4 @@
+import { DictationFeedback } from '../../dictation/DictationFeedback';
 import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 import { LevelPicker } from '../../components/LevelPicker';
@@ -11,6 +12,8 @@ import { MARKING_LIMITS, type MarkingActor, type MarkingImagePage, type MarkingP
 
 export interface ImageMarkupProps {
   commentContainer?: HTMLElement | null;
+  /** Includes the owning session/revision, so delayed speech cannot cross drafts. */
+  dictationScope?: string;
   pages: MarkingImagePage[];
   feedback: MarkingPageFeedback[];
   onChange: (next: MarkingPageFeedback[]) => void;
@@ -27,7 +30,7 @@ export interface ImageMarkupProps {
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
+export function ImageMarkup({ dictationScope = '', commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
   const pages = feedback.map(item => originalPages.find(page => page.id === item.pageId)).filter((page): page is MarkingImagePage => Boolean(page));
   for (const page of originalPages) if (!pages.some(item => item.id === page.id)) pages.push(page);
@@ -317,7 +320,7 @@ export function ImageMarkup({ commentContainer, pages: originalPages, feedback, 
     {!selectedAnnotation && <div className="flex flex-wrap items-center gap-2"><label className="text-sm">Saved marks <select aria-label="Select saved mark" value={selected ?? ''} className="rounded border p-2" onChange={event => selectMark(event.target.value || null)}><option value="">Select a mark</option>{current.annotations.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.kind}{item.text ? `: ${item.text.slice(0, 40)}` : ''}</option>)}</select></label>
     </div>}
     {selectedAnnotation && <fieldset key={selectedAnnotation.id} disabled={disabled} className="space-y-2 rounded border bg-white p-3"><legend className="text-sm font-semibold">Write a comment for this mark</legend>
-      <label className="block text-sm">Comment text <textarea aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} value={selectedAnnotation.text} onChange={event => editAnnotation({ text: event.target.value })} /></label>
+      <div className="block text-sm">Comment text <DictationFeedback target={`${dictationScope}:${actor?.userId}:${actor?.epoch}:${page.id}:${selectedAnnotation.id}`} aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} disabled={disabled || readOnly} value={selectedAnnotation.text} onValue={text => editAnnotation({ text })} /></div>
       <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         </div>
       {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
