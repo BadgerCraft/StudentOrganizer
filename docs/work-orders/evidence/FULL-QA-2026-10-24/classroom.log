@@ -1,0 +1,23 @@
+
+> ontario-teacher-assessment@1.0.0 test:classroom
+> node --import tsx scripts/annotationFeedbackSmoke.ts && node --import tsx scripts/teacherProfilesSmoke.ts && node --import tsx scripts/classroomUseSmoke.ts && node --import tsx scripts/classroomEvidencePopupSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+PASS: photo selection, 17 levels, criterion, Save/Cancel, switching guards and retained feedback/bytes
+PASS: browser fresh setup, second teacher, explicit choose/edit/switch, reload persistence, new-session confirmation, Escape cancellation, modal isolation; no page errors or external requests.
+Re-optimizing dependencies because vite config has changed
+PASS: At 1280×720 the result editor scrolls naturally to Save and Cancel, saves the selected level and feedback, and Cancel preserves the saved result.
+PASS: Real TXT/DOCX guided import: explicit multi-student matching, several pages per student, Back, Undo, unsupported .doc, file-read retry, partial-save retry and failed-opening recovery without duplicates.
+PASS: All 17 level choices select visibly; failed final save retains draft and rolls back results; Save and next/return update Markbook, feedback-only stays ungraded, and saved results survive restart.
+PASS: Single-student pasted-text flow requires explicit student confirmation, skips matching, and retains entered content on Back without duplicate imports.
+PASS: Picture import preserves exact local bytes and opens image marking; historical results are unchanged; no external requests or browser errors.
+PASS: Save and return protects unsaved rubric and import preparation: Cancel preserves exact preparation/draft/official records; explicit discard alone finalizes and returns to Markbook.
+Re-optimizing dependencies because vite config has changed
+PASS: popup half-width/tall/responsive, X/outside/Escape dirty guards, nested Escape, focus restoration, no background activation
+PASS: focused criterion comment editing, return review, retained evidence, built-in and saved rubric level choices
+PASS: focused image comments/shared levels, pen stroke preserved alongside comments, original image bytes retained
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

@@ -1,0 +1,38 @@
+
+> ontario-teacher-assessment@1.0.0 build
+> tsc && vite build
+
+shared/capturePackage.ts(1,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+shared/capturePackage.ts(113,33): error TS7006: Parameter 'chunk' implicitly has an 'any' type.
+src/benchmarks/markingDesktopAcceptance.ts(5,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/capturePackage.test.ts(2,25): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importDocumentArchive.test.ts(2,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importDocumentArchive.ts(1,25): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importDocuments.test.ts(2,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importDocuments.ts(1,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importDocuments.ts(2,29): error TS2307: Cannot find module 'saxes' or its corresponding type declarations.
+src/marking/importDocuments.ts(115,26): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+src/marking/importDocuments.ts(120,51): error TS18046: 'attribute' is of type 'unknown'.
+src/marking/importDocuments.ts(120,86): error TS2339: Property 'value' does not exist on type '{}'.
+src/marking/importDocuments.ts(121,56): error TS18046: 'attribute' is of type 'unknown'.
+src/marking/importDocuments.ts(121,87): error TS2339: Property 'value' does not exist on type '{}'.
+src/marking/importDocuments.ts(151,63): error TS2307: Cannot find module 'mammoth' or its corresponding type declarations.
+src/marking/importImages.test.ts(2,26): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importImages.ts(1,24): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importImages.ts(81,28): error TS7006: Parameter 'chunk' implicitly has an 'any' type.
+src/marking/importRubric.test.ts(2,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importRubric.ts(1,27): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/importRubric.ts(2,29): error TS2307: Cannot find module 'saxes' or its corresponding type declarations.
+src/marking/importRubric.ts(16,24): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+src/marking/importRubric.ts(25,21): error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/marking/importRubric.ts(26,25): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+src/marking/markingBackup.test.ts(9,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/marking/markingService.test.ts(4,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+src/services/nativeFiles.ts(1,43): error TS2307: Cannot find module '@capacitor/core' or its corresponding type declarations.
+src/services/rosterTable.ts(1,53): error TS2307: Cannot find module 'parse5' or its corresponding type declarations.
+src/services/rosterTable.ts(151,27): error TS7006: Parameter 'attr' implicitly has an 'any' type.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

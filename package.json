@@ -51,7 +51,8 @@
     "test:analytics": "vitest run src/analytics/analytics.test.ts",
     "test:analytics:browser": "node --import tsx scripts/analytics/browserSmoke.ts",
     "dictation:prepare": "node scripts/prepareDictation.cjs",
-    "test:dictation:browser": "node --import tsx scripts/dictationSmoke.ts"
+    "test:dictation:browser": "node --import tsx scripts/dictationSmoke.ts",
+    "test:qa:integrity": "node --import tsx scripts/qaMarkbookConcurrencySmoke.ts && node --import tsx scripts/qaClassroomAuthorizationSmoke.ts && node --import tsx scripts/qaCustomAssessmentSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

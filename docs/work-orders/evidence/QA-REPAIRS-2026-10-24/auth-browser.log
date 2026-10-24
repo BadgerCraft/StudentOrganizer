@@ -1,0 +1,1 @@
+PASS: real Dashboard archive and six SeatingChart controls deny read-only writes, retain all tables and show errors; authorized layout/archive writes version and audit; zero page errors/external requests.

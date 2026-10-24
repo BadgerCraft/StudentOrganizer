@@ -1,0 +1,15 @@
+
+ RUN  v2.1.9 /workspace/StudentOrganizer
+
+ ✓ src/services/profileAssessmentService.test.ts (7 tests) 1089ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  13:58:53
+   Duration  2.82s (transform 717ms, setup 0ms, collect 1.11s, tests 1.09s, environment 0ms, prepare 139ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

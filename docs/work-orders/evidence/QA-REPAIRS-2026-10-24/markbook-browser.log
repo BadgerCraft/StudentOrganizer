@@ -1,0 +1,2 @@
+PASS: Existing editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.
+PASS: Absent editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.

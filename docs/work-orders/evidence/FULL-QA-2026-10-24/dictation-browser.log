@@ -1,0 +1,11 @@
+
+> ontario-teacher-assessment@1.0.0 test:dictation:browser
+> node --import tsx scripts/dictationSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+{"result":"PASS","checks":"review/add/save, native undo, synthetic capture, repeated use, cancellation, stale target, window blur, no microphone, disabled editor, zero external requests","calls":{"begin":8,"transcribe":3,"cancel":6,"stopped":7,"bytes":9644}}
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

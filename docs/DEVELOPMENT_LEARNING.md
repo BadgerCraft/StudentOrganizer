@@ -383,3 +383,14 @@ Prepared discussion question: If two rows have the same name but different stude
 ## October21 — analytics pipeline walkthrough prepared
 
 DEV-ANALYTICS-OUTBOX: an outbox holds validated summary events until an explicit local attempt; idempotent ingestion means replaying the same event cannot inflate adoption. Fictional session consent never enables production capture. Restart drops unsent fictional events and requires fresh consent, favoring privacy over completeness. Collector withdrawal removes received local events and blocks replay, but cannot erase independent exported copies. Prepared question: after withdrawal following an export, which local copies can this pipeline erase and which require deliberate removal? Walkthrough and actual answer pending; no recall or merge/release approval inferred. See analytics work order and exact definitions in docs/analytics/README.md.
+
+
+## October 24 — QA integrity repairs walkthrough (prepared; review pending)
+
+Before this repair, a Markbook editor could keep an old mark while its live data refreshed, then silently save over the newer mark. The editor now remembers the version it opened. A conflict keeps the draft visible and requires reopening the current result before saving. This is optimistic concurrency: compare the record you started with before replacing it.
+
+Individual assessment creation, its optional percentage mark and audit records now succeed or fail together in one transaction. Repeating the same save does not create another assignment, and a failed save keeps the draft. Read-only profiles cannot alter classes/layouts through the older direct UI routes. Reporting periods come from the actual class calendar; an ambiguous choice is explicit and an open draft cannot silently move to another period. Restore checks that linked records describe the same class/assessment before replacing anything.
+
+Tradeoff: conflicting saves and inconsistent backups are rejected instead of guessing how to combine them. Existing records/history are retained; no schema migration or silent cleanup is performed. The two deferred phone-capacity/seating-geometry findings are unchanged. Local verification and independent reviews are recorded in FULL-QA-2026-10-24.md; exact draft PR/revision will be recorded there after publication. Physical-platform limits remain separate.
+
+Prepared discussion question: If another authorized window changes a mark while your editor is open, what should happen to their saved mark and your unsaved draft? Status DEFERRED until Tyler reviews the PR; no answer or demonstrated understanding inferred. This walkthrough does not authorize merge/release and does not block already-approved publication.

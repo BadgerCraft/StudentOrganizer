@@ -1,0 +1,22 @@
+
+warn - The `content` option in your Tailwind CSS configuration is missing or empty.
+warn - Configure your content sources or your generated CSS will be missing styles.
+warn - https://tailwindcss.com/docs/content-configuration
+dialogs 1
+INVALID_SCORE_PARTIAL {
+  assessmentCount: 1,
+  assignmentCount: 1,
+  resultCount: 0,
+  periods: [ 'rp-midterm' ]
+}
+RETRY_DUPLICATE {
+  assessmentCount: 2,
+  assignmentCount: 2,
+  resultCount: 1,
+  periods: [ 'rp-midterm', 'rp-midterm' ]
+}
+CLEAN_CALENDAR_BROKEN {
+  assessment: '104189e8-b73b-4a5b-86ea-1d1cb9f26ff2',
+  period: 'rp-midterm',
+  periodExists: false
+}

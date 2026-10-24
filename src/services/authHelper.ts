@@ -72,7 +72,11 @@ async function assertClassSectionAccess(
   while (currentOrgId && depth < 10) {
     depth++;
     const org: Organization | undefined = await db.organizations.get(currentOrgId);
-    if (!org || org.deletedAt !== null || !org.parentOrganizationId) {
+    if (!org || org.deletedAt !== null) {
+      throw new AuthorizationError('Organization hierarchy contains a missing or deleted organization.');
+    }
+    if (!org.parentOrganizationId) {
+      currentOrgId = null;
       break;
     }
     const parentId: UUID = org.parentOrganizationId;
@@ -83,6 +87,8 @@ async function assertClassSectionAccess(
     orgChain.push(parentId);
     currentOrgId = parentId;
   }
+
+  if (currentOrgId) throw new AuthorizationError('Organization hierarchy exceeds the supported depth.');
 
   // 4. Retrieve memberships across the entire ancestor chain
   const memberships = await db.organizationMemberships

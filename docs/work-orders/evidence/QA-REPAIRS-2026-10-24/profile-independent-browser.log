@@ -1,0 +1,1 @@
+PASS: real profile fresh calendar, invalid-score rollback, corrected double-submit once, pending edits/dismissal guards, override visible conflict, explicit period-change recovery, read-only blank-score rejection, full backup roundtrip. Fictional browser data only.

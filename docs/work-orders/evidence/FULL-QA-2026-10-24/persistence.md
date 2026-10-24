@@ -1,0 +1,42 @@
+# Independent persistence/authorization review — 2026-10-24
+
+Source: `/workspace/StudentOrganizer`, commit `ca9523735325a1b8873ce824f8cf4066b9991da3`. Review-only; no product source changes. Fictional isolated IndexedDB data only. Findings below do not describe an authenticated multiuser server: teacher selection is explicitly local attribution, not security against someone controlling the device.
+
+## Findings
+
+### P1 — remaining direct UI mutations bypass established read-only/actor boundary
+`src/components/DashboardView.tsx:150-155` archives a class with `db.classSections.update` without identity, class authorization, version, audit or outbox. `src/components/SeatingChartView.tsx:131-177` likewise changes lock/dimensions/display directly. `listAccessibleClassSections` deliberately admits read-only assignments (`src/services/authHelper.ts:137-158`), while these controls have no write-role gate. Thus a legitimate read-only profile can use visible controls to modify/hide another teacher's class. Automated Chromium repro mounted the actual components with classes returned by listAccessibleClassSections for a read_only actor: Archive Class committed deletedAt with zero audit records; Remove Row also succeeded. See layout-browser.mjs and layout-browser.log (exit 0). This is a concrete UI path, not a server privilege-escalation claim. Archive does not delete historical records, but class disappears from active views. Require a transactional class/layout service with actor, authorization, optimistic version, audit and outbox, and allow/deny UI tests. StudentProfile custom creation has the same pattern, coordinated with marking reviewer to avoid duplicate report entries.
+
+### P2 — restore accepts internally inconsistent and unresolvable graph edges
+`src/services/portabilityService.ts:1311-1319` checks only existence of separate foreign keys, not agreement between assessment, enrollment, category and section. Runtime probe changed seeded English studentAssessment enrollment to an existing Chemistry enrollment; `restoreFromJSON` succeeded and retained the contradictory record. Such a backup loses the assessment from the intended student's calculation and leaves a record ordinary writes reject. Existing per-write relationship checks are stronger than restore.
+
+A second reproducible mechanism: `:912-916` and `:1210-1211` validate trimmed IDs/references but restore stores original strings (`:1523-1528`). Adding spaces around a course's organizationId passes validation and atomic restore, yet exact parent lookup returns undefined and the class drops from accessible listings. Validation must either reject noncanonical identifiers or consistently normalize the entire graph before both validation and storage. Add graph-consistency validators and pre-clear rejection tests; retain the current single atomic replacement transaction.
+
+Evidence: `node --import tsx /tmp/studentorganizer-review/persistence-probes.mts` exits 0; log `/tmp/studentorganizer-review/persistence-probes.log`: `CROSS_CLASS_RESTORE_ACCEPTED`, `WHITESPACE_REF_RESTORE_ACCEPTED { missingExactParent: true, accessible: 1 }`. These are observed accepting-invalid-input probes, not a passing safety assertion.
+
+### Justified improvement — stale-actor guard is inconsistent in older services
+`src/services/portabilityService.ts:195-218` checks membership but never captures/checks the session identity epoch or includes devices. Probe selects teacher, retains returned actor/device, clears active teacher, then calls importRosterCSV: one student and enrollment are committed. `ImportExportModal.tsx:111-121` checks actor only before dispatch, so a delayed transaction has no final revocation boundary. Several newer services correctly use `captureLocalWriteActor`/`guardLocalWriteIdentity`; apply that existing pattern consistently to older mutators (roster, markbook, seating, attendance, participation, class creation) with failure-injection tests. Runtime evidence directly proves service contract; a physical UI race was not demonstrated. Do not describe this as ability to forge a remote session.
+
+### P2 — authorization accepts deleted organization
+`src/services/authHelper.ts:74-76` breaks on a missing/deleted organization after including its ID in `orgChain`, then continues evaluating memberships/assignments. Probe soft-deletes the seeded course organization and calls `assertClassSectionWriteAccess`; accepted (`DELETED_ORG_WRITE_AUTH_ACCEPTED`). The helper's documented deletion detection is not enforced. Reject deleted/missing organization nodes; distinguish a valid root's null parent from invalid hierarchy, and reject over-depth traversal. Reachable after restoring a soft-deleted organization (restore currently permits it); no normal UI organization deletion workflow identified, so lower priority than direct UI bypass.
+
+### P2 — shrinking seating dimensions silently hides occupied students
+`src/components/SeatingChartView.tsx:155-177` decrements dimensions without reconciling occupied edge seats. Grid at `:122-126` excludes out-of-bounds coordinates, while unseated list at `:113-117` excludes every persisted seat even outside bounds. A student in the removed last row/column is therefore in neither list. Automated Chromium repro of the actual component confirmed the edge student was visible before shrink, absent afterward, while its seat persisted outside the new bounds (`layoutRows:2, retainedSeatRow:2, studentVisible:false`). See layout-browser.log. Records are retained and re-expansion recovers visibility, so this is recovery/operability, not permanent data loss. Either block occupied-edge shrink or transactionally unseat affected occupants with audit and explicit messaging.
+
+## Architecture and coverage
+
+Strong foundation: Dexie transactions for domain changes, explicit relational checks in modern services, version checks, audit/outbox writes in same transaction, coherent snapshot backup transaction, prevalidation plus atomic all-table restore, schema 4/5 additive tables, migration quarantine for orphan sync entries. Identity epoch guard is a particularly useful existing abstraction. No rewrite warranted.
+
+Material debt: enforcement is opt-in per call site, and old UI/old services coexist with stronger services. The costly defect is competing write entrypoints, not component aesthetics. Restore shape/reference validation and normal domain validation have diverged. Migration v3 and restore separately implement participation summary projection; they currently also differ on undefined deletedAt (`database.ts:315` exact null versus restore `:1460` null-or-undefined). Consolidation is a justified improvement after defining legacy semantics and regression coverage, not a proved corruption finding.
+
+Traced: identity selection/device/epoch; class authorization; roster preview/revalidation/atomic commit/audit; profile update and enrollment mutation; seat assignment and direct resize; backup snapshot/validation/legacy normalization/file validation/atomic replacement; migrations 1→2 organization backfill/quarantine and 2→3 summary rebuild, additive 4/5. Focused probes cover restore malformed graph, revoked roster actor and deleted organization; actual-component Chromium interactions cover read-only archive, read-only dimension change and edge-student disappearance. Root owns full tests/builds. Marking reviewer owns detailed custom-assessment repro and period defect. No physical filesystem quota/power loss/Windows/Mac restart tests performed here. Component lesson authoritative reference read failed in coordinator context; no shared lesson update claimed.
+
+Browser evidence scope: component mount used real DB/service queries and event handlers, not a complete navigation from app startup. Both initial browser setup failures (dependency import and createRoot export shape) were harness issues; final layout harness uses a Vite virtual import with isolated cache and passes. Marking reviewer owns successful profile browser result.
+
+## Repair sequence
+1. Consolidate direct UI destructive/grade mutations behind existing service-style transactional boundaries; include role denial and partial-write rollback tests.
+2. Add strict restore graph integrity/canonical-ID validation before any replacement.
+3. Apply identity epoch guard consistently; fix hierarchy fail-open.
+4. Repair seating shrink semantics, then factor proven duplicate validation/projection logic.
+
+All proposals remain unapplied, as requested. No merge/release/deployment or live-data access.

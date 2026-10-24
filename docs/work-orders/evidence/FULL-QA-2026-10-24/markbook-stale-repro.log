@@ -1,0 +1,5 @@
+
+warn - The `content` option in your Tailwind CSS configuration is missing or empty.
+warn - Configure your content sources or your generated CSS will be missing styles.
+warn - https://tailwindcss.com/docs/content-configuration
+STALE_EDITOR_OVERWRITE {"openedValue":"3+","newerWrite":{"raw":"90","feedback":"NEWER WRITE","version":2},"staleSave":{"raw":"3+","feedback":"Effective application of tropes.","version":3}}

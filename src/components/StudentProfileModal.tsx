@@ -1,5 +1,6 @@
 import { safePhotoSource } from '../utils/localPhoto';
 import React, { useState, useMemo, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
   X,
   BookOpen,
@@ -28,7 +29,7 @@ import type {
   UUID
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
-import { MarkbookDomainService } from '../services/markbookService';
+import { ProfileAssessmentService, profileReportingPeriods } from '../services/profileAssessmentService';
 import { StudentDomainService } from '../services/studentService';
 import { getAppIdentity, getIdentityEpoch } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
@@ -80,7 +81,6 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [customTitle, setCustomTitle] = useState('');
   const [customType, setCustomType] = useState<'formative' | 'summative'>('summative');
   const [customCategory, setCustomCategory] = useState<AchievementCategoryCode>('K');
-  const [customMaxScore, setCustomMaxScore] = useState(100);
   const [customScore, setCustomScore] = useState('');
   const [customFeedback, setCustomFeedback] = useState('');
 
@@ -90,6 +90,24 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [overrideRationale, setOverrideRationale] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const saveInFlight = useRef(false);
+  const customOperation = useRef(crypto.randomUUID());
+  const overrideSnapshot = useRef<GradeOverride[]>([]);
+  const [customPeriod, setCustomPeriod] = useState('');
+  const [overridePeriod, setOverridePeriod] = useState('');
+  const periodOptions = useLiveQuery(() => profileReportingPeriods(db, enrollment.classSectionId, policy.id)
+    .catch(() => ({ periods: [], suggestedId: '' })), [enrollment.classSectionId, policy.id]);
+  const effectiveCustomPeriod = customPeriod;
+  const effectiveOverridePeriod = overridePeriod;
+  const periodSelect = (value: string, onChange: (value: string) => void, testId: string) => (
+    <label className="block text-xs font-bold text-slate-700">Reporting period
+      <select required data-testid={testId} value={value} onChange={event => onChange(event.target.value)} className="block w-full border rounded-lg p-1">
+        <option value="">Choose an open reporting period</option>
+        {periodOptions?.periods.map(period => <option key={period.id} value={period.id}>{period.name}</option>)}
+      </select>
+    </label>
+  );
   const formIdentityEpoch = useRef(getIdentityEpoch());
   const [confirmRemoval, setConfirmRemoval] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -100,8 +118,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     customScore.trim() !== '' ||
     customFeedback.trim() !== '' ||
     customType !== 'summative' ||
-    customCategory !== 'K' ||
-    customMaxScore !== 100;
+    customCategory !== 'K' || (!!customPeriod && customPeriod !== periodOptions?.suggestedId);
   const isOverrideDirty =
     showOverrideModal &&
     (overrideCategory !== 'OVERALL' ||
@@ -111,6 +128,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const isProfileDirty = isNoteDirty || isCustomAssessmentDirty || isOverrideDirty;
 
   const handleOpenSettingsGuarded = () => {
+    if (saveInFlight.current) return;
     if (isProfileDirty) {
       const confirmed = window.confirm(
         'You have unsaved changes in this student profile. Navigating to settings will discard them. Are you sure you want to discard them?'
@@ -121,6 +139,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   };
 
   const handleToggleCustomAssessment = () => {
+    if (saveInFlight.current) return;
     if (showAddCustomAssessment && isCustomAssessmentDirty) {
       const confirmed = window.confirm(
         'You have an unfinished custom assignment draft. Discard this draft?'
@@ -129,10 +148,11 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
       setCustomTitle('');
       setCustomType('summative');
       setCustomCategory('K');
-      setCustomMaxScore(100);
       setCustomScore('');
       setCustomFeedback('');
     }
+    customOperation.current = crypto.randomUUID();
+    setCustomPeriod(showAddCustomAssessment ? '' : periodOptions?.suggestedId || '');
     setShowAddCustomAssessment(!showAddCustomAssessment);
   };
 
@@ -152,7 +172,6 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     finally { setIsRemoving(false); }
   };
 
-  const markbookService = new MarkbookDomainService(db);
   const studentService = new StudentDomainService(db);
 
   const gradeSummary = useMemo(() => {
@@ -209,144 +228,49 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
     s => s.classEnrollmentId === enrollmentId && s.completionStatus === 'missing' && s.deletedAt === null
   ).length;
 
+  const profileActor = async () => {
+    const identity = await getAppIdentity(db);
+    if (!userId || identity.userId !== userId || (deviceId && identity.deviceId !== deviceId) || formIdentityEpoch.current !== getIdentityEpoch()) throw new AuthorizationError('Acting teacher changed. Reopen the profile.');
+    return { ...identity, identityEpoch: formIdentityEpoch.current };
+  };
   const handleCreateCustomAssessment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date().toISOString();
-    const assessId = crypto.randomUUID();
-    const catId = crypto.randomUUID();
-    const saId = crypto.randomUUID();
-
-    await db.transaction(
-      'rw',
-      [db.units, db.assessments, db.assessmentCategories, db.studentAssessments, db.categoryResults, db.auditEntries, db.syncMutations],
-      async () => {
-        let unit = await db.units.where('classSectionId').equals(enrollment.classSectionId).first();
-        if (!unit) {
-          const newUnit = {
-            id: `unit-${enrollment.classSectionId}-1`,
-            classSectionId: enrollment.classSectionId,
-            code: 'U1',
-            title: 'Unit 1: Course Foundations',
-            sortOrder: 1,
-            startsOn: null,
-            endsOn: null,
-            createdAt: now,
-            updatedAt: now,
-            deletedAt: null,
-            version: 1
-          };
-          await db.units.add(newUnit);
-          unit = newUnit;
-        }
-
-        await db.assessments.add({
-          id: assessId,
-          classSectionId: enrollment.classSectionId,
-          unitId: unit.id,
-          reportingPeriodId: policy.reportingPeriodId || 'rp-midterm',
-          code: `IND-${Date.now().toString().slice(-4)}`,
-          title: customTitle.trim(),
-          assessmentType: customType,
-          assignedAt: now,
-          dueAt: now,
-          isLocked: false,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-          version: 1
-        });
-
-        await db.assessmentCategories.add({
-          id: catId,
-          assessmentId: assessId,
-          categoryCode: customCategory,
-          maxScore: customMaxScore,
-          evidenceWeight: 1.0,
-          markScaleVersionId: policy.defaultMarkScaleVersionId,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-          version: 1
-        });
-
-        await db.studentAssessments.add({
-          id: saId,
-          assessmentId: assessId,
-          classEnrollmentId: enrollmentId,
-          classSectionId: enrollment.classSectionId,
-          workflowStatus: 'assessed',
-          completionStatus: 'complete',
-          isLate: false,
-          assignedAt: now,
-          dueAt: now,
-          submittedAt: now,
-          assessedAt: now,
-          returnedAt: now,
-          overallFeedback: customFeedback.trim() || null,
-          privateNotes: null,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-          version: 1
-        });
-      }
-    );
-
+    if (saveInFlight.current) return;
+    saveInFlight.current = true; setProfileSaving(true); setActionError(null);
     try {
-      const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
-        throw new AuthorizationError('Acting teacher has changed since opening this profile. Please reopen the profile.');
-      }
-
-      if (customScore.trim() !== '') {
-        await markbookService.recordCategoryResult({
-          studentAssessmentId: saId,
-          assessmentCategoryId: catId,
-          rawScore: customScore.trim(),
-          inputFormat: 'percentage',
-          feedback: customFeedback.trim() || null,
-          expectedStudentAssessmentVersion: 1,
-          userId: currentIdentity.userId,
-          deviceId: currentIdentity.deviceId
-        });
-      }
-
-      setShowAddCustomAssessment(false);
-      setCustomTitle('');
-      setCustomScore('');
-      setCustomFeedback('');
-      setActionError(null);
+      const actor = await profileActor();
+      await new ProfileAssessmentService(db).createIndividual({ ...actor, operationId: customOperation.current,
+        enrollmentId, classSectionId: enrollment.classSectionId, policyId: policy.id, reportingPeriodId: effectiveCustomPeriod,
+        title: customTitle, assessmentType: customType, categoryCode: customCategory, rawPercentage: customScore, feedback: customFeedback });
+      setShowAddCustomAssessment(false); setCustomTitle(''); setCustomScore(''); setCustomFeedback(''); setCustomPeriod('');
+      customOperation.current = crypto.randomUUID();
       onRefresh();
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to record custom assessment.');
-    }
+    } catch (err) { setActionError(err instanceof Error ? err.message : 'Failed to record custom assessment.'); }
+    finally { saveInFlight.current = false; setProfileSaving(false); }
   };
-
+  const changeOverrideTarget = (periodId: string, categoryCode: typeof overrideCategory) => {
+    const existing = overrideSnapshot.current.find(row => row.classEnrollmentId === enrollmentId && row.reportingPeriodId === periodId && row.categoryCode === categoryCode && row.deletedAt === null);
+    setOverridePeriod(periodId); setOverrideCategory(categoryCode); setOverrideValue(existing?.overridePercentage ?? 85); setOverrideRationale(existing?.rationale ?? '');
+  };
+  const openOverride = () => {
+    if (saveInFlight.current) return;
+    overrideSnapshot.current = structuredClone(overrides);
+    changeOverrideTarget(periodOptions?.suggestedId || '', 'OVERALL');
+    setActionError(null); setShowOverrideModal(true);
+  };
   const handleSaveOverride = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionError(null);
+    if (saveInFlight.current) return;
+    saveInFlight.current = true; setProfileSaving(true); setActionError(null);
     try {
-      const currentIdentity = await getAppIdentity(db);
-      if (userId && userId !== currentIdentity.userId) {
-        throw new AuthorizationError('Acting teacher has changed since opening this profile. Please reopen the profile.');
-      }
-
-      await markbookService.saveGradeOverride({
-        classEnrollmentId: enrollmentId,
-        reportingPeriodId: policy.reportingPeriodId || 'rp-midterm',
-        categoryCode: overrideCategory,
-        overridePercentage: overrideValue,
-        rationale: overrideRationale.trim(),
-        userId: currentIdentity.userId,
-        deviceId: currentIdentity.deviceId
-      });
-
-      setShowOverrideModal(false);
-      setOverrideRationale('');
-      onRefresh();
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to save grade override.');
-    }
+      const actor = await profileActor();
+      const expected = overrideSnapshot.current.find(row => row.classEnrollmentId === enrollmentId && row.reportingPeriodId === effectiveOverridePeriod && row.categoryCode === overrideCategory);
+      await new ProfileAssessmentService(db).saveOverride({ ...actor, enrollmentId, classSectionId: enrollment.classSectionId,
+        policyId: policy.id, reportingPeriodId: effectiveOverridePeriod, categoryCode: overrideCategory,
+        overridePercentage: overrideValue, rationale: overrideRationale, expected: expected ? { id: expected.id, version: expected.version } : null });
+      setShowOverrideModal(false); setOverrideRationale(''); onRefresh();
+    } catch (err) { setActionError(err instanceof Error ? err.message : 'Failed to save grade override.'); }
+    finally { saveInFlight.current = false; setProfileSaving(false); }
   };
 
   const handleAddNote = async (e: React.FormEvent) => {
@@ -375,9 +299,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   };
   return (
     <ModalDialog
-      allowStudentTransfer
+      allowStudentTransfer={!profileSaving}
       isOpen={true}
-      onClose={onClose}
+      onClose={() => { if (!saveInFlight.current) onClose(); }}
       isDirty={isProfileDirty}
       confirmDiscardMessage="You have unsaved changes in this student profile. Are you sure you want to discard them?"
       title={`Student Profile: ${student.preferredName || student.firstName} ${student.lastName}`}
@@ -431,7 +355,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               {onOpenSettings && (
                 <button
                   type="button"
-                  data-testid="profile-settings-gear-btn"
+                  disabled={profileSaving} data-testid="profile-settings-gear-btn"
                   onClick={handleOpenSettingsGuarded}
                   className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
                   title="Edit Student Settings"
@@ -443,7 +367,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               <button
                 type="button"
                 onClick={requestDismiss}
-                data-testid="profile-close-btn"
+                disabled={profileSaving} data-testid="profile-close-btn"
                 aria-label="Close profile"
                 className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
               >
@@ -453,7 +377,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           </div>
 
           {enrollment.enrollmentStatus === 'active' && <div className="px-6 py-3 bg-white border-b border-slate-200">
-            {!confirmRemoval ? <button type="button" data-testid="remove-from-class-btn" onClick={() => {
+            {!confirmRemoval ? <button type="button" disabled={profileSaving} data-testid="remove-from-class-btn" onClick={() => {
               if (isProfileDirty) { setActionError('Save or discard the unfinished profile entries before removing this student.'); return; }
               setConfirmRemoval(true);
             }} className="text-xs text-red-700 font-semibold hover:underline">Remove from this class</button> : <div data-testid="remove-from-class-confirmation" className="space-y-2">
@@ -465,7 +389,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
             </div>}
           </div>}
 
-          {actionError && (
+          {actionError && !showOverrideModal && (
             <div
               role="alert"
               className="bg-rose-50 border-b border-rose-200 px-6 py-2.5 text-xs text-rose-800 flex items-center justify-between"
@@ -495,7 +419,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               return (
                 <button
                   key={tab.id}
-                  data-testid={`profile-tab-${tab.id}`}
+                  disabled={profileSaving} data-testid={`profile-tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex shrink-0 items-center space-x-2 py-3 px-3 text-xs font-bold border-b-2 transition ${
                     activeTab === tab.id
@@ -511,7 +435,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           </div>
           <button
             data-testid="open-grade-override-btn"
-            onClick={() => setShowOverrideModal(true)}
+            onClick={openOverride}
             className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition"
           >
             Manual Grade Override
@@ -576,7 +500,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 <span className="text-xs font-bold text-slate-700">Assignments for {student.preferredName || student.firstName}</span>
                 <button
                   onClick={handleToggleCustomAssessment}
-                  data-testid="profile-add-assignment-btn"
+                  disabled={profileSaving} data-testid="profile-add-assignment-btn"
                   className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -586,7 +510,9 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
 
               {showAddCustomAssessment && (
                 <form onSubmit={handleCreateCustomAssessment} data-testid="custom-assessment-form" className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md space-y-3 mb-4">
+                  <fieldset disabled={profileSaving} className="space-y-3">
                   <h4 className="text-xs font-bold text-blue-900">Create Differentiated Assignment</h4>
+                  {periodSelect(effectiveCustomPeriod, setCustomPeriod, 'custom-assessment-period-select')}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700">Title</label>
@@ -610,8 +536,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700">Score</label>
-                      <input type="text" data-testid="custom-assessment-score-input" value={customScore} onChange={e => setCustomScore(e.target.value)} placeholder="e.g. 88% or 4+" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
+                      <label className="block text-[11px] font-bold text-slate-700">Score (%) — optional</label>
+                      <input type="text" data-testid="custom-assessment-score-input" value={customScore} onChange={e => setCustomScore(e.target.value)} placeholder="e.g. 88 or 88%" className="w-full px-2.5 py-1.5 text-xs border rounded-lg" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700">Feedback</label>
@@ -620,8 +546,10 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   </div>
                   <div className="flex justify-end space-x-2 pt-2 border-t">
                     <button type="button" data-testid="cancel-custom-assessment-btn" onClick={handleToggleCustomAssessment} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button type="submit" data-testid="save-custom-assessment-btn" className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg">Save</button>
+                    <button type="submit" disabled={profileSaving || !effectiveCustomPeriod} data-testid="save-custom-assessment-btn" className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg">Save</button>
                   </div>
+                  </fieldset>
+                  {profileSaving && <p role="status">Saving assignment…</p>}
                 </form>
               )}
 
@@ -714,6 +642,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           <ModalDialog
             isOpen={showOverrideModal}
             onClose={() => {
+              if (saveInFlight.current) return;
               setShowOverrideModal(false);
               setOverrideRationale('');
               setOverrideValue(85);
@@ -727,12 +656,15 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           >
             {({ requestDismiss: requestDismissOverride }) => (
               <form onSubmit={handleSaveOverride} className="space-y-3">
+                {actionError && <p role="alert" className="text-xs text-rose-800">{actionError}</p>}
+                <fieldset disabled={profileSaving} className="space-y-3">
+                {periodSelect(effectiveOverridePeriod, value => changeOverrideTarget(value, overrideCategory), 'override-period-select')}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700">Scope</label>
                   <select
                     data-testid="override-category-select"
                     value={overrideCategory}
-                    onChange={e => setOverrideCategory(e.target.value as any)}
+                    onChange={e => changeOverrideTarget(effectiveOverridePeriod, e.target.value as typeof overrideCategory)}
                     className="w-full px-2 py-1.5 text-xs border rounded-lg bg-white"
                   >
                     <option value="OVERALL">Overall Course Mark</option>
@@ -778,12 +710,14 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   </button>
                   <button
                     type="submit"
-                    data-testid="save-override-btn"
+                    disabled={profileSaving || !effectiveOverridePeriod} data-testid="save-override-btn"
                     className="px-3.5 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700"
                   >
                     Apply
                   </button>
                 </div>
+                </fieldset>
+                {profileSaving && <p role="status">Saving override…</p>}
               </form>
             )}
           </ModalDialog>

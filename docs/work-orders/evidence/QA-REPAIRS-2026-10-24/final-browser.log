@@ -1,0 +1,73 @@
+PASS: Existing editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.
+PASS: Absent editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.
+PASS: real Dashboard archive and six SeatingChart controls deny read-only writes, retain all tables and show errors; authorized layout/archive writes version and audit; zero page errors/external requests.
+PASS: real profile fresh calendar, invalid-score rollback, corrected double-submit once, pending edits/dismissal guards, override visible conflict, explicit period-change recovery, read-only blank-score rejection, full backup roundtrip. Fictional browser data only.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> ontario-teacher-assessment@1.0.0 test:marking:authority
+> tsx scripts/markingAuthorityAcceptanceSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+PASS: pending-teacher-switch; existing official records unchanged.
+PASS: failed-navigation-retry; existing official records unchanged.
+PASS: epoch-revoked; existing official records unchanged.
+PASS: membership-revoked; existing official records unchanged.
+PASS: 4 fictional authority/navigation scenarios (pending-teacher-switch, failed-navigation-retry, epoch-revoked, membership-revoked); zero external requests and page exceptions. Browser evidence does not establish native readiness.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> ontario-teacher-assessment@1.0.0 test:marking:portability
+> tsx scripts/markingPortabilityAcceptanceSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+PASS: actual UI stale manual mark conflict, explicit baseline acceptance, confirmed finalization, post-commit readback failure and idempotent UI retry.
+PASS: downloaded inert HTML bytes served alone over loopback (file URLs blocked by cloud browser policy), escaped fictional student/feedback/annotation, print-media styles and headless Chromium PDF output. Native print dialog/printer are not tested.
+PASS: clean-profile backup preview left marking tables empty; confirmed restore exactly recovered attempts, sessions, rubrics and official records.
+PASS: actual full-backup download, clean-profile ImportExportModal preview/confirm restore, reopened pending draft, immutable finalized report, originals and official records preserved.
+PASS: historical finalized Report downloads byte-for-byte after authorized current-category removal; official records and both sessions stay unchanged.
+PASS: zero external requests or page errors across all portability scenarios.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> ontario-teacher-assessment@1.0.0 test:marking:archive
+> tsx scripts/markingArchiveSmoke.ts
+
+PASS: Default removal: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation; Explicit retain: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation; Draft-only archive discards unpublished content without creating official results or reports; Former-student pending draft remains discoverable read-only across close/reload/reopen; no revision, marks, audit or enrollment writes; Reload retains the explicit teacher session and preserves separate Archive listing; Actual downloaded backup contains no removed source text/base64; deliberately kept source remains; Clean-profile backup preview and restore preserve final records without resurrecting discarded drafts.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> ontario-teacher-assessment@1.0.0 test:classroom
+> node --import tsx scripts/annotationFeedbackSmoke.ts && node --import tsx scripts/teacherProfilesSmoke.ts && node --import tsx scripts/classroomUseSmoke.ts && node --import tsx scripts/classroomEvidencePopupSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+PASS: photo selection, 17 levels, criterion, Save/Cancel, switching guards and retained feedback/bytes
+PASS: browser fresh setup, second teacher, explicit choose/edit/switch, reload persistence, new-session confirmation, Escape cancellation, modal isolation; no page errors or external requests.
+Re-optimizing dependencies because vite config has changed
+PASS: At 1280×720 the result editor scrolls naturally to Save and Cancel, saves the selected level and feedback, and Cancel preserves the saved result.
+PASS: Real TXT/DOCX guided import: explicit multi-student matching, several pages per student, Back, Undo, unsupported .doc, file-read retry, partial-save retry and failed-opening recovery without duplicates.
+PASS: All 17 level choices select visibly; failed final save retains draft and rolls back results; Save and next/return update Markbook, feedback-only stays ungraded, and saved results survive restart.
+PASS: Single-student pasted-text flow requires explicit student confirmation, skips matching, and retains entered content on Back without duplicate imports.
+PASS: Picture import preserves exact local bytes and opens image marking; historical results are unchanged; no external requests or browser errors.
+PASS: Save and return protects unsaved rubric and import preparation: Cancel preserves exact preparation/draft/official records; explicit discard alone finalizes and returns to Markbook.
+Re-optimizing dependencies because vite config has changed
+PASS: popup half-width/tall/responsive, X/outside/Escape dirty guards, nested Escape, focus restoration, no background activation
+PASS: focused criterion comment editing, return review, retained evidence, built-in and saved rubric level choices
+PASS: focused image comments/shared levels, pen stroke preserved alongside comments, original image bytes retained
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
