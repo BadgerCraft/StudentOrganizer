@@ -6,7 +6,9 @@ import { CLASSROOM_LEVEL_LABELS } from '../src/services/classroomLevels';
 
 // Reuse the actual-component fictional fixture; no student files or official marks.
 const source = await readFile(new URL('./classroomEvidencePopupSmoke.ts', import.meta.url), 'utf8');
-const harness = source.match(/const harness = `([\s\S]*?)`;\nconst server/)![1].replace("const [open,setOpen]=useState(false)","const [readOnly,setReadOnly]=useState(false),[busy,setBusy]=useState(false);window.setFictionalReadOnly=setReadOnly;window.setFictionalBusy=setBusy; const [open,setOpen]=useState(false)").replace("e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:false})","e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:readOnly||busy,readOnly,onFeedbackActiveChange:active=>{window.fictionalFeedbackActive=active}})");
+let harness = source.match(/const harness = `([\s\S]*?)`;\nconst server/)![1].replace("const [open,setOpen]=useState(false)","const [readOnly,setReadOnly]=useState(false),[busy,setBusy]=useState(false);window.setFictionalReadOnly=setReadOnly;window.setFictionalBusy=setBusy; const [open,setOpen]=useState(false)").replace("e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:false})","e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:readOnly||busy,readOnly,onFeedbackActiveChange:active=>{window.fictionalFeedbackActive=active}})");
+// Exercise delayed fixture state delivery without altering the real component.
+if (process.env.ANNOTATION_DELAY_READONLY_COMMIT === '1') harness = harness.replace('window.setFictionalReadOnly=setReadOnly;', 'window.setFictionalReadOnly=value=>setTimeout(()=>setReadOnly(value),100);');
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 }, plugins: [{name:'annotation-fixture',configureServer(instance){instance.middlewares.use('/__annotation', async (_request,response)=>{response.setHeader('Content-Type','text/html');response.end(await instance.transformIndexHtml('/__annotation',harness));});}}]});
 await server.listen();
 const address = server.httpServer!.address(); assert.ok(address && typeof address !== 'string');
@@ -69,6 +71,7 @@ try {
  await image.getByLabel('Select saved mark').selectOption(saved.id);
  await editor.fill('Temporarily busy feedback');
  await page.evaluate(()=>(window as any).setFictionalBusy(true));
+ await image.locator('button:disabled').filter({hasText:/^Cancel feedback$/}).waitFor();
  assert.equal(await page.evaluate(()=>(window as any).fictionalFeedbackActive),true,'temporary busy state keeps unfinished feedback guard');
  assert.equal(await image.getByRole('button',{name:'Cancel feedback',exact:true}).isDisabled(),true,'busy cannot bypass Save/Cancel snapshot');
  assert.equal(await image.getByRole('button',{name:'Close feedback',exact:true}).count(),0);
@@ -76,8 +79,13 @@ try {
  await image.getByRole('button',{name:'Cancel feedback',exact:true}).click();
  assert.deepEqual((await state()).at(-1),saved,'cancel still restores snapshot after temporary busy state');
  await page.evaluate(()=>(window as any).setFictionalReadOnly(true));
+ // The fixture setter schedules React work; returning from evaluate is not a commit.
+ await image.locator('button:disabled').filter({hasText:/^Pen$/}).waitFor();
  const beforeReadOnly=await state();
  await image.getByLabel('Select saved mark').selectOption(saved.id);
+ await image.getByRole('button',{name:'Close feedback',exact:true}).waitFor();
+ // Departure guard is delivered by ImageMarkup's effect after the readonly render.
+ await page.waitForFunction(()=>(window as any).fictionalFeedbackActive===false);
  assert.equal(await page.evaluate(()=>(window as any).fictionalFeedbackActive),false,'read-only viewing cannot block workspace departure');
  assert.equal(await image.getByRole('button',{name:'Close feedback',exact:true}).isEnabled(),true);
  await image.getByRole('button',{name:'Close feedback',exact:true}).click();
