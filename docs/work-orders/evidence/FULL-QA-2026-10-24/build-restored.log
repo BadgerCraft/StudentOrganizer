@@ -1,0 +1,30 @@
+
+> ontario-teacher-assessment@1.0.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 1696 modules transformed.
+rendering chunks...
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) /workspace/StudentOrganizer/src/marking/importDocuments.ts is dynamically imported by /workspace/StudentOrganizer/src/marking/markingService.ts, /workspace/StudentOrganizer/src/marking/portabilityValidation.ts but also statically imported by /workspace/StudentOrganizer/src/marking/commentBank.ts, /workspace/StudentOrganizer/src/marking/importDocumentArchive.ts, /workspace/StudentOrganizer/src/marking/importImages.ts, /workspace/StudentOrganizer/src/marking/importRubric.ts, /workspace/StudentOrganizer/src/marking/ui/EvidenceImportWizard.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) /workspace/StudentOrganizer/src/marking/importImages.ts is dynamically imported by /workspace/StudentOrganizer/src/marking/portabilityValidation.ts but also statically imported by /workspace/StudentOrganizer/shared/capturePackage.ts, /workspace/StudentOrganizer/shared/capturePreview.ts, /workspace/StudentOrganizer/src/capture/attachmentService.ts, /workspace/StudentOrganizer/src/capture/portabilityValidation.ts, /workspace/StudentOrganizer/src/marking/annotatedReport.ts, /workspace/StudentOrganizer/src/marking/markingService.ts, /workspace/StudentOrganizer/src/marking/ui/EvidenceImportWizard.tsx, /workspace/StudentOrganizer/src/marking/ui/ImageMarkup.tsx, dynamic import will not move module into another chunk.
+
+computing gzip size...
+dist/index.html                              0.93 kB │ gzip:   0.52 kB
+dist/assets/index-D2WWrpKr.css              47.90 kB │ gzip:   8.48 kB
+dist/assets/mammoth.browser-D9TyKYvT.js    304.60 kB │ gzip:  93.23 kB
+dist/assets/index--5PbEfiB.js            1,128.76 kB │ gzip: 323.54 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 18.68s
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

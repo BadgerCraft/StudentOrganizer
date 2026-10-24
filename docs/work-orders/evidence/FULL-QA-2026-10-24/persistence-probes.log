@@ -1,0 +1,12 @@
+CROSS_CLASS_RESTORE_ACCEPTED {"studentAssessment":{"id":"sa-essay-enroll-eng-1","assessmentId":"assess-eng-essay","classEnrollmentId":"enroll-sch-1","classSectionId":"class-eng4u-01","workflowStatus":"assessed","completionStatus":"complete","isLate":false,"assignedAt":"2026-09-08T09:00:00Z","dueAt":"2026-09-25T23:59:00Z","submittedAt":"2026-09-24T18:30:00Z","assessedAt":"2026-10-24T01:57:32.428Z","returnedAt":"2026-10-24T01:57:32.428Z","overallFeedback":"Well structured rhetorical analysis.","privateNotes":null,"createdAt":"2026-10-24T01:57:32.428Z","updatedAt":"2026-10-24T01:57:32.428Z","deletedAt":null,"version":1},"enrollment":{"id":"enroll-sch-1","classSectionId":"class-sch3u-02","studentId":"student-1","enrollmentStatus":"active","enrolledDate":"2026-09-02","droppedDate":null,"customDisplayOrder":1,"createdAt":"2026-10-24T01:57:32.428Z","updatedAt":"2026-10-24T01:57:32.428Z","deletedAt":null,"version":1}}
+WHITESPACE_REF_RESTORE_ACCEPTED { missingExactParent: true, accessible: 1 }
+DELETED_ORG_WRITE_AUTH_ACCEPTED
+REVOKED_ACTOR_IMPORT {
+  totalRows: 1,
+  importedCount: 1,
+  newStudentsCount: 1,
+  existingLinkedCount: 0,
+  skippedDuplicates: 0,
+  rejectedCount: 0,
+  errors: []
+}

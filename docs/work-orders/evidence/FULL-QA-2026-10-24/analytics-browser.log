@@ -1,0 +1,10 @@
+
+> ontario-teacher-assessment@1.0.0 test:analytics:browser
+> node --import tsx scripts/analytics/browserSmoke.ts
+
+PASS: actual local collector export → browser ingestion/query; simulation consent; source separation; suppression/context; restart; delayed-import withdrawal/replay; corrupt-state reset; responsive UI; zero external requests.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

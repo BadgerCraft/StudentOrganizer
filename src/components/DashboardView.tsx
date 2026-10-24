@@ -14,6 +14,7 @@ import type { ClassSection, Course, ClassEnrollment, Term, ChicletDisplaySetting
 import { DEFAULT_CHICLET_DISPLAY, formatChicletTitle } from '../types/schema';
 import { db } from '../db/database';
 import { ModalDialog } from './ModalDialog';
+import { ClassroomStructureService } from '../services/classroomStructureService';
 import { ClassDomainService } from '../services/classService';
 import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { saveClassCardDisplay } from '../services/displayPreferencesService';
@@ -147,12 +148,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  const handleArchiveClass = async (sectionId: string) => {
+  const handleArchiveClass = async (section: ClassSection) => {
+    const identityEpoch = getIdentityEpoch();
     if (!confirm('Are you sure you want to archive this class?')) return;
-    await db.classSections.update(sectionId, {
-      deletedAt: new Date().toISOString()
-    });
-    onRefresh();
+    try {
+      if (!userId || !deviceId) throw new AuthorizationError('Select an acting teacher before archiving.');
+      await new ClassroomStructureService(db).archiveClass(section.id, section.version, { userId, deviceId, identityEpoch });
+      onRefresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Class could not be archived.');
+    }
   };
 
   return (
@@ -296,7 +301,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     type="button"
                     onClick={e => {
                       e.stopPropagation();
-                      handleArchiveClass(section.id);
+                      void handleArchiveClass(section);
                     }}
                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                     title="Archive Class"

@@ -1,0 +1,25 @@
+
+warn - The `content` option in your Tailwind CSS configuration is missing or empty.
+warn - Configure your content sources or your generated CSS will be missing styles.
+warn - https://tailwindcss.com/docs/content-configuration
+CUSTOM_READONLY {
+  assessment: {
+    id: '0d7148c3-b042-4b0a-9ffb-5b4b6e45c573',
+    classSectionId: 'class-eng4u-01',
+    unitId: 'unit-eng-1',
+    reportingPeriodId: 'rp-midterm',
+    code: 'IND-3498',
+    title: 'Fictional read-only injected assessment',
+    assessmentType: 'summative',
+    assignedAt: '2026-10-24T02:00:13.486Z',
+    dueAt: '2026-10-24T02:00:13.486Z',
+    isLocked: false,
+    createdAt: '2026-10-24T02:00:13.486Z',
+    updatedAt: '2026-10-24T02:00:13.486Z',
+    deletedAt: null,
+    version: 1
+  },
+  studentAssessments: 1,
+  audit: 0,
+  error: true
+}

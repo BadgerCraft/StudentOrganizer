@@ -48,6 +48,11 @@ export interface SaveMarkbookCellParams {
   feedback?: string | null;
   expectedStudentAssessmentVersion?: number;
   expectedCategoryResultVersion?: number;
+  /** An editor's opening snapshot. Null means the record must still be absent. */
+  expectedCellState?: {
+    studentAssessment: Pick<StudentAssessment, 'id' | 'version'> | null;
+    categoryResult: Pick<CategoryResult, 'id' | 'version'> | null;
+  };
   userId: UUID;
   deviceId: UUID;
 }
@@ -516,6 +521,15 @@ export class MarkbookDomainService {
     studentAssessment: StudentAssessment;
     categoryResult?: CategoryResult;
   }> {
+    const assertOpeningState = (
+      current: { id: UUID; version: number; deletedAt: string | null } | undefined,
+      expected: { id: UUID; version: number } | null,
+    ) => {
+      if (expected === null ? current !== undefined : !current || current.deletedAt !== null ||
+          current.id !== expected.id || current.version !== expected.version) {
+        throw new ConcurrencyConflictError('This mark changed after the editor opened. Your entries are still here; cancel and reopen the cell to review the current result before saving.');
+      }
+    };
     return await this.db.transaction(
       'rw',
       [
@@ -573,6 +587,8 @@ export class MarkbookDomainService {
             classEnrollmentId: params.classEnrollmentId
           })
           .first();
+
+        if (params.expectedCellState) assertOpeningState(sa, params.expectedCellState.studentAssessment);
 
         const hasCategoryWrite = params.rawScore !== undefined && !!params.assessmentCategoryId;
         const hasScore =
@@ -696,6 +712,8 @@ export class MarkbookDomainService {
               assessmentCategoryId: params.assessmentCategoryId
             })
             .first();
+
+          if (params.expectedCellState) assertOpeningState(existingCr, params.expectedCellState.categoryResult);
 
           if (existingCr) {
             if (existingCr.deletedAt !== null) {

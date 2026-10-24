@@ -896,15 +896,15 @@ export class PortabilityService {
         if (!rec || typeof rec !== 'object' || Array.isArray(rec)) {
           throw new Error(`Invalid backup file: Table "${tblName}" contains invalid record shape at index ${i}.`);
         }
-        if (typeof rec.id !== 'string' || !rec.id.trim()) {
-          throw new Error(`Invalid backup file: Table "${tblName}" contains record at index ${i} with missing or invalid "id".`);
+        if (typeof rec.id !== 'string' || !rec.id.trim() || rec.id !== rec.id.trim()) {
+          throw new Error(`Invalid backup file: Table "${tblName}" contains record at index ${i} with missing, invalid or noncanonical "id".`);
         }
 
-        const trimmedId = rec.id.trim();
-        if (idSets[tblName].has(trimmedId)) {
+        const recordId = rec.id;
+        if (idSets[tblName].has(recordId)) {
           throw new Error(`Invalid backup file: Table "${tblName}" contains duplicate primary key "id": "${rec.id}".`);
         }
-        idSets[tblName].add(trimmedId);
+        idSets[tblName].add(recordId);
 
         const requireString = (field: string) => {
           if (!isNonEmptyStr(rec[field])) {
@@ -1202,13 +1202,13 @@ export class PortabilityService {
       if (nullable && (value === null || value === undefined || value === '')) {
         return;
       }
-      if (typeof value !== 'string' || !value.trim()) {
+      if (typeof value !== 'string' || !value.trim() || value !== value.trim()) {
         throw new Error(
-          `Invalid backup file: Table "${sourceTable}" contains record at index ${recordIndex} with missing or invalid reference "${field}".`
+          `Invalid backup file: Table "${sourceTable}" contains record at index ${recordIndex} with missing, invalid or noncanonical reference "${field}".`
         );
       }
       const targetSet = idSets[targetTable];
-      if (!targetSet || !targetSet.has(value.trim())) {
+      if (!targetSet || !targetSet.has(value)) {
         throw new Error(
           `Invalid backup file: Broken reference in table "${sourceTable}" at index ${recordIndex}. Field "${field}" references nonexistent record "${value}" in table "${targetTable}".`
         );
@@ -1286,6 +1286,7 @@ export class PortabilityService {
 
           case 'gradingPolicies':
             requireRef('gradingPolicies', i, 'classSectionId', 'classSections', rec.classSectionId);
+            requireRef('gradingPolicies', i, 'reportingPeriodId', 'reportingPeriods', rec.reportingPeriodId, true);
             break;
 
           case 'gradeOverrides':
@@ -1363,6 +1364,63 @@ export class PortabilityService {
           // Historical audit or sync references may legitimately outlive entities, and must not be discarded.
         }
       }
+    }
+
+    // Existence alone is insufficient: each assessment graph must describe one class.
+    // Use the imported snapshot, never current data, and retain null/missing legacy
+    // studentAssessment.classSectionId until the existing restore backfill runs.
+    const graphTables = ['reportingPeriods', 'classSections', 'units', 'assessments', 'classEnrollments',
+      'studentAssessments', 'assessmentCategories', 'classSessions', 'seatingLayouts', 'participationEventTypes', 'courses'];
+    const recordsById: Record<string, Map<string, any>> = Object.fromEntries(
+      graphTables.map(name => [name, new Map((data.tables[name] as any[]).map(record => [record.id, record]))])
+    );
+    const sameClass = (table: string, id: string, actual: string, expected: string) => {
+      if (actual !== expected) throw new Error(`Invalid backup file: ${table}/${id} crosses a class boundary. Existing data has not been changed.`);
+    };
+    const samePeriodTerm = (table: string, record: any, classSectionId: string) => {
+      if (record.reportingPeriodId == null || record.reportingPeriodId === '') return;
+      const period = recordsById.reportingPeriods.get(record.reportingPeriodId);
+      const section = recordsById.classSections.get(classSectionId);
+      if (period.termId !== section.termId) throw new Error(`Invalid backup file: ${table}/${record.id} reporting period belongs to a different term. Existing data has not been changed.`);
+    };
+    for (const assessment of data.tables.assessments) {
+      if (assessment.unitId) sameClass('assessments', assessment.id, recordsById.units.get(assessment.unitId).classSectionId, assessment.classSectionId);
+      samePeriodTerm('assessments', assessment, assessment.classSectionId);
+    }
+    for (const assignment of data.tables.studentAssessments) {
+      const assessment = recordsById.assessments.get(assignment.assessmentId);
+      const enrollment = recordsById.classEnrollments.get(assignment.classEnrollmentId);
+      sameClass('studentAssessments', assignment.id, enrollment.classSectionId, assessment.classSectionId);
+      if (assignment.classSectionId) sameClass('studentAssessments', assignment.id, assignment.classSectionId, assessment.classSectionId);
+    }
+    for (const result of data.tables.categoryResults) {
+      const assignment = recordsById.studentAssessments.get(result.studentAssessmentId);
+      const category = recordsById.assessmentCategories.get(result.assessmentCategoryId);
+      if (category.assessmentId !== assignment.assessmentId) throw new Error(`Invalid backup file: categoryResults/${result.id} crosses an assessment boundary. Existing data has not been changed.`);
+    }
+    for (const attendance of data.tables.attendanceRecords) {
+      const enrollment = recordsById.classEnrollments.get(attendance.classEnrollmentId);
+      sameClass('attendanceRecords', attendance.id, recordsById.classSessions.get(attendance.classSessionId).classSectionId, enrollment.classSectionId);
+    }
+    for (const seat of data.tables.seatPositions) {
+      const enrollment = recordsById.classEnrollments.get(seat.classEnrollmentId);
+      sameClass('seatPositions', seat.id, recordsById.seatingLayouts.get(seat.seatingLayoutId).classSectionId, enrollment.classSectionId);
+    }
+    for (const event of data.tables.participationEvents) {
+      sameClass('participationEvents', event.id, recordsById.classEnrollments.get(event.classEnrollmentId).classSectionId, event.classSectionId);
+      if (event.classSessionId) sameClass('participationEvents', event.id, recordsById.classSessions.get(event.classSessionId).classSectionId, event.classSectionId);
+      // Historical events may legitimately have no retained event type or session.
+      if (event.eventTypeId) {
+        const eventType = recordsById.participationEventTypes.get(event.eventTypeId);
+        const section = recordsById.classSections.get(event.classSectionId);
+        if (eventType.organizationId != null && eventType.organizationId !== recordsById.courses.get(section.courseId).organizationId) {
+          throw new Error(`Invalid backup file: participationEvents/${event.id} event type belongs to a different organization. Existing data has not been changed.`);
+        }
+      }
+    }
+    for (const policy of data.tables.gradingPolicies) samePeriodTerm('gradingPolicies', policy, policy.classSectionId);
+    for (const name of ['gradeOverrides', 'gradeSnapshots']) {
+      for (const record of data.tables[name]) samePeriodTerm(name, record, recordsById.classEnrollments.get(record.classEnrollmentId).classSectionId);
     }
 
     validateMarkingBackup(data.tables);

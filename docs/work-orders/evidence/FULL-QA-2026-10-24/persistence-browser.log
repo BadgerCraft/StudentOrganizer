@@ -1,0 +1,26 @@
+file:///workspace/StudentOrganizer/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:45596
+          reject(new Error(`Port ${port} is already in use`));
+                 ^
+
+Error: Port 4317 is already in use
+    at Server.onECUSTOM_READONLY {
+  assessment: {
+    id: '172332a4-d46b-4185-a0f2-9931f4a76c05',
+    classSectionId: 'class-eng4u-01',
+    unitId: 'unit-eng-1',
+    reportingPeriodId: 'rp-midterm',
+    code: 'IND-5216',
+    title: 'Fictional read-only injected assessment',
+    assessmentType: 'summative',
+    assignedAt: '2026-10-24T01:59:45.207Z',
+    dueAt: '2026-10-24T01:59:45.207Z',
+    isLocked: false,
+    createdAt: '2026-10-24T01:59:45.207Z',
+    updatedAt: '2026-10-24T01:59:45.207Z',
+    deletedAt: null,
+    version: 1
+  },
+  studentAssessments: 1,
+  audit: 0,
+  error: true
+}

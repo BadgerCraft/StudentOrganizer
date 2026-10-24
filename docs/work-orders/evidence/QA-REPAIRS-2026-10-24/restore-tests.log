@@ -1,0 +1,29 @@
+
+ RUN  v2.1.9 /workspace/StudentOrganizer
+
+ ✓ src/services/portabilityService.test.ts (4 tests) 298ms
+ ✓ src/services/backupValidation.test.ts (16 tests) 816ms
+ ❯ src/services/restoreGraphIntegrity.test.ts (22 tests | 1 failed) 1176ms
+   × Restore validates the imported assessment graph before replacing records > rejects seat in another class layout and preserves all current tables 29ms
+     → Cannot read properties of undefined (reading 'id')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/services/restoreGraphIntegrity.test.ts > Restore validates the imported assessment graph before replacing records > rejects seat in another class layout and preserves all current tables
+TypeError: Cannot read properties of undefined (reading 'id')
+ ❯ e src/services/restoreGraphIntegrity.test.ts:41:256
+
+ ❯ src/services/restoreGraphIntegrity.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 41 passed (42)
+   Start at  13:51:23
+   Duration  2.03s (transform 419ms, setup 0ms, collect 1.40s, tests 2.29s, environment 1ms, prepare 165ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
