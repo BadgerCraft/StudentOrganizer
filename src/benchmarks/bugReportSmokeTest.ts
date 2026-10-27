@@ -18,6 +18,7 @@ try {
   await chooseTeacher.waitFor({ state: 'visible' });
   await chooseTeacher.click();
   await page.getByTestId('teacher-selector-modal').waitFor({ state: 'hidden' });
+  await page.getByTestId('student-seat-card').first().waitFor({ state: 'visible' });
   const externalRequests: string[] = [];
   page.on('request', request => { if (!request.url().startsWith('http://localhost:3229')) externalRequests.push(request.url()); });
   await page.getByRole('button', { name: 'Report a problem', exact: true }).click();
@@ -30,7 +31,7 @@ try {
   const preview = page.getByTestId('bug-report-preview');
   const generated = await preview.inputValue();
   assert.match(generated, /Platform:/);
-  assert.match(generated, /Screen: dashboard/);
+  assert.match(generated, /Screen: seating/);
   const edited = 'Fictional edited report. No identifying details.\nExpected: card moves.';
   await preview.fill(edited);
   const savedDraft = await page.evaluate(() => JSON.parse(localStorage.getItem('ota.bug-report-draft.v1')!));
