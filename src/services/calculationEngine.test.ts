@@ -130,6 +130,39 @@ describe('Calculation Engine - Normalization and Two-Stage Aggregation', () => {
     expect(overall.finalOverall).toBe(80.0);
   });
 
+  it.each([false, true])('keeps all-course evidence separate from period overrides (reverse=%s)', reverse => {
+    const base = { createdAt: '', updatedAt: '', deletedAt: null, version: 1 };
+    const policy: GradingPolicy = { ...base, id: 'policy', classSectionId: 'class', reportingPeriodId: null, scopeKey: 'DEFAULT', weightK: 25, weightT: 25, weightC: 25, weightA: 25, excludeFormative: true, missingWorkPolicy: 'exclude', defaultMarkScaleVersionId: 'scale', decimalPrecision: 1 };
+    const assessments: Assessment[] = ['A', 'B'].map(period => ({ ...base, id: period, classSectionId: 'class', unitId: 'unit', reportingPeriodId: period, code: period, title: period, assessmentType: 'summative', assignedAt: '', dueAt: '', isLocked: false }));
+    const categories: AssessmentCategory[] = assessments.map((a, i) => ({ ...base, id: 'cat-' + a.id, assessmentId: a.id, categoryCode: 'K', maxScore: 100, evidenceWeight: i ? 3 : 1, markScaleVersionId: 'scale' }));
+    const assignments: StudentAssessment[] = assessments.map(a => ({ ...base, id: 'sa-' + a.id, assessmentId: a.id, classEnrollmentId: 'student', classSectionId: 'class', workflowStatus: 'assessed', completionStatus: 'complete', isLate: false, assignedAt: '', dueAt: '', submittedAt: '', assessedAt: '', returnedAt: '', overallFeedback: null, privateNotes: null }));
+    const results: CategoryResult[] = categories.map((c, i) => ({ ...base, id: 'result-' + c.id, studentAssessmentId: assignments[i].id, assessmentCategoryId: c.id, rawScore: i ? '100' : '80', inputFormat: 'percentage', normalizedPercentage: i ? 100 : 80, pointsEarned: i ? 100 : 80, pointsPossibleSnapshot: 100, feedback: null, assessedAt: '' }));
+    const overrides: GradeOverride[] = ['A', 'B'].flatMap((period, i) => (['K', 'OVERALL'] as const).map(categoryCode => ({ ...base, id: period + categoryCode, classEnrollmentId: 'student', reportingPeriodId: period, categoryCode, overridePercentage: categoryCode === 'K' ? (i ? 90 : 60) : (i ? 94 : 61), rationale: period + categoryCode, teacherUserId: 'teacher' })));
+    if (reverse) overrides.reverse();
+    const grade = (period: string | null, records = overrides) => calculateOverallCourseGrade('student', period, assessments, categories, assignments, results, policy, records);
+    const expected = grade(null, []);
+    expect(expected.finalOverall).toBe(95); // Evidence weights 1:3, not a mean of period summaries.
+    expect(grade(null)).toEqual(expected);
+    expect(grade(null, overrides.filter(o => o.categoryCode === 'K'))).toEqual(expected);
+    for (const [period, category, overall] of [['A', 60, 61], ['B', 90, 94]] as const) {
+      const scoped = grade(period);
+      expect(scoped.categoryBreakdown.K.score).toBe(category);
+      expect(scoped.categoryBreakdown.K.overrideRationale).toBe(period + 'K');
+      expect(scoped.finalOverall).toBe(overall);
+      expect(scoped.overrideRationale).toBe(period + 'OVERALL');
+      expect(scoped.isOverridden).toBe(true);
+      expect(grade(period, overrides.filter(o => o.categoryCode === 'K')).finalOverall).toBe(category);
+      const inactive = overrides.map(o => ({ ...o, deletedAt: '2026-10-27' }));
+      expect(grade(period, inactive)).toEqual(grade(period, []));
+      expect(grade(period, overrides.map(o => ({ ...o, classEnrollmentId: 'someone-else' })))).toEqual(grade(period, []));
+    }
+    const empty = calculateOverallCourseGrade('student', null, [], [], [], [], policy, overrides);
+    expect(empty.finalOverall).toBeNull();
+    expect(empty.isOverridden).toBe(false);
+    expect(empty.categoryBreakdown.K.score).toBeNull();
+    expect(calculateOverallCourseGrade('student', 'B', [], [], [], [], policy, overrides).finalOverall).toBe(94);
+  });
+
   it('respects reporting-period-aware overrides for category and overall', () => {
     const policy: GradingPolicy = {
       id: 'pol-1', classSectionId: 'cs-1', reportingPeriodId: 'rp-1', scopeKey: 'rp-1',

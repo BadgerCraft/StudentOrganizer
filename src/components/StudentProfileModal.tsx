@@ -446,6 +446,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              <p className="text-xs text-slate-600">All-course summary across reporting periods. Period-specific overrides apply only to that period’s results.</p>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm bg-gradient-to-br from-blue-50/50 to-white">
                   <span className="text-xs font-bold text-blue-700 uppercase tracking-wider block">Overall Mark</span>
@@ -659,6 +660,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 {actionError && <p role="alert" className="text-xs text-rose-800">{actionError}</p>}
                 <fieldset disabled={profileSaving} className="space-y-3">
                 {periodSelect(effectiveOverridePeriod, value => changeOverrideTarget(value, overrideCategory), 'override-period-select')}
+                <p className="text-xs text-slate-600">This override applies only to the selected reporting period. It does not replace the all-course summary.</p>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700">Scope</label>
                   <select

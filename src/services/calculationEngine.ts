@@ -165,10 +165,11 @@ export function calculateCategoryScore(
   policy: GradingPolicy,
   overrides: GradeOverride[]
 ): CategoryScoreResult {
-  // Check override first
+  // Overrides belong to a single period. Null aggregates all-course evidence;
+  // it must not promote any period judgment into a course-wide override.
   const override = overrides.find(
     o => o.classEnrollmentId === classEnrollmentId &&
-         (!reportingPeriodId || o.reportingPeriodId === reportingPeriodId) &&
+         (reportingPeriodId !== null && o.reportingPeriodId === reportingPeriodId) &&
          o.categoryCode === categoryCode &&
          o.deletedAt === null
   );
@@ -313,10 +314,10 @@ export function calculateOverallCourseGrade(
     );
   }
 
-  // Check overall override
+  // Apply an overall judgment only within its explicitly requested period.
   const overallOverride = overrides.find(
     o => o.classEnrollmentId === classEnrollmentId &&
-         (!reportingPeriodId || o.reportingPeriodId === reportingPeriodId) &&
+         (reportingPeriodId !== null && o.reportingPeriodId === reportingPeriodId) &&
          o.categoryCode === 'OVERALL' &&
          o.deletedAt === null
   );
