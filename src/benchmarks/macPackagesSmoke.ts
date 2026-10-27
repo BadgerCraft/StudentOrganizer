@@ -115,7 +115,7 @@ async function checkApp(appPath: string, format: string) {
     await page.locator('[data-testid="student-seat-card"]').first().click();
     await page.locator('[data-testid="toggle-note-btn"]').click();
     await page.locator('[data-testid="observation-note-input"]').fill(observation);
-    await page.getByRole('button', { name: /Contributed an idea/ }).click();
+    await page.getByTestId('participation-event-btn').filter({ hasText: 'Contributed an idea' }).click();
     const events = await waitForRecords(page, 'participationEvents', rows => rows.some(row => row.note === observation));
     const event = events.find(row => row.note === observation);
     assert.ok(event);

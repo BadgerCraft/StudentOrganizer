@@ -46,6 +46,12 @@ async function eventually<T>(page: Page, read: () => Promise<T | undefined>, mes
 async function focusedMarking(page: Page) {
   return await page.getByRole('button', { name: 'Assignment setup', exact: true }).count() > 0;
 }
+/** The focused assignment entry is setup; retained legacy packages opened the queue. */
+export async function openMarkingQueue(page: Page) {
+  // Wait for the workspace before capability detection, including after restore/relaunch.
+  await page.getByRole('button', { name: 'Rubric editor', exact: true }).waitFor();
+  if (await focusedMarking(page)) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+}
 async function finalStage(page: Page, category?: string) {
   if (!await focusedMarking(page)) return;
   const area = page.getByTestId('final-grading-workspace');

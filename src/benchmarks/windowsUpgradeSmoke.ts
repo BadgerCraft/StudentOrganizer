@@ -11,7 +11,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
-import { runMarkingDesktopAcceptance, verifyAfterRestart, leaveMarkingWithDraft, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
+import { runMarkingDesktopAcceptance, verifyAfterRestart, leaveMarkingWithDraft, openMarkingQueue, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
 
 // This deliberately uses the real installed application's normal profile. The
 // guard below limits it to a disposable Windows runner containing fictional QA
@@ -370,6 +370,7 @@ async function runLegacyBootstrap() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.equal(canonicalLegacyReport(fs.readFileSync(reportB, 'utf8')), canonicalLegacyReport(fs.readFileSync(marking.reportPath, 'utf8').replace('Criterion / KTAC', 'Criterion / KTCA')), 'Legacy report must preserve all content, allowing only category display reordering');
     // A no-op restore could pass an equality check against identical data.
@@ -409,6 +410,7 @@ async function runLegacyBootstrap() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const restoredReport = path.join(evidenceDir, 'markinator-report-restored-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), restoredReport);
     assert.deepEqual(fs.readFileSync(restoredReport), fs.readFileSync(reportB), 'Current report bytes must survive legacy restore and restart');
     assert.deepEqual(running.errors, []);
@@ -557,6 +559,7 @@ async function runInstallRecovery() {
     // Make the restore observable: the saved pre-failure backup must replace a
     // later B edit rather than merely previewing data that already matches.
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await running.page.getByTestId(`marking-session-open-${marking.firstAttemptId}`).click();
     await waitUntil(async () => {
       const document = running!.page.getByTestId('marking-document');
@@ -592,6 +595,7 @@ async function runInstallRecovery() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-recovered.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Recovered finalized report bytes must match the original');
     await running.app.close(); running = undefined;
@@ -868,6 +872,7 @@ async function main() {
     await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Finalized report bytes must be identical after installing B');
     await running.app.close(); running = undefined;

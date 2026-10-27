@@ -60,6 +60,10 @@ After images live in `evidence/UI-2026-10-27/after/`: class, assignment cards, s
 
 Configured mocked sync UI, explicit conflict resolution and confirmed restore pass with fictional data. Remaining: exact-head native/shared CI, teacher/device acceptance and separate live OAuth/privacy approval. No real records or credentials were accessed.
 
+## Native CI follow-up
+
+Initial published head `c9d999a` passed Control Panel Windows/Mac packages, capture browser/Android and the focused shared-browser suite. Native checks identified harness assumptions about the former default marking queue, ambiguous repeated-participation labels and initially visible classroom tools. These are corrected through explicit focused navigation/action selectors while retaining legacy-app compatibility and the existing recovery/permission assertions. Production-renderer proofs pass for byte-identical reopened reports, exact pending feedback, two distinct repeated observations and authorized profile save; strict native-harness types and diff checks pass. Application source is unchanged by this follow-up; final exact-head results are recorded in PR49.
+
 ## Rollback
 
 Before merge, close this draft without touching main or PR48. After a separately authorized integration, revert this branch's commits and rebuild. Preserve/export a verified full backup before changing installed versions; local dated recovery snapshots and sync envelopes must not be destructively purged. No release or deployed rollback performed by this task.

@@ -161,7 +161,7 @@ async function main() {
     await page.locator('[data-testid="toggle-note-btn"]').tap();
     await page.locator('[data-testid="observation-note-input"]').fill('Fictional iPad observation');
     await noPageOverflow(page, 'participation dock');
-    await page.getByRole('button', { name: /Contributed an idea/ }).tap();
+    await page.getByTestId('participation-event-btn').filter({ hasText: 'Contributed an idea' }).tap();
     await waitForRecords(page, 'participationEvents', rows => rows.some(row => row.note === 'Fictional iPad observation'));
     // Student profile form and local photo selection.
     await page.locator('[data-testid="student-settings-gear-btn"]').first().tap();
