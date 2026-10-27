@@ -20,7 +20,6 @@ import { TeacherSelectorModal } from './components/TeacherSelectorModal';
 import { ParticipationDomainService } from './services/participationService';
 import { ParticipationEventTypeService } from './services/eventTypeService';
 import { ClassroomStructureService } from './services/classroomStructureService';
-import { ClassSessionService } from './services/sessionService';
 import { getAppIdentity, selectActingTeacher, clearActiveTeacherId, getIdentityEpoch } from './services/identityService';
 import { AuthorizationError } from './services/authHelper';
 import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from './utils/dateUtils';
@@ -53,12 +52,16 @@ export function App() {
   const studentSelectionGeneration = useRef(0);
   const [participationMode, setParticipationMode] = useState<'single' | 'group'>('single');
   const participationDraftDirty = useRef(false);
+  const participationActionBusy = useRef(false);
   const settingsDraftDirty = useRef(false);
   const handleSettingsDirty = useCallback((dirty: boolean) => { settingsDraftDirty.current = dirty; }, []);
   const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
-  const confirmParticipationDiscard = () => (!participationDraftDirty.current && !settingsDraftDirty.current) || window.confirm(
-    settingsDraftDirty.current ? 'Leave Settings with unsaved changes? Cancel keeps your edits.' : 'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
-  );
+  const confirmParticipationDiscard = () => {
+    if (participationActionBusy.current) { setParticipationError('Wait for the participation action to finish before changing context.'); return false; }
+    return (!participationDraftDirty.current && !settingsDraftDirty.current) || window.confirm(
+      settingsDraftDirty.current ? 'Leave Settings with unsaved changes? Cancel keeps your edits.' : 'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
+    );
+  };
   const [selectedSchoolDate, setSelectedSchoolDate] = useState<string>(() => getSchoolLocalDate());
   const [historicalTime, setHistoricalTime] = useState<string>(() => getCurrentTorontoTime());
   const [profileEnrollmentId, setProfileEnrollmentId] = useState<UUID | null>(null);
@@ -366,7 +369,6 @@ export function App() {
 
   const allAuditEntries = useLiveQuery(() => db.auditEntries.toArray()) || [];
   const participationService = new ParticipationDomainService(db);
-  const sessionService = new ClassSessionService(db);
 
   const handleSelectClass = async (sectionId: string) => {
     if (sectionId === activeSectionId) return true;
@@ -400,75 +402,91 @@ export function App() {
   };
 
   const handleRecordParticipation = async (params: any) => {
-    const selectionGeneration = studentSelectionGeneration.current, epoch = getIdentityEpoch();
-    let liveIdentity: { userId: UUID; deviceId: UUID };
+    if (participationActionBusy.current) return false;
+    participationActionBusy.current = true;
     try {
-      liveIdentity = await getAppIdentity(db);
-    } catch {
-      setIsTeacherSelectorOpen(true);
-      return false;
-    }
-    if (!activeSectionId || selectedEnrollmentIds.length === 0) return false;
+      const openingIdentity = appIdentity;
+      const sectionId = activeSectionId, enrollmentIds = [...selectedEnrollmentIds];
+      const selectionGeneration = studentSelectionGeneration.current, epoch = getIdentityEpoch();
+      const assertContext = () => {
+        if (!openingIdentity || !sectionId || enrollmentIds.length === 0 || currentView !== 'seating' ||
+            selectionGeneration !== studentSelectionGeneration.current || epoch !== getIdentityEpoch())
+          throw new Error('The teacher, student or school day changed. Reopen the feedback chooser.');
+      };
+      assertContext();
+      let liveIdentity: { userId: UUID; deviceId: UUID };
+      try {
+        liveIdentity = await getAppIdentity(db);
+      } catch {
+        setIsTeacherSelectorOpen(true);
+        return false;
+      }
+      assertContext();
+      if (liveIdentity.userId !== openingIdentity!.userId || liveIdentity.deviceId !== openingIdentity!.deviceId)
+        throw new Error('The acting teacher changed. Reopen the feedback chooser.');
 
-    const schoolDate = selectedSchoolDate;
-    const today = getSchoolLocalDate();
+      const schoolDate = selectedSchoolDate;
+      const today = getSchoolLocalDate();
 
-    let occurredAt: string;
-    if (schoolDate === today) {
-      occurredAt = new Date().toISOString();
-    } else {
-      occurredAt = buildTorontoTimestamp(schoolDate, historicalTime);
-    }
+      let occurredAt: string;
+      if (schoolDate === today) {
+        occurredAt = new Date().toISOString();
+      } else {
+        occurredAt = buildTorontoTimestamp(schoolDate, historicalTime);
+      }
 
-    const session = await sessionService.getOrCreateSession(activeSectionId, schoolDate, {
-      startsAt: occurredAt
-    });
-
-    const events = await participationService.recordParticipation({
-      classEnrollmentIds: selectedEnrollmentIds,
-      classSectionId: activeSectionId,
-      classSessionId: session.id,
-      eventTypeId: params.eventTypeId,
-      achievementLevel: params.achievementLevel,
-      categoryOverride: params.categoryOverride,
-      note: params.note,
-      localSchoolDate: schoolDate,
-      occurredAt,
-      userId: liveIdentity.userId,
-      deviceId: liveIdentity.deviceId
-    });
-
-    if (events.length > 0 && selectionGeneration === studentSelectionGeneration.current && epoch === getIdentityEpoch()) {
-      setLastRetraction(null); setParticipationError('');
-      setLastUndo({
-        batchId: events[0].batchId,
-        eventName: events[0].snapshottedName,
-        studentCount: selectedEnrollmentIds.length
+      assertContext();
+      const events = await participationService.recordParticipation({
+        classEnrollmentIds: enrollmentIds,
+        classSectionId: sectionId!,
+        ensureClassSession: true,
+        identityEpoch: epoch,
+        eventTypeId: params.eventTypeId,
+        achievementLevel: params.achievementLevel,
+        categoryOverride: params.categoryOverride,
+        note: params.note,
+        localSchoolDate: schoolDate,
+        occurredAt,
+        userId: liveIdentity.userId,
+        deviceId: liveIdentity.deviceId
       });
-      clearParticipationSelection();
-      return true;
-    }
-    return false;
+
+      if (events.length > 0 && selectionGeneration === studentSelectionGeneration.current && epoch === getIdentityEpoch()) {
+        setLastRetraction(null); setParticipationError('');
+        setLastUndo({
+          batchId: events[0].batchId,
+          eventName: events[0].snapshottedName,
+          studentCount: enrollmentIds.length
+        });
+        clearParticipationSelection();
+        return true;
+      }
+      return false;
+    } finally { participationActionBusy.current = false; }
   };
 
   const handleRetractParticipation = async (event: ParticipationEvent) => {
-    const selectionGeneration = studentSelectionGeneration.current;
-    const epoch = getIdentityEpoch();
-    const identity = await getAppIdentity(db);
-    if (epoch !== getIdentityEpoch() || identity.userId !== appIdentity?.userId || event.classSectionId !== activeSectionId ||
-      event.localSchoolDate !== getSchoolLocalDate() || !selectedEnrollmentIds.includes(event.classEnrollmentId)) {
-      throw new Error('The teacher, student or school day changed. Reopen the feedback chooser.');
-    }
-    await participationService.retractEvent(event.id, event.version, identity.userId, identity.deviceId, 'Corrected in today’s feedback chooser', epoch);
-    if (selectionGeneration !== studentSelectionGeneration.current || epoch !== getIdentityEpoch()) return;
-    setLastUndo(null);
-    setLastRetraction({ eventId: event.id, version: event.version + 1, epoch });
-    setParticipationError('');
+    if (participationActionBusy.current) throw new Error('Wait for the participation action to finish.');
+    participationActionBusy.current = true;
+    try {
+      const selectionGeneration = studentSelectionGeneration.current;
+      const epoch = getIdentityEpoch();
+      const identity = await getAppIdentity(db);
+      if (epoch !== getIdentityEpoch() || identity.userId !== appIdentity?.userId || event.classSectionId !== activeSectionId ||
+        event.localSchoolDate !== getSchoolLocalDate() || !selectedEnrollmentIds.includes(event.classEnrollmentId)) {
+        throw new Error('The teacher, student or school day changed. Reopen the feedback chooser.');
+      }
+      await participationService.retractEvent(event.id, event.version, identity.userId, identity.deviceId, 'Corrected in today’s feedback chooser', epoch);
+      if (selectionGeneration !== studentSelectionGeneration.current || epoch !== getIdentityEpoch()) return;
+      setLastUndo(null);
+      setLastRetraction({ eventId: event.id, version: event.version + 1, epoch });
+      setParticipationError('');
+    } finally { participationActionBusy.current = false; }
   };
 
   const handleUndo = async (batchId?: UUID) => {
-    if (undoBusy.current) return;
-    undoBusy.current = true;
+    if (undoBusy.current || participationActionBusy.current) return;
+    undoBusy.current = true; participationActionBusy.current = true;
     const epoch = getIdentityEpoch();
     try {
       const identity = await getAppIdentity(db);
@@ -482,7 +500,7 @@ export function App() {
       }
       setParticipationError('');
     } catch (error) { setParticipationError(error instanceof Error ? error.message : 'The last action could not be undone.'); }
-    finally { undoBusy.current = false; }
+    finally { undoBusy.current = false; participationActionBusy.current = false; }
   };
 
   useEffect(() => {

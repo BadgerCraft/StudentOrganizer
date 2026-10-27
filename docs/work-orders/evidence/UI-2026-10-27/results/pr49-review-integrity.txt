@@ -1,0 +1,14 @@
+
+> ontario-teacher-assessment@1.0.0 test:qa:integrity
+> node --import tsx scripts/qaMarkbookConcurrencySmoke.ts && node --import tsx scripts/qaClassroomAuthorizationSmoke.ts && node --import tsx scripts/qaCustomAssessmentSmoke.ts && node --import tsx scripts/qaReportingScopeSmoke.ts
+
+PASS: Existing editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.
+PASS: Absent editor baseline rejects a competing write, retains the draft, and saves only after explicit reopen/review.
+PASS: real Dashboard archive and six SeatingChart controls deny read-only writes, retain all tables and show errors; authorized layout/archive writes version and audit; zero page errors/external requests.
+PASS: real profile fresh calendar, invalid-score rollback, corrected double-submit once, pending edits/dismissal guards, override visible conflict, explicit period-change recovery, read-only blank-score rejection, full backup roundtrip. Fictional browser data only.
+PASS: real profile aggregate and Markbook aggregate/two explicit periods retain weighted evidence, exact61/94 period overall overrides and distinct category overrides/rationales in both input orders; CSV calculated/final columns agree; all records unchanged; zero page errors/external traffic.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

@@ -9,6 +9,7 @@ import type {
 } from '../types/schema';
 import { ValidationError } from './markbookService';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
+import { ClassSessionService } from './sessionService';
 import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 
 export class ConcurrencyError extends Error {
@@ -32,6 +33,10 @@ export interface RecordParticipationParams {
   timezone?: string;
   userId: UUID;
   deviceId: UUID;
+  /** Local UI callers pin the opening teacher; legacy service callers remain compatible. */
+  identityEpoch?: number;
+  /** Create the day session in this same guarded transaction instead of a prior write. */
+  ensureClassSession?: boolean;
 }
 
 export interface UndoBatchResult {
@@ -48,6 +53,7 @@ export class ParticipationDomainService {
    * snapshots event attributes, and maintains the daily summary projection.
    */
   async recordParticipation(params: RecordParticipationParams): Promise<ParticipationEvent[]> {
+    const actor = params.identityEpoch === undefined ? null : captureLocalWriteActor(params);
     if (!params.classEnrollmentIds || params.classEnrollmentIds.length === 0) {
       throw new ValidationError('At least one student must be selected.');
     }
@@ -87,6 +93,7 @@ export class ParticipationDomainService {
       'rw',
       [
         ...AUTH_TABLES(this.db),
+        this.db.devices,
         this.db.classEnrollments,
         this.db.classSessions,
         this.db.participationEventTypes,
@@ -97,6 +104,7 @@ export class ParticipationDomainService {
         this.db.auditEntries
       ],
       async () => {
+        const assertActor = actor ? await guardLocalWriteIdentity(this.db, actor) : () => {};
         // 1. Authorization check
         const auth = await assertClassSectionWriteAccess(this.db, params.userId, params.classSectionId);
         const derivedOrgId = auth.organizationId;
@@ -107,14 +115,19 @@ export class ParticipationDomainService {
           throw new ValidationError(`Class section ${params.classSectionId} not found or deleted.`);
         }
 
+        assertActor();
+        const classSessionId = params.classSessionId ?? (params.ensureClassSession
+          ? (await new ClassSessionService(this.db).getOrCreateSession(params.classSectionId, params.localSchoolDate, { startsAt: occurredAt })).id
+          : null);
+        assertActor();
         // 3. Validate Session (if provided)
-        if (params.classSessionId) {
-          const session = await this.db.classSessions.get(params.classSessionId);
+        if (classSessionId) {
+          const session = await this.db.classSessions.get(classSessionId);
           if (!session || session.deletedAt !== null) {
-            throw new ValidationError(`Class session ${params.classSessionId} not found or deleted.`);
+            throw new ValidationError(`Class session ${classSessionId} not found or deleted.`);
           }
           if (session.classSectionId !== params.classSectionId) {
-            throw new ValidationError(`Class session ${params.classSessionId} does not belong to section ${params.classSectionId}.`);
+            throw new ValidationError(`Class session ${classSessionId} does not belong to section ${params.classSectionId}.`);
           }
           if (session.localSchoolDate !== params.localSchoolDate) {
             throw new ValidationError(`Class session date (${session.localSchoolDate}) does not match participation date (${params.localSchoolDate}).`);
@@ -205,7 +218,7 @@ export class ParticipationDomainService {
             id: crypto.randomUUID(),
             classEnrollmentId: enrollmentId,
             classSectionId: params.classSectionId,
-            classSessionId: params.classSessionId ?? null,
+            classSessionId,
             batchId,
             eventTypeId: params.eventTypeId,
             snapshottedName,
@@ -282,9 +295,11 @@ export class ParticipationDomainService {
           });
         }
 
+        assertActor();
         await this.db.participationEvents.bulkAdd(events);
         await this.db.syncMutations.bulkAdd(syncMutations);
 
+        assertActor();
         return events;
       }
     );

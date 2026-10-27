@@ -77,13 +77,17 @@ export async function assertWorkspaceAccess(database: OntarioTeacherDB, userId: 
   if(!user || user.deletedAt!==null) throw new Error('Select an active teacher first.');
   const memberships=await database.organizationMemberships.filter(m=>m.userId===userId&&m.deletedAt===null&&m.status==='active').toArray();
   if(!memberships.some(m=>['teacher','admin','department_head'].includes(m.role))) throw new Error('An active teacher membership is required for full-workspace recovery.');
-  const activeUsers=await database.users.filter(u=>u.deletedAt===null&&u.id!==userId).toArray();
+  // Archiving an identity does not transfer ownership of its retained records.
+  const otherUsers=await database.users.filter(u=>u.id!==userId).toArray();
+  // Retained confidential notes may also outlive a legacy/missing author row.
+  const foreignNote=await database.studentNotes.filter(note=>note.authorUserId!==userId).first();
   const orgs=await database.organizations.toArray();
   const orgChain=(id:string)=>{const ids:string[]=[];let current:string|null=id;while(current&&!ids.includes(current)&&ids.length<100){ids.push(current);current=orgs.find(o=>o.id===current)?.parentOrganizationId??null;}return ids;};
   const adminFor=(id:string)=>memberships.some(m=>m.role==='admin'&&orgChain(id).includes(m.organizationId));
   // Full backups include identity, unassigned students and archived data. Shared workspaces
-  // require administrative authority; class-level co-teaching alone cannot export everything.
-  if(activeUsers.length && orgs.some(org=>!adminFor(org.id))) throw new Error('Full-workspace sync and automatic recovery require sole-teacher ownership or administrator access to every organization. Use authorized class exports instead.');
+  // require administrative authority even after another teacher is archived. Class-level
+  // co-teaching alone cannot export everything, including retained private notes.
+  if((otherUsers.length || foreignNote) && orgs.some(org=>!adminFor(org.id))) throw new Error('Full-workspace sync and automatic recovery require sole-teacher ownership or administrator access to every organization. Use authorized class exports instead.');
   const sections=await database.classSections.toArray();
   for(const section of sections) {
     if(section.deletedAt===null) await assertClassSectionWriteAccess(database,userId,section.id);

@@ -405,3 +405,10 @@ The class screen now opens on names and participation. Markbook opens assignment
 A dated backup is a recoverable local version, not a second-device copy. Optional Drive sync shares explicitly approved full-workspace snapshots; a common ancestor means a verified version both computers started from. Separate record edits can combine; competing versions require an explicit choice. Linked-record collisions may require choosing a complete version instead of producing inconsistent grades. Safety copies remain available. Default backups are daily while open, seven automatic versions, configurable; no app-level encryption or live-provider acceptance is claimed.
 
 Prepared questions for Tyler's review: (1) What changes an official grade after you save passage feedback? (2) If two computers change the same grade differently offline, what should happen before either version replaces the other? Status DEFERRED until actual review; independent implementation and verification continue.
+
+
+## October 27 evening — PR49 integrity review
+
+A participation record includes a school-day session, event, summary, audit and queued mutation. The repaired transaction now rolls them all back together if the teacher changes mid-write; the UI also holds its context until the action settles so Undo retains the newest target. Archiving a teacher hides/deactivates an identity but does not transfer ownership of retained confidential notes. Full-workspace backup and sync keep that ownership boundary.
+
+Prepared review question: how does an atomic transaction differ from disabling navigation while a save is pending? Both are used here: one protects committed data, the other preserves the teacher’s current task and Undo target. Review/recall remains deferred; no understanding or PR49 merge approval inferred.

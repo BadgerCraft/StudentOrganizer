@@ -1,5 +1,21 @@
 # Focused Student Organizer and personal recovery — October 27, 2026
 
+## Post-PR48 integration review — October 27 evening
+
+Tyler requested “Merge 48 let’s review 49”. PR48 was merged by its separate task; GitHub confirmed merged head `94960946df7a5068c2ec461fe479ca3bd9051512` and main merge `43bb64531ee82bcfe238f72bdba6ae7dfccec6ba`. PR49 started this review at verified `aa0daa0b3039601f5d2b281683fcd74311667a11`. Integrated that exact main without rewriting history; the sole conflict in package.json retains both the new reporting-scope regression and focused-organizer commands. Calculation engine, profile clarification and reporting regression match main byte-for-byte.
+
+Completion: substantive independent participation/backup/sync review; concrete in-scope repairs; reporting-scope preservation; fictional real-browser workflows; full tests/builds; retarget draft PR49 to main and verify all four exact-head workflows. No PR49 merge, release, deployment, encryption, live credentials/data or native configuration. Review findings and final evidence follow below.
+
+Independent review reproduced and resolved three blockers:
+
+- R1: pending participation recording could commit after the acting teacher changed, because its transaction lacked the correction/Undo identity guard. Resolved: opening actor/context is checked before writes, and day-session creation plus event/projection/audit/outbox writes share one identity-guarded transaction. Independent forced-actor-change reproduction now rejects with every table unchanged.
+- R2: a student selection change during pending recording/correction could discard the newest undo metadata, making Ctrl+Z retract the preceding observation. Real Chromium reproduction confirmed the wrong record changed. Resolved: a shared pending-action lock protects student/class/date/view/teacher changes during record, correction and Undo. Independent delayed-commit Chromium reproduction now undoes the newest record and preserves the preceding one.
+- R3: full-workspace ownership checks ignored archived foreign teachers, allowing retained confidential content into backup/sync after archiving its author. Independent fictional reproduction confirmed the boundary change. Resolved: retained foreign identities and foreign-authored notes keep the shared-workspace administrator boundary. Independent original reproduction now rejects; 35 sync/transport tests pass, including no-call publication denial, all backup reasons, stale preview, restore rollback and permitted administrator access.
+
+Final local review verification: 89 test files, **943 passed / one native-only skipped**; app, Control Panel and capture builds pass. All five focused browser workflows and the four integrity flows pass, with fictional data and blocked external requests. The pending participation regression is included in focused CI. Independent reviewers report no remaining concrete blocker in the reviewed paths. Final exact-head CI and main retarget evidence are maintained in PR49.
+
+The ten calculation-engine tests and integrated real profile/Markbook/CSV reporting-scope regression passed: all-course uses weighted evidence and each explicit period retains its own override, with original records unchanged.
+
 ## Authorization, source and delivery
 
 Tyler explicitly requested implementation and a pull request during the October27 call, then clarified “every single decision ... as well as ... the design doc ... include everything”. This supersedes the documents' historical design-only/deferred-mockup limits and the initial delegation's sync deferral. It authorizes implementation, fictional-data verification, isolated commits/push and draft PR publication. No merge, release, deployment, real-student transmission, new OAuth grant, credential/account configuration or outreach is authorized.

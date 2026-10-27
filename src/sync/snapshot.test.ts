@@ -7,7 +7,7 @@ import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher } from '../
 import { applySnapshot, dataSignature, snapshotDigest, guardMergeRelationships, mergeSnapshots, readSnapshot, resolvePlan } from './snapshot';
 import { RecoveryStore, saveBackup, saveRecoveryOptions } from './backupStore';
 import { automaticBackupStatus, runAutomaticBackup } from './automaticBackup';
-import { finishSync, previewSync, type DriveBridge } from './driveSync';
+import { finishSync, previewSync, publishFirstSnapshot, type DriveBridge } from './driveSync';
 let db:OntarioTeacherDB, store:RecoveryStore;
 beforeEach(async()=>{db=new OntarioTeacherDB('sync-'+crypto.randomUUID());store=new RecoveryStore('recovery-'+crypto.randomUUID());await seedDatabase(db);await selectActingTeacher(db,'user-tyler');});
 afterEach(async()=>{clearActiveTeacherId();await db.delete();await store.delete();});
@@ -75,6 +75,55 @@ describe('personal snapshot merge',()=>{
  it('rejects revoked local authority and stale acting-teacher epoch',async()=>{
   const before=await readSnapshot(db),epoch=getIdentityEpoch();clearActiveTeacherId();await selectActingTeacher(db,'user-tyler');
   await expect(applySnapshot(db,before,before,'user-tyler',epoch)).rejects.toThrow('teacher changed');
+ });
+});
+async function addFormerTeacherContent() {
+ const actor=(await db.users.get('user-tyler'))!,now=new Date().toISOString(),enrollment=(await db.classEnrollments.toArray())[0];
+ await db.users.add({...actor,id:'former-fictional-teacher',authSubject:'fictional-former',email:'former@example.invalid',deletedAt:now});
+ await db.studentNotes.add({id:'former-confidential-note',classEnrollmentId:enrollment.id,authorUserId:'former-fictional-teacher',content:'Fictional former teacher confidential note',isConfidential:true,createdAt:now,updatedAt:now,deletedAt:null,version:1});
+}
+describe('retained teacher ownership boundary',()=>{
+ it.each(['automatic','manual','before-sync','before-restore'] as const)('rejects %s backup after another teacher is archived',async reason=>{
+  await addFormerTeacherContent();
+  await expect(saveBackup(db,'user-tyler',reason,store)).rejects.toThrow('sole-teacher ownership');
+  expect(await store.backups.count()).toBe(0);
+ });
+ it('does not treat a missing legacy note author as solely owned content',async()=>{
+  await addFormerTeacherContent();await db.users.delete('former-fictional-teacher');
+  await expect(saveBackup(db,'user-tyler','manual',store)).rejects.toThrow('sole-teacher ownership');
+  expect(await store.backups.count()).toBe(0);
+ });
+ it('rejects first publication and preview before any Drive call',async()=>{
+  await addFormerTeacherContent();const called=vi.fn();const bridge={list:called,upload:called,download:called} as unknown as DriveBridge;
+  await expect(publishFirstSnapshot(db,'user-tyler',bridge,store)).rejects.toThrow('sole-teacher ownership');
+  await expect(previewSync(db,'user-tyler',{id:'remote-fiction',name:'Fiction',modifiedTime:'2026-10-27'},bridge,store)).rejects.toThrow('sole-teacher ownership');
+  expect(called).not.toHaveBeenCalled();expect(await store.state.get('sync')).toBeUndefined();
+ });
+ it('rechecks retained ownership at application of a previously authorized preview',async()=>{
+  const json=JSON.stringify(await readSnapshot(db)),download=vi.fn(async()=>({ok:true as const,value:{json}})),upload=vi.fn();
+  const bridge={download,upload} as unknown as DriveBridge;
+  const preview=await previewSync(db,'user-tyler',{id:'remote-fiction',name:'Fiction',modifiedTime:'2026-10-27'},bridge,store);
+  await addFormerTeacherContent();download.mockClear();
+  await expect(finishSync(db,preview,{},bridge,store)).rejects.toThrow('sole-teacher ownership');
+  expect(download).not.toHaveBeenCalled();expect(upload).not.toHaveBeenCalled();expect(await store.backups.count()).toBe(0);
+ });
+ it('rejects restoring out of a shared archived-author workspace without deleting its retained note',async()=>{
+  const sole=await readSnapshot(db);await addFormerTeacherContent();const current=await readSnapshot(db);
+  await expect(applySnapshot(db,sole,current,'user-tyler',getIdentityEpoch())).rejects.toThrow('sole-teacher ownership');
+  expect(dataSignature(await readSnapshot(db))).toBe(dataSignature(current));
+ });
+ it('rolls back a restore that introduces another archived teacher and confidential content',async()=>{
+  const sole=await readSnapshot(db);await addFormerTeacherContent();const shared=await readSnapshot(db);
+  await db.studentNotes.delete('former-confidential-note');await db.users.delete('former-fictional-teacher');
+  await expect(applySnapshot(db,shared,sole,'user-tyler',getIdentityEpoch())).rejects.toThrow('sole-teacher ownership');
+  expect(dataSignature(await readSnapshot(db))).toBe(dataSignature(sole));
+ });
+ it('allows the retained workspace only with explicit administrator authority over every organization',async()=>{
+  await addFormerTeacherContent();const membership=(await db.organizationMemberships.where('userId').equals('user-tyler').toArray())[0];
+  const board=(await db.organizations.toArray()).find(org=>org.parentOrganizationId===null)!;
+  await db.organizationMemberships.update(membership.id,{organizationId:board.id,role:'admin'});
+  const saved=await saveBackup(db,'user-tyler','manual',store);
+  expect(saved?.json).toContain('Fictional former teacher confidential note');
  });
 });
 describe('dated local recovery',()=>{
