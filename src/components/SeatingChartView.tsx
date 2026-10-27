@@ -30,9 +30,10 @@ import type {
   ParticipationDailySummary,
   UUID
 } from '../types/schema';
+import { ClassroomStructureService } from '../services/classroomStructureService';
 import { SeatingDomainService } from '../services/seatingService';
 import { AttendanceService } from '../services/attendanceService';
-import { getAppIdentity } from '../services/identityService';
+import { getAppIdentity, getIdentityEpoch } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { getSchoolLocalDate, shiftSchoolDate } from '../utils/dateUtils';
 import { db } from '../db/database';
@@ -128,55 +129,23 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     grid.push(rowArr);
   }
 
-  const handleToggleLock = async () => {
-    await db.seatingLayouts.update(layout.id, {
-      isLocked: !layout.isLocked,
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
+  const updateLayout = async (changes: Partial<Pick<SeatingLayout, 'rows' | 'cols' | 'isLocked' | 'cardSize'>>) => {
+    const identityEpoch = getIdentityEpoch();
+    setSeatingError(null);
+    try {
+      if (!userId || !deviceId) throw new AuthorizationError('Select an acting teacher before editing the classroom.');
+      await new ClassroomStructureService(db).updateLayout(layout.id, layout.version, changes, { userId, deviceId, identityEpoch });
+      onRefresh();
+    } catch (error) {
+      setSeatingError(error instanceof Error ? error.message : 'Classroom layout could not be updated.');
+    }
   };
-
-  const handleToggleSize = async () => {
-    await db.seatingLayouts.update(layout.id, {
-      cardSize: layout.cardSize === 'standard' ? 'compact' : 'standard',
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
-  };
-
-  const handleAddRow = async () => {
-    await db.seatingLayouts.update(layout.id, {
-      rows: layout.rows + 1,
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
-  };
-
-  const handleRemoveRow = async () => {
-    if (layout.rows <= 2) return;
-    await db.seatingLayouts.update(layout.id, {
-      rows: layout.rows - 1,
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
-  };
-
-  const handleAddCol = async () => {
-    await db.seatingLayouts.update(layout.id, {
-      cols: layout.cols + 1,
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
-  };
-
-  const handleRemoveCol = async () => {
-    if (layout.cols <= 2) return;
-    await db.seatingLayouts.update(layout.id, {
-      cols: layout.cols - 1,
-      updatedAt: new Date().toISOString()
-    });
-    onRefresh();
-  };
+  const handleToggleLock = () => updateLayout({ isLocked: !layout.isLocked });
+  const handleToggleSize = () => updateLayout({ cardSize: layout.cardSize === 'standard' ? 'compact' : 'standard' });
+  const handleAddRow = () => updateLayout({ rows: layout.rows + 1 });
+  const handleRemoveRow = () => { if (layout.rows > 2) return updateLayout({ rows: layout.rows - 1 }); };
+  const handleAddCol = () => updateLayout({ cols: layout.cols + 1 });
+  const handleRemoveCol = () => { if (layout.cols > 2) return updateLayout({ cols: layout.cols - 1 }); };
 
   const getIdentity = async () => {
     const currentIdentity = await getAppIdentity(db);

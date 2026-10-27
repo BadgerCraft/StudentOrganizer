@@ -1,0 +1,12 @@
+../../tmp/studentorganizer-review/phone-clean/shared/capturePackage.ts(1,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+../../tmp/studentorganizer-review/phone-clean/shared/capturePackage.ts(113,33): error TS7006: Parameter 'chunk' implicitly has an 'any' type.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(1,34): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(2,29): error TS2307: Cannot find module 'saxes' or its corresponding type declarations.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(115,26): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(120,51): error TS18046: 'attribute' is of type 'unknown'.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(120,86): error TS2339: Property 'value' does not exist on type '{}'.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(121,56): error TS18046: 'attribute' is of type 'unknown'.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(121,87): error TS2339: Property 'value' does not exist on type '{}'.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importDocuments.ts(151,63): error TS2307: Cannot find module 'mammoth' or its corresponding type declarations.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importImages.ts(1,24): error TS2307: Cannot find module 'fflate' or its corresponding type declarations.
+../../tmp/studentorganizer-review/phone-clean/src/marking/importImages.ts(81,28): error TS7006: Parameter 'chunk' implicitly has an 'any' type.

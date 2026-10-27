@@ -18,6 +18,7 @@ import { StudentSettingsModal } from './components/StudentSettingsModal';
 import { TeacherSelectorModal } from './components/TeacherSelectorModal';
 import { ParticipationDomainService } from './services/participationService';
 import { ParticipationEventTypeService } from './services/eventTypeService';
+import { ClassroomStructureService } from './services/classroomStructureService';
 import { ClassSessionService } from './services/sessionService';
 import { getAppIdentity, selectActingTeacher, clearActiveTeacherId, getIdentityEpoch } from './services/identityService';
 import { AuthorizationError } from './services/authHelper';
@@ -570,20 +571,12 @@ export function App() {
                   return;
                 }
                 if (!activeSectionId) return;
-                const now = new Date().toISOString();
-                await db.seatingLayouts.add({
-                  id: `layout-${activeSectionId}`,
-                  classSectionId: activeSectionId,
-                  name: 'Standard Classroom 4x5',
-                  rows: 4,
-                  cols: 5,
-                  isLocked: false,
-                  cardSize: 'standard',
-                  createdAt: now,
-                  updatedAt: now,
-                  deletedAt: null,
-                  version: 1
-                });
+                try {
+                  await new ClassroomStructureService(db).createDefaultLayout(activeSectionId,
+                    { userId: appIdentity.userId, deviceId: appIdentity.deviceId, identityEpoch: getIdentityEpoch() });
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : 'Classroom layout could not be created.');
+                }
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
             >

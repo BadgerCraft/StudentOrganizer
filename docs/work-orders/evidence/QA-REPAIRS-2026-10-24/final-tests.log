@@ -1,0 +1,124 @@
+
+> ontario-teacher-assessment@1.0.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /workspace/StudentOrganizer
+
+ ✓ src/marking/categoryRecovery.test.ts (23 tests) 2168ms
+   ✓ marking category-change recovery > saves all pending feedback against the original categories after an authorized category replacement 337ms
+ ✓ src/marking/markingService.test.ts (34 tests) 3492ms
+   ✓ Assessment-linked marking integrity > recovers unfinished feedback, exact second-occurrence anchors and original bytes after reopening the database without touching grades 529ms
+   ✓ Assessment-linked marking integrity > rejects independently rehashed marking text that differs from its retained DOCX without writing records 341ms
+ ✓ src/services/domainServices.test.ts (16 tests) 1032ms
+ ✓ src/marking/modesPhotoService.test.ts (47 tests) 2717ms
+ ✓ src/services/windowsInstallerUpdate.test.ts (24 tests) 349ms
+ ✓ src/services/identityAttribution.test.ts (9 tests) 673ms
+ ✓ src/marking/archive.test.ts (23 tests) 2531ms
+ ✓ src/services/backupValidation.test.ts (16 tests) 1044ms
+ ✓ src/services/migration.test.ts (2 tests) 165ms
+ ✓ src/services/multiDayParticipation.test.ts (15 tests) 824ms
+ ✓ src/services/dataWriteIntegrity.test.ts (5 tests) 428ms
+ ✓ src/services/eventTypeService.test.ts (13 tests) 721ms
+ ✓ src/services/releaseDelivery.test.ts (5 tests) 174ms
+ ✓ src/services/rosterConflict.test.ts (13 tests) 727ms
+ ✓ src/services/calculationEngine.test.ts (8 tests) 13ms
+ ✓ src/marking/importImages.test.ts (19 tests) 140ms
+ ✓ src/marking/modesPhotoBackup.test.ts (4 tests) 999ms
+   ✓ atomic recovery of all marking modes and original photographs > rejects corrupt image bytes, hashes, URLs, dimensions, modes and draft links before changing any table 444ms
+ ✓ src/analytics/analytics.test.ts (26 tests) 403ms
+ ✓ src/marking/classroomMarking.test.ts (23 tests) 2617ms
+ ✓ src/services/teacherProfileService.test.ts (10 tests) 425ms
+ ✓ src/services/profileAssessmentService.test.ts (7 tests) 395ms
+ ✓ src/marking/report.test.ts (11 tests) 16ms
+ ✓ src/services/multiTeacherIdentity.test.ts (5 tests) 326ms
+ ✓ src/dictation/desktop.test.ts (8 tests) 544ms
+   ✓ desktop local process boundary > bounds runaway inference and output and isolates process failure 512ms
+ ✓ src/services/securityBoundaries.test.ts (26 tests) 843ms
+ ✓ src/services/rosterSeating.test.ts (8 tests) 434ms
+ ✓ src/marking/importDocumentArchive.test.ts (20 tests) 588ms
+   ✓ bounded local DOCX class ZIP import > enforces compressed size before reading and bounds count, per-file and total expanded bytes 364ms
+ ✓ src/components/MarkbookView.test.tsx (5 tests) 266ms
+ ✓ src/services/rosterEnrollmentService.test.ts (7 tests) 524ms
+ ✓ src/services/studentService.test.ts (7 tests) 452ms
+ ✓ src/services/manualUpdater.test.ts (10 tests) 26ms
+ ✓ src/services/dayAfterSeedRegression.test.ts (4 tests) 221ms
+ ✓ src/marking/ui/evidenceImport.test.ts (8 tests) 26ms
+ ✓ src/capture/driveTransport.test.ts (21 tests) 78ms
+ ✓ src/services/updateApproval.test.ts (6 tests) 54ms
+ ✓ src/marking/importDocuments.test.ts (10 tests) 242ms
+ ✓ src/capture/attachmentService.test.ts (14 tests) 20582ms
+   ✓ durable capture matching boundary > atomically retains multipage originals/edits, duplicate names and identical pages across students without marking 409ms
+   ✓ durable capture matching boundary > persists a whole class of 40 ten-page sets incrementally without a flat ten-photo cap 3132ms
+   ✓ durable capture matching boundary > starts marking large saved photos for two of five students and preserves receipts across restart 9225ms
+   ✓ durable capture matching boundary > rejects wrong teacher association and grouped page-count or original-byte overflow atomically 6839ms
+ ✓ src/services/classroomLevels.test.ts (21 tests) 440ms
+ ✓ src/services/classroomStructureService.test.ts (24 tests) 1897ms
+ ✓ src/services/starterParticipationButtons.test.ts (11 tests) 904ms
+ ✓ src/marking/capturePackage.test.ts (35 tests) 704ms
+   ✓ completed capture package v2 > round-trips a bounded whole class of 40 students and 400 pages 460ms
+stdout | src/dictation/runtimeIntegrity.test.ts > packaged speech runtime integrity > checks exact prepared bytes on win32 before signing
+Speech runtime before signing: {"engine":"whisper.cpp","version":"1.7.6","revision":"a8d002cfd879315632a579e73f0148d06959de36","platform":"win32","architecture":"arm64","modelBundled":false,"bytes":14,"sha256":"52c3935626c104b2cbc9031291a1c4d56614c38f52072a361d658a58a9c48698"}
+
+stdout | src/dictation/runtimeIntegrity.test.ts > packaged speech runtime integrity > checks exact prepared bytes on linux before signing
+Speech runtime before signing: {"engine":"whisper.cpp","version":"1.7.6","revision":"a8d002cfd879315632a579e73f0148d06959de36","platform":"linux","architecture":"arm64","modelBundled":false,"bytes":14,"sha256":"52c3935626c104b2cbc9031291a1c4d56614c38f52072a361d658a58a9c48698"}
+
+stdout | src/dictation/runtimeIntegrity.test.ts > packaged speech runtime integrity > checks exact prepared bytes on darwin before signing
+Speech runtime before signing: {"engine":"whisper.cpp","version":"1.7.6","revision":"a8d002cfd879315632a579e73f0148d06959de36","platform":"darwin","architecture":"arm64","modelBundled":false,"bytes":14,"sha256":"52c3935626c104b2cbc9031291a1c4d56614c38f52072a361d658a58a9c48698"}
+
+stdout | src/dictation/runtimeIntegrity.test.ts > packaged speech runtime integrity > rejects manifest changes between hooks
+Speech runtime before signing: {"engine":"whisper.cpp","version":"1.7.6","revision":"a8d002cfd879315632a579e73f0148d06959de36","platform":"darwin","architecture":"arm64","modelBundled":false,"bytes":14,"sha256":"52c3935626c104b2cbc9031291a1c4d56614c38f52072a361d658a58a9c48698"}
+
+ ✓ src/dictation/runtimeIntegrity.test.ts (17 tests | 1 skipped) 22ms
+ ✓ src/services/restoreGraphIntegrity.test.ts (22 tests) 1695ms
+ ✓ src/marking/markingBackup.test.ts (5 tests) 1002ms
+   ✓ marking records participate in atomic Organizer recovery > roundtrips originals, feedback-only commits and draft revisions without changing official feedback 380ms
+ ✓ src/services/unitService.test.ts (18 tests) 1389ms
+ ✓ src/services/reportPdf.test.ts (10 tests) 76ms
+ ✓ src/marking/markingMigration.test.ts (2 tests) 223ms
+ ✓ src/services/rosterTable.test.ts (9 tests) 25ms
+ ✓ src/marking/ui/ReadOnlyMarkingHistory.test.tsx (6 tests) 17ms
+ ✓ src/services/csvExport.test.ts (9 tests) 493ms
+ ✓ src/services/classService.test.ts (4 tests) 318ms
+ ✓ src/services/portabilityService.test.ts (4 tests) 301ms
+ ✓ src/services/rosterParser.test.ts (13 tests) 7ms
+ ✓ src/marking/rubricParser.test.ts (8 tests) 8ms
+ ✓ src/dictation/session.test.ts (9 tests) 28ms
+ ✓ src/components/studentPress.test.ts (5 tests) 7ms
+ ✓ src/services/rosterImport.test.ts (7 tests) 417ms
+ ✓ src/services/bugReportService.test.ts (7 tests) 11ms
+ ✓ src/services/seatingSwap.test.ts (3 tests) 224ms
+ ✓ src/marking/legacyBackup.test.ts (8 tests) 717ms
+ ✓ src/services/studentPhotoSync.test.ts (2 tests) 186ms
+ ✓ src/marking/commentBank.test.ts (7 tests) 24ms
+ ✓ src/services/markbookConcurrency.test.ts (5 tests) 358ms
+ ✓ src/services/seatReactivation.test.ts (3 tests) 234ms
+ ✓ src/components/chicletSettings.test.ts (5 tests) 162ms
+ ✓ src/marking/annotatedReport.test.ts (4 tests) 9ms
+ ✓ src/capture/driveAuth.test.ts (3 tests) 102ms
+ ✓ src/marking/ui/ModeEvidence.test.tsx (3 tests) 21ms
+ ✓ src/services/displayPreferencesService.test.ts (4 tests) 222ms
+ ✓ src/utils/photoCrop.test.ts (6 tests) 8ms
+ ✓ src/marking/importRubric.test.ts (3 tests) 28ms
+ ✓ src/marking/readValidation.test.ts (4 tests) 481ms
+ ✓ src/capture/previewQueue.test.ts (3 tests) 58ms
+ ✓ src/components/MarkScalePreview.test.tsx (3 tests) 334ms
+ ✓ src/services/classSettingsIdentity.test.ts (12 tests) 1419ms
+ ✓ apps/control-panel/src/dashboard.test.ts (3 tests) 37ms
+ ✓ src/marking/cropEditing.test.ts (10 tests) 8ms
+ ✓ src/benchmarks/legacyReportComparison.test.ts (9 tests) 22ms
+ ✓ src/marking/imageGeometry.test.ts (6 tests) 9ms
+ ✓ src/marking/validation.test.ts (13 tests) 17ms
+ ✓ src/services/nativeFiles.test.ts (3 tests) 6ms
+ ✓ src/utils/categoryDisplay.test.ts (1 test) 5ms
+
+ Test Files  82 passed (82)
+      Tests  880 passed | 1 skipped (881)
+   Start at  13:58:54
+   Duration  31.96s (transform 2.72s, setup 0ms, collect 11.31s, tests 61.93s, environment 21ms, prepare 6.08s)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

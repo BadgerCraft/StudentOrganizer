@@ -1,0 +1,16 @@
+
+> ontario-teacher-assessment@1.0.0 test:marking:portability
+> tsx scripts/markingPortabilityAcceptanceSmoke.ts
+
+Re-optimizing dependencies because vite config has changed
+PASS: actual UI stale manual mark conflict, explicit baseline acceptance, confirmed finalization, post-commit readback failure and idempotent UI retry.
+PASS: downloaded inert HTML bytes served alone over loopback (file URLs blocked by cloud browser policy), escaped fictional student/feedback/annotation, print-media styles and headless Chromium PDF output. Native print dialog/printer are not tested.
+PASS: clean-profile backup preview left marking tables empty; confirmed restore exactly recovered attempts, sessions, rubrics and official records.
+PASS: actual full-backup download, clean-profile ImportExportModal preview/confirm restore, reopened pending draft, immutable finalized report, originals and official records preserved.
+PASS: historical finalized Report downloads byte-for-byte after authorized current-category removal; official records and both sessions stay unchanged.
+PASS: zero external requests or page errors across all portability scenarios.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

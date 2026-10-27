@@ -1,0 +1,14 @@
+
+> ontario-teacher-assessment@1.0.0 test:marking:authority
+> tsx scripts/markingAuthorityAcceptanceSmoke.ts
+
+PASS: pending-teacher-switch; existing official records unchanged.
+PASS: failed-navigation-retry; existing official records unchanged.
+PASS: epoch-revoked; existing official records unchanged.
+PASS: membership-revoked; existing official records unchanged.
+PASS: 4 fictional authority/navigation scenarios (pending-teacher-switch, failed-navigation-retry, epoch-revoked, membership-revoked); zero external requests and page exceptions. Browser evidence does not establish native readiness.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

@@ -1,0 +1,19 @@
+Re-optimizing dependencies because vite config has changed
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: read-only viewing cannot block workspace departure
+
+true !== false
+
+    at <anonymous> (/workspace/StudentOrganizer/scripts/annotationFeedbackSmoke.ts:83:9) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: true,
+  expected: false,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0

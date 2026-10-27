@@ -20,7 +20,7 @@ import type {
   UUID
 } from '../types/schema';
 import { calculateOverallCourseGrade } from '../services/calculationEngine';
-import { MarkbookDomainService } from '../services/markbookService';
+import { MarkbookDomainService, type SaveMarkbookCellParams } from '../services/markbookService';
 import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
 import { db } from '../db/database';
@@ -117,6 +117,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     currentCompletion: CompletionStatus;
     currentIsLate: boolean;
     currentFeedback: string;
+    expectedCellState: NonNullable<SaveMarkbookCellParams['expectedCellState']>;
   } | null>(null);
 
   const [editScore, setEditScore] = useState('');
@@ -250,7 +251,11 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
       currentFormat: cr?.inputFormat || 'classroom_level',
       currentCompletion: sa?.completionStatus || 'complete',
       currentIsLate: sa?.isLate || false,
-      currentFeedback: cr?.feedback || ''
+      currentFeedback: cr?.feedback || '',
+      expectedCellState: {
+        studentAssessment: sa ? { id: sa.id, version: sa.version } : null,
+        categoryResult: cr ? { id: cr.id, version: cr.version } : null,
+      }
     });
 
     setEditScore(cr?.rawScore || '');
@@ -276,16 +281,6 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
         throw new AuthorizationError('Acting teacher has changed. Please refresh and try again.');
       }
 
-      const existingSa = studentAssessments.find(
-        s => s.classEnrollmentId === activeCell.enrollmentId &&
-             s.assessmentId === activeCell.assessmentId &&
-             s.deletedAt === null
-      );
-
-      const existingCr = existingSa ? categoryResults.find(
-        r => r.studentAssessmentId === existingSa.id && r.assessmentCategoryId === activeCell.categoryId && r.deletedAt === null
-      ) : undefined;
-
       await markbookService.saveMarkbookCell({
         assessmentId: activeCell.assessmentId,
         classEnrollmentId: activeCell.enrollmentId,
@@ -296,8 +291,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
         rawScore: editScore.trim(),
         inputFormat: editFormat,
         feedback: editFeedback.trim() || null,
-        expectedStudentAssessmentVersion: existingSa ? existingSa.version : undefined,
-        expectedCategoryResultVersion: existingCr ? existingCr.version : undefined,
+        expectedCellState: activeCell.expectedCellState,
         userId: currentIdentity.userId,
         deviceId: currentIdentity.deviceId
       });
