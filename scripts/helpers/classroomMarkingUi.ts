@@ -6,6 +6,7 @@ export async function revealRubricPaste(page: Page) {
   if (!await field.isVisible()) await page.locator('summary').filter({ hasText: /^Paste rubric text or table$/ }).click();
 }
 export async function chooseOfficialLevel(page: Page, category: string, level: string) {
+  await selectFinalCategory(page, category);
   const group = page.getByRole('group', { name: `${category} category judgment`, exact: true });
   await group.getByRole('button', { name: /^(✓ )?Level$/ }).click();
   await group.getByRole('group', { name: `Official ${category} level`, exact: true }).getByRole('button', { name: new RegExp(`^(✓ )?${level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).click();
@@ -44,4 +45,46 @@ export async function importDocumentsForStudents(page: Page, files: TestFile[], 
   await root.getByRole('button',{name:'Confirm and start marking',exact:true}).click();
   await page.getByRole('region',{name:'Marking session',exact:true}).waitFor();
   return available;
+}
+
+/** Navigate through the focused workspace, without bypassing departure guards. */
+export async function openQueuedAttempt(page: Page, attemptId: string) {
+  const selector = page.getByLabel('Current submission', { exact: true });
+  if (await selector.isVisible()) {
+    if (await selector.inputValue() !== attemptId) { await selector.selectOption(attemptId); return; }
+    // Re-selecting the current submission is an intentional no-op in the UI.
+    await selector.selectOption(attemptId);
+    const reopen = page.getByRole('button', { name: 'Reopen as draft revision', exact: true });
+    if (await page.getByText('Finalized revision — current official results shown below', { exact: false }).isVisible()) {
+      await enterFinalGrading(page);
+      await reopen.click();
+      await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
+    }
+    return;
+  }
+  const target = page.getByTestId(`marking-session-open-${attemptId}`);
+  if (!await target.isVisible()) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+  await target.click();
+}
+export async function enterFinalGrading(page: Page) {
+  if (!await page.getByTestId('final-grading-workspace').isVisible()) await page.getByRole('button', { name: 'Final grading', exact: true }).click();
+  await page.getByTestId('final-grading-workspace').waitFor({ timeout: 12000 }).catch(async error => { console.error('FINAL_STAGE_DIAGNOSTIC', await page.locator('body').innerText()); throw error; });
+}
+export async function selectFinalCategory(page: Page, category: string) {
+  await enterFinalGrading(page);
+  const chip = page.getByRole('complementary', { name: 'Final category decisions', exact: true }).getByRole('button', { name: new RegExp(`^${category} ·`) });
+  await chip.click({ timeout: 12000 }).catch(async error => { console.error('FINAL_CATEGORY_DIAGNOSTIC', await page.locator('body').innerText()); throw error; });
+}
+
+export async function showFinalOverview(page: Page) {
+  await enterFinalGrading(page);
+  const finish = page.getByRole('button', { name: 'Finish category', exact: true });
+  if (await finish.isVisible()) await finish.click();
+  await page.getByLabel('Overall student-facing feedback').waitFor({ timeout: 12000 }).catch(async error => { console.error('OVERVIEW_DIAGNOSTIC', await page.locator('body').innerText()); throw error; });
+}
+
+export async function openPortability(page: Page) {
+  await page.getByTestId('nav-settings-btn').click();
+  await page.getByRole('button', { name: 'Backups & import / export', exact: true }).click();
+  await page.getByTestId('nav-portability-btn').click();
 }

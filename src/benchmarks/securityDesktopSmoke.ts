@@ -1,3 +1,4 @@
+import { openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import assert from 'node:assert/strict';
@@ -83,7 +84,7 @@ async function main() {
         return request;
       };
     });
-    await page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(page, 'updates');
     const updates = page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await app.evaluate(() => (globalThis as any).__manualUpdateRequests), [], 'Opening Settings must not check for updates');

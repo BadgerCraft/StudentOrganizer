@@ -4,6 +4,7 @@ import { createServer } from 'vite';
 import { chromium, type Page } from 'playwright';
 import { strToU8, zipSync } from 'fflate';
 import { installFictionalClassroom } from './helpers/classroomFixture';
+import { enterFinalGrading, openQueuedAttempt, selectFinalCategory, showFinalOverview } from './helpers/classroomMarkingUi';
 import { verifyCompactMarkbookEditor } from './helpers/markbookViewportAcceptance';
 
 // Actual application UI and IndexedDB, with fictional local files. Vite module
@@ -53,11 +54,11 @@ try {
   await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
   async function assessments() {
-    await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+    await page.getByRole('button', { name: 'Markbook', exact: true }).click();
   }
   await assessments();
   const historicalResults = await rows(page, 'categoryResults');
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional classroom-use acceptance');
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
   let assessment: any;
@@ -169,16 +170,18 @@ try {
   pass('Real TXT/DOCX guided import: explicit multi-student matching, several pages per student, Back, Undo, unsupported .doc, file-read retry, partial-save retry and failed-opening recovery without duplicates.');
 
   const first = attempts[0], second = attempts[1];
-  await page.getByTestId(`marking-session-open-${first.id}`).click();
+  await openQueuedAttempt(page, first.id);
+  await selectFinalCategory(page, 'T');
   const thinking = page.getByRole('group', { name: 'T category judgment', exact: true });
-  await thinking.getByRole('button', { name: 'Level', exact: true }).click();
+  await thinking.getByRole('button', { name: /^(✓ )?Level$/ }).click();
   const exactLevels = ['R', '1−', '1', '1+', '2−', '2', '2+', '3−', '3', '3+', '4−(low)', '4−(High)', '4(low)', '4(high)', '4+(low)', '4+(med)', '4+(high)'];
   for (const value of exactLevels) {
-    const choice = thinking.getByRole('button', { name: value, exact: true }); await choice.click();
+    const choice = thinking.getByRole('button', { name: new RegExp(`^(✓ )?${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }); await choice.click();
     assert.equal(await choice.getAttribute('aria-pressed'), 'true');
   }
-  await thinking.getByRole('button', { name: '3+', exact: true }).click();
+  await thinking.getByRole('button', { name: /^(✓ )?3\+$/ }).click();
   await page.getByLabel('Category T feedback', { exact: true }).fill('Fictional category feedback.');
+  await showFinalOverview(page);
   await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional first student saved feedback.');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await page.evaluate(async () => {
@@ -194,6 +197,9 @@ try {
   assert.equal((await rows(page, 'markingCommits')).length, 0);
   await page.evaluate(() => { (window as any).restoreClassroomFinalize(); delete (window as any).restoreClassroomFinalize; });
   await page.getByTestId('marking-save-next').click();
+  await page.waitForFunction(id => (document.querySelector('[aria-label="Current submission"]') as HTMLSelectElement | null)?.value === id, second.id);
+  await selectFinalCategory(page, 'T');
+  await showFinalOverview(page);
   await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).filter({ hasText: '' }).waitFor();
   await page.waitForFunction(() => (document.querySelector('textarea') !== null));
   for (let index = 0; index < 50 && await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue() !== ''; index++) await page.waitForTimeout(100);
@@ -201,7 +207,9 @@ try {
   const firstSA = (await rows(page, 'studentAssessments')).find(row => row.assessmentId === assessment.id && row.classEnrollmentId === first.classEnrollmentId);
   const firstResult = (await rows(page, 'categoryResults')).find(row => row.studentAssessmentId === firstSA.id);
   assert.equal(firstResult.rawScore, '3+'); assert.equal(firstResult.normalizedPercentage, 78);
+  await selectFinalCategory(page, 'T');
   await page.getByLabel('Category T feedback', { exact: true }).fill('Fictional feedback only; no grade.');
+  await showFinalOverview(page);
   await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional feedback-only student.');
   await page.getByTestId('marking-save-markbook').click();
   await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
@@ -218,7 +226,7 @@ try {
   pass('All 17 level choices select visibly; failed final save retains draft and rolls back results; Save and next/return update Markbook, feedback-only stays ungraded, and saved results survive restart.');
 
   await assessments(); await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await wizard.getByLabel('Paste text', { exact: true }).check(); await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
   await wizard.getByLabel('Work title', { exact: true }).fill('Fictional pasted work');
   await wizard.getByRole('textbox', { name: /^Student work/ }).fill('Fictional pasted text remains intact when going Back.');
@@ -234,7 +242,7 @@ try {
   await page.getByTestId('marking-document').filter({ hasText: 'Fictional pasted text' }).waitFor();
   pass('Single-student pasted-text flow requires explicit student confirmation, skips matching, and retains entered content on Back without duplicate imports.');
 
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await wizard.getByLabel('Upload a picture', { exact: true }).check(); await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
   const pngs = await page.evaluate(() => [1, 2].map(number => { const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 640; const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 480, 640); ctx.fillStyle = '#111'; ctx.font = '20px sans-serif'; ctx.fillText(`Fictional photographed work ${number}`, 20, 40); return canvas.toDataURL('image/png').split(',')[1]; }));
   await wizard.getByLabel('Choose pictures', { exact: true }).setInputFiles(pngs.map((png, index) => ({ name: `Fictional-page-${index + 1}.png`, mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })));
@@ -254,8 +262,10 @@ try {
   for (const preparation of ['rubric', 'import'] as const) {
     await page.getByText(/Draft — official marks unchanged/).waitFor();
     await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
+    await enterFinalGrading(page);
     const feedback = `Fictional picture feedback with guarded ${preparation} preparation.`;
-    await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(feedback);
+    await showFinalOverview(page);
+  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(feedback);
     await page.getByRole('button', { name: 'Save now', exact: true }).click();
     await page.getByTestId('marking-save-status').filter({ hasText: /^Saved locally$/ }).waitFor();
     const title = `Fictional unsaved ${preparation} preparation`;
@@ -264,13 +274,14 @@ try {
       await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
       await page.getByLabel('Rubric title', { exact: true }).fill(title);
     } else {
-      await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+      await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
       await wizard.getByLabel('Paste text', { exact: true }).check();
       await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
       await wizard.getByLabel('Work title', { exact: true }).fill(title);
       await wizard.getByRole('textbox', { name: /^Student work/ }).fill(work);
     }
-    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Resume current submission', exact: true }).click();
+    await enterFinalGrading(page);
     const before = Object.fromEntries(await Promise.all(['studentAssessments', 'categoryResults', 'markingCommits', 'markingSessions', 'markingRubrics', 'markingAttempts']
       .map(async table => [table, await rows(page, table)])));
     const cancelPrompt = page.waitForEvent('dialog');
@@ -285,11 +296,12 @@ try {
       await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
       assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), title);
     } else {
-      await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+      await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
       assert.equal(await wizard.getByLabel('Work title', { exact: true }).inputValue(), title);
       assert.equal(await wizard.getByRole('textbox', { name: /^Student work/ }).inputValue(), work);
     }
-    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Resume current submission', exact: true }).click();
+    await enterFinalGrading(page);
     const acceptPrompt = page.waitForEvent('dialog');
     const acceptedReturn = page.getByTestId('marking-save-markbook').click();
     const acceptance = await acceptPrompt;
@@ -307,7 +319,7 @@ try {
     assert.deepEqual(await rows(page, 'markingRubrics'), before.markingRubrics, 'Discarding rubric preparation must not create a rubric version');
     if (preparation === 'rubric') {
       await assessments(); await page.getByTestId(`open-marking-${assessment.id}`).click();
-      await page.getByTestId(`marking-session-open-${picture.id}`).click();
+      await openQueuedAttempt(page, picture.id);
       await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
     }
   }

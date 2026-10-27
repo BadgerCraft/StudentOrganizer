@@ -1,6 +1,6 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
 import { leaveMarkingWithDraft } from '../src/benchmarks/markingDesktopAcceptance';
-import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory, importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { preview } from 'vite';
@@ -34,6 +34,7 @@ async function waitRecord(page: Page, table: string, predicate: (row: any) => bo
   throw new Error(`Expected fictional ${table} row was not persisted.`);
 }
 async function selectText(page: Page, length: number) {
+  await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
   await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
   await page.getByTestId('marking-document').evaluate((root, length) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), node = walk.nextNode();
@@ -65,9 +66,9 @@ try {
   await page.waitForFunction(() => !!sessionStorage.getItem('ontario_active_user_id'));
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
   assert.ok(actorId, 'fictional teacher explicitly selected');
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional Archive Acceptance');
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
   const assessment = await waitRecord(page, 'assessments', row => row.title === 'Fictional Archive Acceptance');
@@ -88,19 +89,20 @@ try {
   const first = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[0].value);
   const second = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[1].value);
   for (const [attempt, source, keep] of [[first, removedSource, false], [second, retainedSource, true]] as const) {
-    await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+    await openQueuedAttempt(page, attempt.id);
     await page.getByTestId('marking-document').waitFor();
     await selectText(page, source.length);
     await page.getByTestId('marking-feedback').fill('Fictional teacher passage feedback retained after archive.');
     await page.getByTestId('marking-comment-save').click();
     await chooseOfficialLevel(page, 'T', '3+');
     await page.getByLabel('Category T feedback').fill('Fictional archived category feedback.');
-    await page.getByLabel('Overall student-facing feedback').fill('Fictional archived overall feedback.');
+    await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill('Fictional archived overall feedback.');
     await page.getByRole('button', { name: 'Save now', exact: true }).click();
     await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
-    await page.getByTestId('marking-finalize-preview').click();
+    await showFinalOverview(page);await page.getByTestId('marking-finalize-preview').click();
     await page.getByTestId('marking-finalize-confirm').click();
     await page.getByText('Finalized revision — current official results shown below', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
     const checkbox = page.getByRole('checkbox', { name: `Keep student work for ${attempt.id}`, exact: true });
     assert.equal(await checkbox.isChecked(), false, 'retention is off by default');
     const grades = await official(page, assessment.id);
@@ -119,13 +121,17 @@ try {
       await (await exportDownload).saveAs(`${artifacts}-retained-report.html`);
       assert.ok((await records(page, 'markingAttempts')).find(row => row.id === attempt.id).documents.length, 'export does not remove source');
     }
-    await page.getByRole('region', { name: 'Marking session', exact: true }).getByRole('button', { name: 'Reopen as draft revision', exact: true }).click();
-    await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_OVERALL');
+    await openQueuedAttempt(page, attempt.id);
+    await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_OVERALL');
+    await selectFinalCategory(page, 'T');
     await page.getByLabel('Category T feedback').fill('UNPUBLISHED_ARCHIVE_CATEGORY');
     await selectText(page, 7);
     await page.getByTestId('marking-feedback').fill('UNPUBLISHED_ARCHIVE_PENDING');
     await page.getByRole('button', { name: 'Save now', exact: true }).click();
     await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
+    await leaveMarkingWithDraft(page);
+    await page.getByTestId(`open-marking-${assessment.id}`).click();
+    await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
     const draftsBeforeCancel = await records(page, 'markingSessions');
     page.once('dialog', dialog => dialog.dismiss());
     await page.getByTestId(`marking-archive-${attempt.id}`).click();
@@ -161,11 +167,12 @@ try {
   }
   await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   const draftOnly = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[3].value);
-  await page.getByTestId(`marking-session-open-${draftOnly.id}`).click();
-  await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_DRAFT_ONLY');
+  await openQueuedAttempt(page, draftOnly.id);
+  await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill('UNPUBLISHED_ARCHIVE_DRAFT_ONLY');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
   const draftOnlyOfficial = await official(page, assessment.id);
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.getByTestId(`marking-archive-${draftOnly.id}`).click();
   const draftOnlyCard = page.getByTestId(`marking-archived-${draftOnly.id}`);
@@ -177,13 +184,14 @@ try {
   // Leave a saved unfinished comment, then remove the student through the real roster UI.
   const historical = await waitRecord(page, 'markingAttempts', row => row.assessmentId === assessment.id && row.classEnrollmentId === students[2].value);
   await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
-  await page.getByTestId(`marking-session-open-${historical.id}`).click();
+  await openQueuedAttempt(page, historical.id);
   await selectText(page, 9);
   await page.getByTestId('marking-feedback').fill('Fictional unfinished former-student feedback.');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
   await leaveMarkingWithDraft(page);
   await page.getByTestId('nav-seating-btn').click();
+  await page.getByTestId('classroom-tools-toggle').click();
   const enrollment = (await records(page, 'classEnrollments')).find(row => row.id === students[2].value);
   const student = (await records(page, 'students')).find(row => row.id === enrollment.studentId);
   const card = page.getByTestId('student-seat-card').filter({ has: page.getByTestId('student-seat-name').filter({ hasText: `${student.preferredName || student.firstName} ${student.lastName}` }) });
@@ -196,7 +204,7 @@ try {
   const historyTables = ['classEnrollments', 'markingAttempts', 'markingSessions', 'markingCommits', 'categoryResults', 'studentAssessments', 'auditEntries'];
   const historySnapshot = async () => Object.fromEntries(await Promise.all(historyTables.map(async table => [table, await records(page!, table)])));
   const beforeBrowsing = await historySnapshot();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   assert.equal(await page.getByTestId(`marking-session-open-${historical.id}`).count(), 0);
   for (let repeat = 0; repeat < 2; repeat++) {
@@ -230,7 +238,7 @@ try {
   scenarios.push('Reload retains the explicit teacher session and preserves separate Archive listing');
   await page.screenshot({ path: `${artifacts}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
-  await page.getByTestId('nav-portability-btn').click();
+  await openPortability(page);
   const download = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   await (await download).saveAs(`${artifacts}-backup.json`);
   const backupText = await readFile(`${artifacts}-backup.json`, 'utf8');
@@ -250,7 +258,7 @@ try {
   restoredPage.on('pageerror', error => errors.push(error.message));
   await restoredPage.goto(origin); await installFictionalClassroom(restoredPage);
   await restoredPage.locator('[data-testid^="select-teacher-"]').first().click();
-  await restoredPage.getByTestId('nav-portability-btn').click();
+  await openPortability(restoredPage);
   await restoredPage.getByTestId('restore-file-input').setInputFiles(`${artifacts}-backup.json`);
   await restoredPage.getByTestId('restore-confirm-dialog').waitFor();
   assert.equal((await records(restoredPage, 'markingAttempts')).length, 0, 'restore preview does not write');

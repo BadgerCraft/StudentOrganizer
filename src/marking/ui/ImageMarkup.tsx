@@ -1,3 +1,4 @@
+import { useFeedbackCategoryShortcut } from './useFeedbackCategoryShortcut';
 import { DictationFeedback } from '../../dictation/DictationFeedback';
 import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
@@ -71,7 +72,7 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
     setSelected(null); setFeedbackStart(null); setBankDirty(false); onComposerDirtyChange?.(false);
     setFeedbackNotice(save ? 'Feedback saved. Ready for the next mark.' : 'Feedback cancelled. Saved feedback is unchanged.');
   }
-  const changeVisiblePage = (id: string) => { if (allowLeavingComment()) setPageId(id); };
+  const changeVisiblePage = (id: string) => { if (allowLeavingComment()) { setSelected(null); setFeedbackStart(null); setPageId(id); } };
   const [renderError, setRenderError] = useState('');
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const [previewKey, setPreviewKey] = useState('');
@@ -122,7 +123,7 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
   useEffect(() => { if (disabled) endStroke(); }, [disabled]);
 
   useEffect(() => { if (!pages.some(item => item.id === pageId)) setPageId(pages[0]?.id ?? ''); }, [pages, pageId]);
-  useEffect(() => { setSelected(null); stroke.current = null; }, [page?.id]);
+  useEffect(() => { stroke.current = null; }, [page?.id]);
   useEffect(() => {
     if (!page || !view) return;
     const activeStroke = stroke.current;
@@ -260,6 +261,11 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
     if (onReorder) onReorder(ids);
   }
 
+  useFeedbackCategoryShortcut(Boolean(selectedAnnotation) && !disabled && !readOnly, rubric, category => {
+    const criterion = rubric.criteria.find(item => item.id === selectedAnnotation?.criterionId && item.categoryCode === category) ?? rubric.criteria.find(item => item.categoryCode === category);
+    if (criterion && criterion.id !== selectedAnnotation?.criterionId) editAnnotation({ criterionId: criterion.id, level: '' });
+  });
+
   if (!page || !current) return <p className="text-sm text-gray-600">Import local page images to add visual feedback.</p>;
   return <section aria-label="Image markup" data-testid="image-markup" style={{ overflowAnchor: 'none' }} className="image-markup-layout rounded border border-gray-300 bg-gray-50 p-3">
     <div className="image-work-pane space-y-3" data-testid="marking-image-work">
@@ -321,7 +327,7 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
     </div>}
     {selectedAnnotation && <fieldset key={selectedAnnotation.id} disabled={disabled} className="space-y-2 rounded border bg-white p-3"><legend className="text-sm font-semibold">Write a comment for this mark</legend>
       <div className="block text-sm">Comment text <DictationFeedback target={`${dictationScope}:${actor?.userId}:${actor?.epoch}:${page.id}:${selectedAnnotation.id}`} aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} disabled={disabled || readOnly} value={selectedAnnotation.text} onValue={text => editAnnotation({ text })} /></div>
-      <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name} ({item.categoryCode})</option>)}</select></label>
         </div>
       {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
         const combined = `${selectedAnnotation.text}${selectedAnnotation.text ? '\n' : ''}${text}`;
@@ -337,7 +343,8 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
         <button type="button" className={buttonClass} disabled={disabled} onClick={() => { if (bankDirty && !window.confirm('Discard the unsaved comment bank import review?')) return; endStroke(); change(item => ({ ...item, annotations: item.annotations.filter(annotation => annotation.id !== selected) })); setSelected(null); setFeedbackStart(null); setBankDirty(false); onComposerDirtyChange?.(false); }}>Delete selected mark</button>
       </div>
     </fieldset>}
-    {selectedAnnotation && <div className="flex gap-2"><button type="button" className={`${buttonClass} font-semibold`} disabled={disabled} onClick={() => finishFeedback(true)}>Save feedback</button><button type="button" className={buttonClass} disabled={disabled && !readOnly} onClick={() => finishFeedback(false)}>{readOnly ? 'Close feedback' : 'Cancel feedback'}</button></div>}
+    {selectedAnnotation && <div className="flex gap-2"><button type="button" className={`${buttonClass} !bg-blue-700 !text-white font-semibold`} disabled={disabled} onClick={() => finishFeedback(true)}>Save feedback</button><button type="button" className={buttonClass} disabled={disabled && !readOnly} onClick={() => finishFeedback(false)}>{readOnly ? 'Close feedback' : 'Cancel feedback'}</button></div>}
+    <section aria-label="Saved photo evidence" className="space-y-2"><h3 className="font-semibold">Saved evidence · {feedback.reduce((count, item) => count + item.annotations.length, 0)} marks</h3>{feedback.flatMap((item, index) => [...item.annotations].filter(mark => mark.id !== selected).sort((a,b) => (a.points[0]?.y ?? 0) - (b.points[0]?.y ?? 0) || (a.points[0]?.x ?? 0) - (b.points[0]?.x ?? 0)).map(mark => <button key={mark.id} type="button" className={`${buttonClass} block w-full text-left space-y-1`} onClick={() => { if (!allowLeavingComment()) return; setPageId(item.pageId); setFeedbackStart({ text: mark.text, criterionId: mark.criterionId, level: mark.level, isNew: false }); setSelected(mark.id); setFeedbackNotice(''); }}><strong className="block">{rubric.criteria.find(criterion => criterion.id === mark.criterionId)?.categoryCode ?? 'General'} · {mark.level || 'Feedback'}</strong><span className="block text-xs">Page {index + 1} · {mark.kind}</span>{mark.text && <span className="block whitespace-pre-wrap">{mark.text}</span>}</button>))}</section>
     </div>;
     return commentContainer ? createPortal(content, commentContainer) : content;
   }

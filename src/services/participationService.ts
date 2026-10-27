@@ -9,6 +9,7 @@ import type {
 } from '../types/schema';
 import { ValidationError } from './markbookService';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
+import { captureLocalWriteActor, guardLocalWriteIdentity } from './localWriteIdentity';
 
 export class ConcurrencyError extends Error {
   constructor(message: string) {
@@ -294,17 +295,20 @@ export class ParticipationDomainService {
    * Recalculates entire daily summary projection from remaining active events,
    * guaranteeing accurate counts, total points, and lastEventAt without drift.
    */
-  async undoBatch(batchId: UUID, userId: UUID, deviceId: UUID): Promise<UndoBatchResult> {
+  async undoBatch(batchId: UUID, userId: UUID, deviceId: UUID, identityEpoch?: number): Promise<UndoBatchResult> {
+    const actor = identityEpoch === undefined ? null : captureLocalWriteActor({ userId, deviceId, identityEpoch });
     return await this.db.transaction(
       'rw',
       [
         ...AUTH_TABLES(this.db),
+        this.db.devices,
         this.db.participationEvents,
         this.db.participationDailySummaries,
         this.db.auditEntries,
         this.db.syncMutations
       ],
       async () => {
+        const assertActor = actor ? await guardLocalWriteIdentity(this.db, actor) : () => {};
         const now = new Date().toISOString();
         const txId = crypto.randomUUID();
 
@@ -384,6 +388,7 @@ export class ParticipationDomainService {
           });
         }
 
+        assertActor();
         await Promise.all([
           this.db.participationEvents.bulkPut(updatedEvents),
           this.db.auditEntries.bulkAdd(auditEntries),
@@ -455,6 +460,7 @@ export class ParticipationDomainService {
           }
         }));
 
+        assertActor();
         return { undoneCount: activeEvents.length, batchId };
       }
     );
@@ -474,22 +480,26 @@ export class ParticipationDomainService {
     expectedVersion: number,
     userId: UUID,
     deviceId: UUID,
-    reason?: string
+    reason?: string,
+    identityEpoch?: number
   ): Promise<void> {
     if (reason && reason.length > 500) {
       throw new ValidationError('Retraction reason exceeds maximum length of 500 characters.');
     }
 
+    const actor = identityEpoch === undefined ? null : captureLocalWriteActor({ userId, deviceId, identityEpoch });
     return await this.db.transaction(
       'rw',
       [
         ...AUTH_TABLES(this.db),
+        this.db.devices,
         this.db.participationEvents,
         this.db.participationDailySummaries,
         this.db.auditEntries,
         this.db.syncMutations
       ],
       async () => {
+        const assertActor = actor ? await guardLocalWriteIdentity(this.db, actor) : () => {};
         const ev = await this.db.participationEvents.get(eventId);
         if (!ev) {
           throw new ValidationError(`Participation event ${eventId} not found.`);
@@ -554,6 +564,7 @@ export class ParticipationDomainService {
           acknowledgedAt: null
         };
 
+        assertActor();
         await Promise.all([
           this.db.participationEvents.put(updatedEv),
           this.db.auditEntries.add(audit),
@@ -620,6 +631,126 @@ export class ParticipationDomainService {
             });
           }
         }
+        assertActor();
+      }
+    );
+  }
+
+  /** Restores exactly one freshly retracted event for correction Undo. The stored
+   * observation is retained; button settings and batch membership are not replayed.
+   * A stale version or changed actor leaves the record and projections untouched.
+   */
+  async restoreRetractedEvent(
+    eventId: UUID,
+    expectedVersion: number,
+    userId: UUID,
+    deviceId: UUID,
+    identityEpoch?: number
+  ): Promise<ParticipationEvent> {
+    const actor = captureLocalWriteActor({ userId, deviceId, identityEpoch });
+
+    return await this.db.transaction(
+      'rw',
+      [
+        ...AUTH_TABLES(this.db),
+        this.db.devices,
+        this.db.participationEvents,
+        this.db.participationDailySummaries,
+        this.db.auditEntries,
+        this.db.syncMutations
+      ],
+      async () => {
+        const assertActor = await guardLocalWriteIdentity(this.db, actor);
+        const ev = await this.db.participationEvents.get(eventId);
+        if (!ev) {
+          throw new ValidationError(`Participation event ${eventId} not found.`);
+        }
+        if (ev.deletedAt === null) {
+          throw new ValidationError('Participation event is already active.');
+        }
+        if (ev.version !== expectedVersion) {
+          throw new ConcurrencyError(
+            `Stale event version for ${eventId}. Expected ${expectedVersion}, found ${ev.version}.`
+          );
+        }
+
+        const auth = await assertClassSectionWriteAccess(this.db, userId, ev.classSectionId);
+        const derivedOrgId = auth.organizationId;
+
+        const actualNow = new Date().toISOString();
+        const txId = crypto.randomUUID();
+
+        const updatedEv: ParticipationEvent = {
+          ...ev,
+          deletedAt: null,
+          updatedAt: actualNow,
+          version: ev.version + 1
+        };
+
+        const audit: any = {
+          id: crypto.randomUUID(),
+          entityName: 'participationEvents',
+          entityId: ev.id,
+          action: 'UPDATE',
+          transactionId: txId,
+          previousStateJson: JSON.stringify(ev),
+          newStateJson: JSON.stringify(updatedEv),
+          diffJson: JSON.stringify({
+            deletedAt: { old: ev.deletedAt, new: null },
+            reason: 'Undo participation correction'
+          }),
+          userId,
+          timestamp: actualNow,
+          clientVersion: '1.0.0'
+        };
+
+        const sync: SyncMutation = {
+          id: crypto.randomUUID(),
+          deviceId,
+          organizationId: derivedOrgId,
+          mutationId: crypto.randomUUID(),
+          transactionId: txId,
+          sequenceNumber: 1,
+          transactionSize: 1,
+          entityName: 'participationEvents',
+          entityId: ev.id,
+          operation: 'UPDATE',
+          payloadJson: JSON.stringify(updatedEv),
+          baseVersion: ev.version,
+          status: 'pending',
+          createdAt: actualNow,
+          attemptCount: 0,
+          lastAttemptAt: null,
+          lastError: null,
+          acknowledgedAt: null
+        };
+
+        assertActor();
+        await Promise.all([
+          this.db.participationEvents.put(updatedEv),
+          this.db.auditEntries.add(audit),
+          this.db.syncMutations.add(sync)
+        ]);
+
+        const [events, summary] = await Promise.all([
+          this.db.participationEvents.where('[classEnrollmentId+localSchoolDate]')
+            .equals([ev.classEnrollmentId, ev.localSchoolDate]).filter(event => event.deletedAt === null).toArray(),
+          this.db.participationDailySummaries.where('[classEnrollmentId+localSchoolDate]')
+            .equals([ev.classEnrollmentId, ev.localSchoolDate]).first()
+        ]);
+        // Rebuild from all active snapshots, including this exact restored event.
+        await this.db.participationDailySummaries.put({
+          id: summary?.id ?? crypto.randomUUID(),
+          classEnrollmentId: ev.classEnrollmentId,
+          localSchoolDate: ev.localSchoolDate,
+          positiveCount: events.filter(event => event.snapshottedClassification === 'positive').length,
+          needsFollowupCount: events.filter(event => event.snapshottedClassification === 'needs_followup').length,
+          neutralCount: events.filter(event => event.snapshottedClassification === 'neutral').length,
+          totalPoints: events.reduce((total, event) => total + event.snapshottedPoints, 0),
+          lastEventAt: events.reduce<string | null>((latest, event) => !latest || event.occurredAt > latest ? event.occurredAt : latest, null)
+        });
+        assertActor();
+        return updatedEv;
       }
     );
   }

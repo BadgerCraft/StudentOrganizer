@@ -1,0 +1,34 @@
+{
+  "decodeRejection": {
+    "isolated": true,
+    "recoveredWithExplicitRetry": true
+  },
+  "quotaRejection": {
+    "draftRetained": true,
+    "retrySucceeded": true
+  },
+  "contextReadFailure": {
+    "reasonVisible": true,
+    "retrySucceeded": true,
+    "editorAndDraftRetained": true
+  },
+  "stagedCrop": {
+    "tabsAndBackBlocked": true
+  },
+  "malformedActiveAttempt": {
+    "editorRetained": true,
+    "changesBlocked": true,
+    "recoveredWithoutRemount": true
+  },
+  "deniedContext": {
+    "hiddenDuringRetry": true,
+    "obsoleteSuccessIgnored": true,
+    "draftRecoveredAfterAuthorizedRead": true
+  },
+  "malformedHistory": {
+    "rootRetained": true,
+    "localFailureVisible": true,
+    "productionWriterWouldReject": true,
+    "recoveredWithoutReload": true
+  }
+}

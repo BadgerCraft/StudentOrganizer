@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
+import { preview } from 'vite';
+import { chromium } from 'playwright';
+import { installFictionalClassroom } from './helpers/classroomFixture';
+const origin='http://127.0.0.1:4287';
+const server=await preview({preview:{host:'127.0.0.1',port:4287,strictPort:true}});
+const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:{})});
+const context=await browser.newContext({viewport:{width:1440,height:1000}}),external:string[]=[],errors:string[]=[];
+await context.route('**/*',route=>{if(new URL(route.request().url()).origin!==origin){external.push(route.request().url());return route.abort();}return route.continue();});
+const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(20000);
+try{
+ await page.goto(origin);await installFictionalClassroom(page);await page.locator('[data-testid^="select-teacher-"]').first().click();
+ await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Backups & import / export',exact:true}).click();
+ const section=page.getByRole('region',{name:'Backup and personal sync'});await section.getByRole('heading',{name:'Backups & personal sync'}).waitFor();
+ assert.match(await section.innerText(),/Personal sync is unavailable/);
+ assert.equal(await section.getByRole('button',{name:'Connect personal Drive'}).count(),0);
+ await section.getByRole('button',{name:'Save a backup now'}).click();await section.getByText('Dated backup saved on this computer.',{exact:true}).waitFor();
+ const target=await page.evaluate(async()=>new Promise<{id:string;firstName:string}>((resolve,reject)=>{const request=indexedDB.open('OntarioTeacherAssessmentDB');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const database=request.result,tx=database.transaction('students','readwrite'),store=tx.objectStore('students'),get=store.getAll();let first:{id:string;firstName:string};get.onsuccess=()=>{first=get.result[0];store.put({...first,firstName:'Fictional Later Edit'});};tx.oncomplete=()=>{database.close();resolve(first);};tx.onerror=()=>reject(tx.error);};}));
+ await section.getByRole('button',{name:'Review restore',exact:true}).first().click();
+ const confirm=section.getByRole('alertdialog',{name:'Confirm dated backup restore'});await confirm.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await confirm.count(),0);
+ await section.getByRole('button',{name:'Review restore',exact:true}).first().click();await confirm.getByRole('button',{name:'Confirm restore',exact:true}).click();
+ await section.getByText('Backup restored. Reopen your class. Review Drive versions before the next sync.',{exact:true}).waitFor();
+ const restored=await page.evaluate(async id=>new Promise<string>((resolve,reject)=>{const request=indexedDB.open('OntarioTeacherAssessmentDB');request.onsuccess=()=>{const db=request.result,read=db.transaction('students').objectStore('students').get(id);read.onsuccess=()=>{resolve(read.result.firstName);db.close();};read.onerror=()=>reject(read.error);};}),target.id);assert.equal(restored,target.firstName);
+ assert.match(await section.innerText(),/before-restore/);
+ await section.getByLabel('Backup interval').selectOption('6');await section.getByLabel('Automatic backup versions').selectOption('14');await page.reload();await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Backups & import / export',exact:true}).click();
+ assert.equal(await section.getByLabel('Backup interval').inputValue(),'6');assert.equal(await section.getByLabel('Automatic backup versions').inputValue(),'14');
+ const remoteJSON=await page.evaluate(async()=>new Promise<string>((resolve,reject)=>{const request=indexedDB.open('OntarioTeacherAssessmentDB');request.onsuccess=()=>{const db=request.result,names=Array.from(db.objectStoreNames),tx=db.transaction(names),tables:Record<string,any[]>={};for(const name of names){const read=tx.objectStore(name).getAll();read.onsuccess=()=>{tables[name]=read.result;};}tx.oncomplete=()=>{tables.students[0].firstName='Fictional Drive Name';db.close();resolve(JSON.stringify({version:2,schemaVersion:5,exportedAt:new Date().toISOString(),tables}));};tx.onerror=()=>reject(tx.error);};}));
+ await page.addInitScript({content:`{
+  let connected=false,body=${JSON.stringify(remoteJSON)};let versions=[{id:'fictional-remote',name:'Fictional remote version',modifiedTime:'2026-10-27T00:00:00Z'}];
+  window.desktopOrganizerDrive={status:async()=>({ok:true,value:{configured:true,connected}}),connect:async()=>{connected=true;return{ok:true,value:{configured:true,connected}};},list:async()=>({ok:true,value:versions}),download:async()=>({ok:true,value:{json:body}}),upload:async(text)=>{body=text;versions=[{id:'fictional-merged',name:'Fictional merged version',modifiedTime:new Date().toISOString()}];return{ok:true,value:{id:'fictional-merged'}};},disconnect:async()=>{connected=false;return{ok:true,value:{configured:true,connected}};}};
+ }`});
+ await page.reload();await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Backups & import / export',exact:true}).click();await section.getByRole('checkbox',{name:'I choose to send this workspace to my personal Drive for this session.'}).check();await section.getByRole('button',{name:'Connect personal Drive',exact:true}).click();
+ await section.getByRole('button',{name:'Review merge',exact:true}).click();
+ await section.getByText(/Student details ·/).waitFor();
+ await section.getByRole('radio',{name:'Keep Drive version',exact:true}).check();
+ mkdirSync('screenshots/personal-sync-chromium',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'screenshots/personal-sync-chromium/conflict-review.png',fullPage:true});
+ await section.getByRole('button',{name:'Apply reviewed merge & save version',exact:true}).click();await section.getByText('Merged locally and saved a verified new Drive version.',{exact:true}).waitFor();
+ const merged=await page.evaluate(async id=>new Promise<string>(resolve=>{const request=indexedDB.open('OntarioTeacherAssessmentDB');request.onsuccess=()=>{const db=request.result,read=db.transaction('students').objectStore('students').get(id);read.onsuccess=()=>{resolve(read.result.firstName);db.close();};};}),target.id);assert.equal(merged,'Fictional Drive Name');
+ mkdirSync('screenshots/personal-sync-chromium',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'screenshots/personal-sync-chromium/recovery-settings.png',fullPage:true});
+ assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS personal recovery: automatic/manual dated snapshots, confirmed restore/cancel, preserved safety version, settings persistence, unavailable Drive gate and mocked explicit Drive conflict resolution; no external requests.');
+}finally{await context.close();await browser.close();await server.httpServer?.close();}

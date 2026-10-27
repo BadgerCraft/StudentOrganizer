@@ -39,7 +39,9 @@ try {
     return { layoutId: layout.id, seats, people };
   });
   await page.locator('[data-testid^="select-teacher-"]').first().click();
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByTestId('classroom-tools-toggle').click();
   await page.getByRole('button', { name: 'Group', exact: true }).click();
   for (const person of fixture.people) {
     const card = page.locator(`[data-enrollment-id="${person.enrollmentId}"]`);

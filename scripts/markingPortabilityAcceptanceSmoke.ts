@@ -1,6 +1,6 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
 import { leaveMarkingWithDraft } from '../src/benchmarks/markingDesktopAcceptance';
-import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory, importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
@@ -48,6 +48,7 @@ async function official(page: Page, assessmentId: string) {
   };
 }
 async function selectPassage(page: Page, start: number, end: number) {
+  await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
   await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Save now' && button.matches(':enabled')));
   await page.getByTestId('marking-document').evaluate((root, { start, end }) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -67,9 +68,9 @@ async function selectPassage(page: Page, start: number, end: number) {
 async function setup(context: BrowserContext) {
   const page = await context.newPage(); await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional portability acceptance');
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
   let assessment: any;
@@ -89,7 +90,7 @@ async function setup(context: BrowserContext) {
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
   const [selectedStudent] = await importDocumentsForStudents(page, [{ name: 'Fictional-portable.txt', mimeType: 'text/plain', buffer: Buffer.from(originalText) }]);
   const enrollmentId = selectedStudent.value;
-  await page.locator('[data-testid^="marking-session-open-"]').first().waitFor();
+  await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
   const attempt = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id);
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
   assert.ok(actorId);
@@ -105,7 +106,7 @@ async function setup(context: BrowserContext) {
       await db.students.put({ ...student, firstName: 'Fictional <img src="https://fictional.invalid/name">', lastName: 'Learner & Example', preferredName: null, updatedAt: new Date().toISOString(), version: student.version + 1 });
     });
   }, { actorId, assessmentId: assessment.id, enrollmentId });
-  await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+  await openQueuedAttempt(page, attempt.id);
   await page.getByTestId('marking-document').waitFor();
   return { page, otherPage, assessment, attempt, enrollmentId, actorId };
 }
@@ -130,7 +131,7 @@ try {
   await page.getByTestId('marking-comment-save').click();
   await chooseOfficialLevel(page, 'T', '3+');
   await page.getByLabel('Category T feedback').fill('Fictional category feedback <em>literal</em>.');
-  await page.getByLabel('Overall student-facing feedback').fill(summary);
+  await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill(summary);
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await otherPage.evaluate(async ({ actorId, assessmentId, enrollmentId }) => {
     const dbPath = '/src/db/database.ts', identityPath = '/src/services/identityService.ts', servicePath = '/src/services/markbookService.ts';
@@ -141,7 +142,7 @@ try {
     await new MarkbookDomainService(db).saveMarkbookCell({ assessmentId, classSectionId: assessment.classSectionId, classEnrollmentId: enrollmentId, assessmentCategoryId: category.id, rawScore: '2+', inputFormat: 'scale_code', feedback: 'Newer authorized fictional manual mark', expectedStudentAssessmentVersion: studentAssessment.version, userId: actor.userId, deviceId: actor.deviceId });
   }, { actorId, assessmentId: assessment.id, enrollmentId });
   const manual = await official(page, assessment.id); assert.equal(manual.results.length, 1); assert.equal(manual.results[0].rawScore, '2+');
-  await page.getByTestId('marking-finalize-preview').click(); await page.getByTestId('marking-finalize-confirm').click();
+  await showFinalOverview(page);await page.getByTestId('marking-finalize-preview').click(); await page.getByTestId('marking-finalize-confirm').click();
   await page.getByRole('alert').filter({ hasText: /changed.*review|review.*changed|newer/i }).waitFor();
   assert.deepEqual(await official(page, assessment.id), manual, 'stale finalization must preserve newer manual marks');
   await page.getByRole('button', { name: 'Resolve newer manual mark conflict', exact: true }).click();
@@ -150,7 +151,7 @@ try {
   await page.getByRole('button', { name: 'Accept reviewed official baseline', exact: true }).click();
   await page.getByRole('region', { name: 'Review official mark conflict' }).waitFor({ state: 'hidden' });
   assert.deepEqual(await official(page, assessment.id), manual, 'accepting baseline alone must not write a mark');
-  await page.getByTestId('marking-finalize-preview').click();
+  await showFinalOverview(page);await page.getByTestId('marking-finalize-preview').click();
   // Inject failure after a successful commit, at the UI's readback boundary.
   await page.evaluate(async () => {
     const path = '/src/marking/markingService.ts', { MarkingService } = await import(path);
@@ -177,6 +178,7 @@ try {
   assert.equal((await records(page, 'auditEntries')).length, auditCount, 'retry must not duplicate audit writes');
   passed('actual UI stale manual mark conflict, explicit baseline acceptance, confirmed finalization, post-commit readback failure and idempotent UI retry.');
 
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   const reportDownload = page.waitForEvent('download');
   await page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click();
   const downloadedReport = await reportDownload; await downloadedReport.saveAs(`${artifacts}-report.html`);
@@ -199,8 +201,9 @@ try {
   await reportContext.close();
   passed('downloaded inert HTML bytes served alone over loopback (file URLs blocked by cloud browser policy), escaped fictional student/feedback/annotation, print-media styles and headless Chromium PDF output. Native print dialog/printer are not tested.');
 
-  await page.getByTestId(`marking-session-open-${attempt.id}`).click();
-  await page.getByLabel('Overall student-facing feedback').fill('Fictional revision draft retained after full restore');
+  await openQueuedAttempt(page, attempt.id);
+  await enterFinalGrading(page);
+  await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill('Fictional revision draft retained after full restore');
   await selectPassage(page, 35, 49); await page.getByTestId('marking-feedback').fill('Fictional unfinished annotation recovered from backup');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   assert.deepEqual(await official(page, assessment.id), committed);
@@ -211,7 +214,7 @@ try {
   };
   assert.equal(before.sessions.length, 2);
   await leaveMarkingWithDraft(page);
-  await page.getByTestId('nav-portability-btn').click();
+  await openPortability(page);
   const backupDownload = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   const downloadedBackup = await backupDownload; await downloadedBackup.saveAs(`${artifacts}-backup.json`);
   const backup = JSON.parse(await readFile(`${artifacts}-backup.json`, 'utf8'));
@@ -222,7 +225,7 @@ try {
   const restoredPage = await restoredContext.newPage(); await restoredPage.goto(origin); await installFictionalClassroom(restoredPage);
   await restoredPage.locator('[data-testid^="select-teacher-"]').first().click();
   assert.equal((await records(restoredPage, 'markingAttempts')).length, 0, 'restore profile must start without marking data');
-  await restoredPage.getByTestId('nav-portability-btn').click();
+  await openPortability(restoredPage);
   await restoredPage.getByTestId('restore-file-input').setInputFiles(`${artifacts}-backup.json`);
   await restoredPage.getByTestId('restore-confirm-dialog').waitFor();
   assert.equal((await records(restoredPage, 'markingAttempts')).length, 0, 'file preview must not mutate database');
@@ -238,12 +241,16 @@ try {
   // Reload preserves the Import/Export view, so return to the dashboard explicitly.
   await restoredPage.getByTestId('nav-dashboard-btn').click();
   await restoredPage.getByTestId('chiclet-open-overlay-btn').first().click();
-  await restoredPage.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await restoredPage.getByRole('button', { name: 'Markbook', exact: true }).click();
   await restoredPage.getByTestId(`open-marking-${assessment.id}`).click();
-  await restoredPage.getByTestId(`marking-session-open-${attempt.id}`).click();
+  await openQueuedAttempt(restoredPage, attempt.id);
   assert.equal(await restoredPage.getByTestId('marking-document').innerText(), originalText);
-  assert.equal(await restoredPage.getByLabel('Overall student-facing feedback').inputValue(), 'Fictional revision draft retained after full restore');
+  assert.equal((await records(restoredPage, 'markingSessions')).find(row => row.attemptId === attempt.id && row.status === 'draft').draft.overallFeedback, 'Fictional revision draft retained after full restore', 'final-stage feedback survives while unfinished annotation stays open');
   assert.equal(await restoredPage.getByTestId('marking-feedback').inputValue(), 'Fictional unfinished annotation recovered from backup');
+  restoredPage.once('dialog', async dialog => { assert.equal(dialog.message(), 'Keep unfinished feedback saved as a draft and leave marking?'); await dialog.accept(); });
+  await restoredPage.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
+  await restoredPage.getByTestId(`open-marking-${assessment.id}`).click();
+  await restoredPage.getByRole('button', { name: 'Marking queue', exact: true }).click();
   const restoredReportDownload = restoredPage.waitForEvent('download');
   await restoredPage.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click();
   const restoredReport = await restoredReportDownload; const restoredReportPath = await restoredReport.path();

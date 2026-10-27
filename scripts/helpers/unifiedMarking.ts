@@ -4,7 +4,7 @@ import type { Page } from 'playwright';
 export async function openUnifiedMarking(page: Page, options: { phone?: boolean; rubricId?: string } = {}) {
   const back = page.getByRole('button', { name: 'Back to Organizer', exact: true });
   if (await back.isVisible()) await back.click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
   const entry = page.locator('[data-testid^="open-marking-"]').first();
   const assessmentId = (await entry.getAttribute('data-testid'))!.slice('open-marking-'.length);
   const rubricId = options.rubricId ?? await page.evaluate(async assessmentId => {
@@ -15,7 +15,8 @@ export async function openUnifiedMarking(page: Page, options: { phone?: boolean;
     const device = await db.devices.where('userId').equals(userId).first();
     return (await new (await import(m)).MarkingService(db).saveRubric(assessmentId, { title: 'Fictional unified capture rubric', levels: ['Clear'], criteria: [{ id: 'fictional-evidence', name: 'Evidence', categoryCode: 'K', descriptors: { Clear: 'Clear fictional evidence' } }] }, { userId, deviceId: device.id, epoch: identity.getIdentityEpoch() })).id;
   }, assessmentId);
-  await entry.click(); await page.getByTestId('marking-mode-written').click();
+  await entry.click();
+  await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
   await page.getByLabel('Choose confirmed rubric', { exact: true }).selectOption(rubricId);
   await page.getByRole('button', { name: 'Continue with confirmed rubric', exact: true }).click();
   if (options.phone !== false) {

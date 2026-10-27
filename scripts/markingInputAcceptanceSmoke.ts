@@ -1,3 +1,4 @@
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium, type Locator, type Page } from 'playwright';
@@ -85,7 +86,9 @@ async function matchSeveralStudents(page: Page, pairs: { filename: string; label
 async function confirmImport(page: Page, retry = false) {
   await wizard(page).getByRole('button', { name: retry ? 'Retry and start marking' : 'Confirm and start marking', exact: true }).click();
 }
-const server = await createServer({ server: { host: '127.0.0.1', port: 4195, strictPort: true, watch: null, hmr: false } });
+const server = await createServer({ server: { host: '127.0.0.1', port: 4195, strictPort: true, watch: null, hmr: false }, plugins: [{ name: 'independent-comment-composer', configureServer(server) {
+  server.middlewares.use('/__comment-composer', (_request, response) => { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><link rel="icon" href="data:,"></head><body><div id="composer-root"></div></body></html>'); });
+} }] });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium', headless: true });
 try {
@@ -100,9 +103,9 @@ try {
   await page.goto(origin);
   await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional input acceptance');
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
   let assessment: any;
@@ -123,7 +126,7 @@ try {
   await page.getByLabel('Rubric title', { exact: true }).fill('Fictional manual descriptor matrix');
   await page.getByLabel('Criterion 1 name', { exact: true }).fill('Evidence');
   await page.getByLabel('Criterion 1 KTCA mapping').selectOption('T');
-  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+  await page.getByRole('button', { name: 'Assignment setup', exact: true }).click();
   await page.getByRole('button', { name: 'Rubric editor', exact: true }).click();
   assert.equal(await page.getByLabel('Rubric title', { exact: true }).inputValue(), 'Fictional manual descriptor matrix');
   assert.equal(await page.getByLabel('Criterion 1 name', { exact: true }).inputValue(), 'Evidence');
@@ -172,7 +175,7 @@ try {
   console.log('PASS: manually entered complete 2×4 rubric matrix; duplicate achievement label and malformed pasted rubric rejected without descriptor loss; corrected custom labels persist.');
 
   // The unified entry requires a confirmed rubric before mounting student-work intake.
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await wizard(page).getByRole('radio', { name: 'Upload a text/document file', exact: true }).check();
   await wizard(page).getByRole('button', { name: 'Continue', exact: true }).click();
   await wizard(page).getByLabel('Choose text/document files', { exact: true }).setInputFiles({ name: 'Fictional failed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Unsupported fictional input') });
@@ -189,7 +192,7 @@ try {
   await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   console.log('PASS: failed-only import survives source change and canceled departure; leaving requires explicit discard.');
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
 
   const firstFile = txt('Fictional essay.txt', 'Essay passage. Fictional reasoning follows.');
   const secondFile = txt('Fictional notes.txt', 'Notes passage. Fictional planning follows.');
@@ -210,7 +213,7 @@ try {
   for (const [index, document] of grouped.documents.entries()) {
     assert.equal(document.original?.base64, [firstFile, secondFile][index].buffer.toString('base64'), 'original attachment bytes retained exactly');
   }
-  await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+  await openQueuedAttempt(page, grouped.id);
   await page.getByTestId('marking-document').waitFor();
   const documentSelect = page.getByRole('combobox', { name: /^Document/ });
   const expectedPassageFeedback = ['Fictional attachment feedback 1', 'Fictional attachment feedback 2'];
@@ -231,7 +234,7 @@ try {
       await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
       assert.deepEqual((await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending,pendingBefore,'confirmed Back preserves exact pending draft');
       await page.getByTestId(`open-marking-${assessment.id}`).click();
-      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      await openQueuedAttempt(page, grouped.id);
       await page.getByTestId('marking-feedback').waitFor();
       // Force a real draft flush failure, then retry the same departure without changing feedback.
       await page.evaluate(async () => {
@@ -252,10 +255,10 @@ try {
       await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
       assert.deepEqual((await records(page,'markingSessions')).find(row=>row.attemptId===grouped.id).draft.pending,{...pendingBefore,text:pendingBefore.text+' retry'},'retry saves pending without committing annotation');
       await page.getByTestId(`open-marking-${assessment.id}`).click();
-      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      await openQueuedAttempt(page, grouped.id);
       await page.getByTestId('marking-feedback').fill(pendingBefore.text);
       await documentSelect.selectOption(grouped.documents[1].id);
-      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+      await openQueuedAttempt(page, grouped.id);
       assert.equal(await documentSelect.inputValue(),document.id,'unfinished text prevents document switch');
       assert.equal(await page.getByTestId('marking-feedback').inputValue(),expectedPassageFeedback[index],'Back and submission changes retain unfinished text');
       await selectPassage(page,14,20);
@@ -283,8 +286,37 @@ try {
       await textBank.getByRole('button', { name: 'Review pasted comments', exact: true }).click();
       assert.equal(await textBank.getByLabel('Bank comment 1', { exact: true }).inputValue(), 'Revised bank draft.');
       await textBank.getByRole('button', { name: 'Add reviewed comments to bank', exact: true }).click();
-      const criterion = page.getByTestId(`marking-criterion-${rubric.criteria[0].id}`);
-      await criterion.locator('summary').filter({ hasText: /^Previous criterion evidence/ }).click();
+      // Concurrent bank editors are now separate focused surfaces. Mount the
+      // actual criterion component independently in a second same-origin window;
+      // this exercises the stale-bank race without writing the active session.
+      const rubricPage = await context.newPage();
+      await rubricPage.goto(`${origin}/__comment-composer`);
+      const actor = await page.evaluate(async () => {
+        const path = '/src/services/identityService.ts'; const dbPath = '/src/db/database.ts';
+        const { getAppIdentity, getIdentityEpoch } = await import(path); const { db } = await import(dbPath);
+        const identity = await getAppIdentity(db); return { userId: identity.userId, deviceId: identity.deviceId, epoch: getIdentityEpoch() };
+      });
+      const annotations = (await records(page, 'markingSessions')).find(row => row.attemptId === grouped.id).draft.annotations;
+      await rubricPage.evaluate(data => { (window as any).fictionalComposer = data; }, { rubric, annotations, actor });
+      await rubricPage.evaluate(`(async () => {
+        const React = (await import('/node_modules/.vite/deps/react.js')).default;
+        const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+        const { RubricEvidenceEditor } = await import('/src/marking/ui/ModeEvidence.tsx');
+        const { rubric, annotations, actor } = window.fictionalComposer;
+        const { selectActingTeacher, getIdentityEpoch } = await import('/src/services/identityService.ts');
+        const { db } = await import('/src/db/database.ts');
+        await selectActingTeacher(db, actor.userId); actor.epoch = getIdentityEpoch();
+        const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/src/index.css'; document.head.append(style);
+        function Fixture() {
+          const [value, setValue] = React.useState([]);
+          return React.createElement(RubricEvidenceEditor, { rubric, annotations, actor, value, onChange: setValue, disabled: false, categoryCode: 'T' });
+        }
+        createRoot(document.getElementById('composer-root')).render(React.createElement(Fixture));
+      })()`);
+
+      const criterion = rubricPage.getByTestId(`marking-criterion-${rubric.criteria[0].id}`);
+      const evidenceDetails = criterion.locator('details').filter({ has: rubricPage.locator('summary').filter({ hasText: /^Criterion evidence/ }) });
+      if (await evidenceDetails.getAttribute('open') === null) await evidenceDetails.locator('summary').first().click();
       await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
       const rubricBank = criterion.locator('section[aria-label="Comment bank"]');
       // The rubric picker is already mounted with the original bank snapshot.
@@ -302,11 +334,11 @@ try {
       await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // close the stale open chooser
       await textBank.getByRole('button', { name: /^Choose bank comment/ }).click(); // reopening reloads the saved bank
       await textBank.getByRole('button', { name: 'Added by rubric composer.', exact: true }).waitFor();
-      await criterion.locator('summary').filter({ hasText: /^Previous criterion evidence/ }).click();
+      if (await evidenceDetails.getAttribute('open') === null) await evidenceDetails.locator('summary').first().click();
       await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
       const delayedBank = criterion.locator('section[aria-label="Comment bank"]');
       await delayedBank.getByRole('button', { name: 'Import comment bank', exact: true }).click();
-      await page.evaluate(() => {
+      await rubricPage.evaluate(() => {
         const original = File.prototype.arrayBuffer;
         (window as any).restoreBankRead = () => { File.prototype.arrayBuffer = original; };
         File.prototype.arrayBuffer = function () {
@@ -320,20 +352,22 @@ try {
       await delayedBank.getByLabel('Choose comment-bank file', { exact: true }).setInputFiles(txt('Fictional delayed bank.txt', 'Discard this delayed bank import.'));
       await delayedBank.getByRole('status').filter({ hasText: 'Reading comment bank' }).waitFor();
       let discardPrompt = '';
-      page.once('dialog', async dialog => { discardPrompt = dialog.message(); await dialog.accept(); });
+      rubricPage.once('dialog', async dialog => { discardPrompt = dialog.message(); await dialog.accept(); });
       await criterion.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
       assert.match(discardPrompt, /Discard the unsaved comment bank import/, 'closing an in-flight import requires deliberate discard');
-      await page.evaluate(async () => { await (window as any).releaseBankRead(); (window as any).restoreBankRead(); delete (window as any).releaseBankRead; delete (window as any).restoreBankRead; });
-      await page.waitForTimeout(500); // allow the released local read/hash promises to settle after unmount
+      await rubricPage.evaluate(async () => { await (window as any).releaseBankRead(); (window as any).restoreBankRead(); delete (window as any).releaseBankRead; delete (window as any).restoreBankRead; });
+      await rubricPage.waitForTimeout(500); // allow the released local read/hash promises to settle after unmount
       const unexpectedDialogs: string[] = [];
       const unexpectedDialog = async (dialog: import('playwright').Dialog) => { unexpectedDialogs.push(dialog.message()); await dialog.dismiss(); };
-      page.on('dialog', unexpectedDialog);
-      await page.getByTestId(`marking-session-open-${grouped.id}`).click();
-      page.off('dialog', unexpectedDialog);
+      rubricPage.on('dialog', unexpectedDialog);
+      await criterion.getByRole('button', { name: 'Write a comment', exact: true }).click();
+      await criterion.getByRole('button', { name: 'Done — review criteria', exact: true }).click();
+      rubricPage.off('dialog', unexpectedDialog);
       assert.deepEqual(unexpectedDialogs, [], 'discarded asynchronous import must not restore a phantom unsaved-bank guard');
       assert.equal(await page.getByRole('status').filter({ hasText: 'Reading comment bank' }).count(), 0);
-      const savedBanks = await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('ota.comment-bank.v1.')).map(key => JSON.parse(localStorage.getItem(key)!)));
+      const savedBanks = await rubricPage.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('ota.comment-bank.v1.')).map(key => JSON.parse(localStorage.getItem(key)!)));
       assert.equal(savedBanks.some(comments => comments.includes('Discard this delayed bank import.')), false, 'discarded import does not write the bank');
+      await rubricPage.close();
       const bankAddition = 'Added by rubric composer.';
       if (!await textBank.getByRole('button', { name: bankAddition, exact: true }).isVisible()) {
         await textBank.getByRole('button', { name: /^Choose bank comment/ }).click();
@@ -364,7 +398,8 @@ try {
     await page.getByRole('combobox', { name: /^Evidence level \(optional\)/ }).selectOption(levels[index + 1]);
     await page.getByTestId('marking-comment-save').click();
   }
-  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Original grouped attempt stays available.');
+  await enterFinalGrading(page);
+  await showFinalOverview(page);await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Original grouped attempt stays available.');
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   await page.getByTestId('marking-save-status').filter({ hasText: 'Saved locally' }).waitFor();
   const originalSession = (await records(page, 'markingSessions')).find(row => row.attemptId === grouped.id);
@@ -373,7 +408,7 @@ try {
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.level), [levels[1], levels[2]]);
   assert.deepEqual(originalSession.draft.annotations.map((row: any) => row.text), expectedPassageFeedback, 'saved passage annotations retain both teacher-written and chosen bank feedback');
 
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await addDocumentFiles(page, txt('Fictional revised essay.txt', 'Revised fictional argument, with new reasoning.'));
   await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
   const relationship = wizard(page).getByRole('combobox', { name: /^Submission relationship/ });
@@ -385,25 +420,27 @@ try {
   const resubmission = attemptsAfterResubmission.find(row => row.id !== grouped.id)!;
   assert.equal(resubmission.previousAttemptId, grouped.id); assert.equal(resubmission.classEnrollmentId, grouped.classEnrollmentId);
   assert.deepEqual(attemptsAfterResubmission.find(row => row.id === grouped.id), grouped, 'resubmission must not mutate its predecessor');
-  await page.getByTestId(`marking-session-open-${resubmission.id}`).click();
+  await openQueuedAttempt(page, resubmission.id);
   await page.getByTestId('marking-document').filter({ hasText: resubmission.documents[0].text }).waitFor();
   assert.equal(await page.getByTestId('marking-document').innerText(), resubmission.documents[0].text);
-  assert.equal(await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), '');
-  await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+  await enterFinalGrading(page);
+  await showFinalOverview(page);assert.equal(await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), '');
+  await openQueuedAttempt(page, grouped.id);
   await page.getByTestId('marking-document').filter({ hasText: grouped.documents[0].text }).waitFor();
-  assert.equal(await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), originalSession.draft.overallFeedback);
+  await enterFinalGrading(page);
+  await showFinalOverview(page);assert.equal(await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), originalSession.draft.overallFeedback);
   await page.reload();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByTestId(`marking-session-open-${grouped.id}`).click();
+  await openQueuedAttempt(page, grouped.id);
   await page.getByTestId('marking-document').filter({ hasText: grouped.documents[0].text }).waitFor();
   assert.deepEqual((await records(page, 'markingSessions')).find(row => row.attemptId === grouped.id), originalSession);
-  assert.equal(await page.getByTestId(`marking-session-open-${resubmission.id}`).count(), 1);
+  assert.equal(await page.getByLabel('Current submission', { exact: true }).locator(`option[value="${resubmission.id}"]`).count(), 1);
   await page.screenshot({ path: '/tmp/markinator-input-grouped-resubmission.png', fullPage: true });
   console.log('PASS: grouped TXT attachments retain originals and isolated comments; explicit same-student resubmission creates linked attempt; predecessor feedback and both queue entries survive reload.');
 
   // File-read failure is a browser-file boundary injection. It creates no records
   // and retains the real parser for the good, malformed and unsupported files.
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await page.evaluate(() => {
     const original = File.prototype.arrayBuffer;
     (window as any).restoreMarkingFileRead = () => { File.prototype.arrayBuffer = original; };
@@ -479,7 +516,7 @@ try {
   // Fail the second import's audit write inside its real transaction, after its
   // attempt write. It must roll back while the first import remains committed;
   // retry must create the failed attempt and audit exactly once.
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await addDocumentFiles(page, [
     txt('Fictional retry-first.txt', 'First successful fictional batch item.'),
     txt('Fictional retry-second.txt', 'Second fictional batch item fails once.')
@@ -522,7 +559,7 @@ try {
     assert.equal(importAudits(retriedAudits, filename).length, 1);
   }
   assert.deepEqual(retried.find(row => row.id === grouped.id), grouped);
-  await page.getByRole('button', { name: 'Add student work', exact: true }).click();
+  await page.getByRole('button', { name: /^(Add student work|Add later submissions)$/, exact: true }).click();
   await addDocumentFiles(page, txt('Fictional retry-first.txt', 'First successful fictional batch item.'));
   await selectOneStudent(page, studentLabels[enrollmentIds[0]]);
   await confirmImport(page);

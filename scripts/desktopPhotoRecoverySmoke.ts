@@ -4,6 +4,7 @@ import {createServer} from 'vite';
 import {chromium} from 'playwright';
 import {installFictionalClassroom} from './helpers/classroomFixture';
 import {openUnifiedMarking} from './helpers/unifiedMarking';
+import {showFinalOverview} from './helpers/classroomMarkingUi';
 const server=await createServer({server:{host:'127.0.0.1',port:0,watch:null,hmr:false}});await server.listen();
 const address=server.httpServer!.address() as any,origin=`http://127.0.0.1:${address.port}`;
 let activePage:any;let activeErrors:any;
@@ -27,6 +28,7 @@ await p.getByRole('button',{name:'Rotate clockwise',exact:true}).click();await p
 assert.ok(await p.getByRole('button',{name:'Back to Organizer',exact:true}).isVisible());
 await p.getByRole('button',{name:'Retry image preview',exact:true}).click();await surface.waitFor({state:'visible'});console.log('decode rejection isolated');results.decodeRejection={isolated:true,recoveredWithExplicitRetry:true};
 console.log('Starting quota test');
+await showFinalOverview(p);
 // A quota-style draft failure must keep the draft and expose a working Retry.
 await p.evaluate(async()=>{const path='/src/marking/markingService.ts';const proto=(await import(path)).MarkingService.prototype,original=proto.saveDraft;let once=true;proto.saveDraft=async function(...args:any[]){if(once){once=false;throw new DOMException('Fictional storage quota exhausted','QuotaExceededError');}return original.apply(this,args);};});
 await p.getByLabel('Overall student-facing feedback',{exact:false}).fill('Fictional unsaved recovery text');await p.getByTestId('marking-save-status').filter({hasText:'Not saved'}).waitFor();
@@ -39,10 +41,11 @@ assert.equal(await p.getByLabel('Overall student-facing feedback',{exact:false})
 await p.evaluate(()=>(window as any).restoreReviewContext());
 await p.getByRole('button',{name:'Retry loading marking',exact:true}).click();
 await p.getByRole('alert').filter({hasText:'Fictional temporary read failure'}).waitFor({state:'hidden'});
-await surface.waitFor({state:'visible'});
+await p.getByTestId('final-grading-workspace').waitFor({state:'visible'});
 assert.equal(await p.getByLabel('Overall student-facing feedback',{exact:false}).inputValue(),'Fictional unsaved recovery text');
 results.contextReadFailure={reasonVisible:true,retrySucceeded:true,editorAndDraftRetained:true};
 // A staged crop cannot disappear through tabs, modes, or Back.
+await p.getByRole('button',{name:'Annotation and evidence',exact:true}).click();await surface.waitFor({state:'visible'});
 await p.getByRole('button',{name:'Edit crop',exact:true}).click();
 await p.getByTestId('crop-handle-top-left').focus();await p.keyboard.press('ArrowRight');
 await p.getByRole('button',{name:'Archive',exact:true}).click();
@@ -51,9 +54,11 @@ await p.getByRole('button',{name:'Back to Organizer',exact:true}).click();
 assert.ok(await p.getByRole('button',{name:'Cancel crop',exact:true}).isVisible());
 await p.getByRole('button',{name:'Cancel crop',exact:true}).click();
 results.stagedCrop={tabsAndBackBlocked:true};
-// A malformed refresh retains the existing valid editor and unsaved draft owner.
+// A malformed refresh retains the existing valid final editor and unsaved draft owner.
+await showFinalOverview(p);
 await p.evaluate(async id=>{const path='/src/db/database.ts';const {db}=await import(path);const a=await db.markingAttempts.get(id);(window as any).savedReviewAttempt=structuredClone(a);a.documents=null;await db.markingAttempts.put(a);},ids.attempt);
 await p.getByRole('alert').filter({hasText:'This submission could not refresh safely'}).waitFor();
+assert.equal(await p.getByTestId('final-grading-workspace').isVisible(),true,'malformed refresh retains the actual final-stage editor');
 assert.equal(await p.getByLabel('Overall student-facing feedback',{exact:false}).inputValue(),'Fictional unsaved recovery text');
 assert.equal(await p.getByLabel('Overall student-facing feedback',{exact:false}).isDisabled(),true);
 await p.evaluate(async()=>{const path='/src/db/database.ts';await (await import(path)).db.markingAttempts.put((window as any).savedReviewAttempt);});
@@ -64,12 +69,13 @@ results.malformedActiveAttempt={editorRetained:true,changesBlocked:true,recovere
 await p.evaluate(async()=>{const mp='/src/marking/markingService.ts',dp='/src/db/database.ts',ap='/src/services/authHelper.ts',ip='/src/services/identityService.ts';const module=await import(mp),proto=module.MarkingService.prototype,original=proto.getContext,{db}=await import(dp),identity=await import(ip),{AuthorizationError}=await import(ap);const userId=identity.getActiveTeacherId(),device=await db.devices.where('userId').equals(userId).first(),a=(await db.markingAttempts.toArray())[0];const good=await original.call(new module.MarkingService(db),a.assessmentId,{userId,deviceId:device.id,epoch:identity.getIdentityEpoch()});(window as any).restoreReviewContext=()=>{proto.getContext=original;};(window as any).holdNextReviewRead=false;proto.getContext=async function(){if((window as any).holdNextReviewRead){(window as any).holdNextReviewRead=false;await new Promise(resolve=>{(window as any).releaseOldReviewRead=resolve;});return good;}throw new AuthorizationError('Fictional denied read');};await db.assessments.update(a.assessmentId,{title:good.assessment.title+' denial-check'});});
 await p.getByRole('alert').filter({hasText:'Fictional denied read'}).waitFor();
 await p.evaluate(()=>(window as any).holdNextReviewRead=true);await p.getByRole('button',{name:'Retry loading marking',exact:true}).click();
-await p.waitForFunction(()=>typeof (window as any).releaseOldReviewRead==='function');assert.equal(await p.getByTestId('image-markup').count(),0);
+await p.waitForFunction(()=>typeof (window as any).releaseOldReviewRead==='function');assert.equal(await p.getByTestId('image-markup').count(),0);assert.equal(await p.getByTestId('final-grading-workspace').count(),0,'denied read unmounts the active final workspace');assert.equal(await p.getByLabel('Overall student-facing feedback').count(),0);
 await p.getByRole('button',{name:'Retry loading marking',exact:true}).click();await p.getByRole('alert').filter({hasText:'Fictional denied read'}).waitFor();
 await p.evaluate(()=>(window as any).releaseOldReviewRead());await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-assert.equal(await p.getByTestId('image-markup').count(),0,'obsolete successful read cannot reveal quarantined context');
-await p.evaluate(()=>(window as any).restoreReviewContext());await p.getByRole('button',{name:'Retry loading marking',exact:true}).click();await surface.waitFor({state:'visible'});
+assert.equal(await p.getByTestId('image-markup').count(),0,'obsolete successful read cannot reveal quarantined context');assert.equal(await p.getByTestId('final-grading-workspace').count(),0,'obsolete successful read cannot reveal final grades or feedback');
+await p.evaluate(()=>(window as any).restoreReviewContext());await p.getByRole('button',{name:'Retry loading marking',exact:true}).click();await p.getByTestId('final-grading-workspace').waitFor({state:'visible'});
 assert.equal(await p.getByLabel('Overall student-facing feedback',{exact:false}).inputValue(),'Fictional unsaved recovery text');results.deniedContext={hiddenDuringRetry:true,obsoleteSuccessIgnored:true,draftRecoveredAfterAuthorizedRead:true};
+await p.getByRole('button',{name:'Annotation and evidence',exact:true}).click();await surface.waitFor({state:'visible'});
 
 // Inject a malformed persisted history record directly, bypassing the otherwise strict writer.
 await p.evaluate(async id=>{const path='/src/db/database.ts';const {db}=await import(path);const session=await db.markingSessions.get(id);(window as any).savedReviewSession=structuredClone(session);session.draft.imageFeedback[0].annotations=null;await db.markingSessions.put(session);const attempt=await db.markingAttempts.get(session.attemptId);await db.classEnrollments.update(attempt.classEnrollmentId,{enrollmentStatus:'withdrawn'});},ids.session);

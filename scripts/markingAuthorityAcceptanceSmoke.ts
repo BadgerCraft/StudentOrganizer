@@ -1,5 +1,5 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
-import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory, importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium, type Page, type BrowserContext, type Dialog } from 'playwright';
@@ -49,9 +49,9 @@ async function setup(context: BrowserContext, scenario: string) {
   const page = await context.newPage();
   await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   const title = `Fictional authority acceptance ${scenario}`;
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
@@ -72,7 +72,7 @@ async function setup(context: BrowserContext, scenario: string) {
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
   const [selectedStudent] = await importDocumentsForStudents(page, [{ name: 'Fictional-authority.txt', mimeType: 'text/plain', buffer: Buffer.from('First fictional passage. Second fictional passage.') }]);
   const enrollmentId = selectedStudent.value;
-  await page.locator('[data-testid^="marking-session-open-"]').first().waitFor();
+  await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
   const attempt = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id);
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
   assert.ok(actorId);
@@ -101,7 +101,7 @@ async function setup(context: BrowserContext, scenario: string) {
   }, { actorId, assessmentId: assessment.id, enrollmentId });
   const baseline = await official(page, assessment.id);
   assert.equal(baseline.results.length, 1, 'official invariants must include a nonempty official mark');
-  await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+  await openQueuedAttempt(page, attempt.id);
   await page.getByTestId('marking-document').waitFor();
   await selectPassage(page, 0, 23);
   await page.getByTestId('marking-feedback').fill(`Saved annotation ${scenario}`);
@@ -120,11 +120,13 @@ async function pendingFeedback(fixture: Fixture) {
   const { page, scenario } = fixture;
   // Keep UI feedback demonstrably pending, independently of machine speed.
   await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await selectFinalCategory(page, 'T');
+  await page.getByLabel('Category T feedback').fill(`T feedback ${scenario}`);
+  await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill(`Overall feedback ${scenario}`);
+  await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
   await selectPassage(page, 25, 49);
   await page.getByTestId('marking-feedback').fill(`Pending comment ${scenario}`);
   await page.getByLabel('Evidence level (optional)').selectOption('Level 3');
-  await page.getByLabel('Category T feedback').fill(`T feedback ${scenario}`);
-  await page.getByLabel('Overall student-facing feedback').fill(`Overall feedback ${scenario}`);
   assert.notEqual((await storedSession(page, fixture.attempt.id)).draft.overallFeedback, `Overall feedback ${scenario}`);
 }
 function assertFeedback(draft: any, scenario: string) {
@@ -153,7 +155,7 @@ async function failSessionWrites(page: Page, enabled: boolean) {
 async function reopen(fixture: Fixture) {
   await fixture.page.clock.resume();
   await fixture.page.getByTestId(`open-marking-${fixture.assessment.id}`).click();
-  await fixture.page.getByTestId(`marking-session-open-${fixture.attempt.id}`).click();
+  await openQueuedAttempt(fixture.page, fixture.attempt.id);
   await fixture.page.getByTestId('marking-document').waitFor();
 }
 async function navigate(page: Page, action: string, message?: string, accept = true) {
@@ -182,8 +184,8 @@ async function switchAndReturn(fixture: Fixture) {
   assert.equal(await page.getByTestId('teacher-selector-modal').count(), 0);
   assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${fixture.scenario}`);
   assert.equal(await page.getByLabel('Evidence level (optional)').inputValue(), 'Level 3');
-  assert.equal(await page.getByLabel('Category T feedback').inputValue(), `T feedback ${fixture.scenario}`);
-  assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), `Overall feedback ${fixture.scenario}`);
+  // Final-category controls are intentionally absent during annotation; the exact
+  // complete draft is checked below and after return via assertFeedback.
   assert.deepEqual(await storedSession(page, fixture.attempt.id), beforeDismiss, 'Dismiss must leave the exact stored draft intact');
   assert.deepEqual(await page.evaluate(async () => {
     const path = '/src/services/identityService.ts';
@@ -201,7 +203,8 @@ async function switchAndReturn(fixture: Fixture) {
   // The other authorized class teacher can see the assessment but cannot see the
   // first teacher's private submission, saved draft, or feedback.
   await page.getByTestId(`open-marking-${fixture.assessment.id}`).click();
-  await page.getByText('No submissions yet. Confirm a rubric, then import student work.', { exact: true }).waitFor();
+  await page.getByRole('region', { name: 'Assignment setup', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Marking queue', exact: true }).count(), 0, 'other teacher has no private submission queue');
   assert.equal(await page.getByTestId(`marking-session-open-${fixture.attempt.id}`).count(), 0);
   assert.equal(await page.getByText(`Saved annotation ${fixture.scenario}`, { exact: true }).count(), 0);
   await navigate(page, 'Switch teacher');
@@ -250,7 +253,7 @@ try {
       assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
     } else if (scenario === 'failed-navigation-retry') {
       await failSessionWrites(page, true);
-      for (const action of ['Back to Organizer', 'Switch teacher', 'Rubric editor']) {
+      for (const action of ['Back to Organizer', 'Switch teacher']) {
         await navigate(page, action, action === 'Back to Organizer' ? leaveDraftPrompt : action === 'Switch teacher' ? switchDraftPrompt : undefined);
         await page.getByRole('alert').filter({ hasText: 'Fictional authority storage failure' }).waitFor();
         assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
@@ -259,6 +262,10 @@ try {
         assert.match(await page.getByTestId('marking-save-status').innerText(), /^Not saved/);
         assert.deepEqual(await storedSession(page, attempt.id), beforeSave);
       }
+      await navigate(page, 'Rubric editor');
+      await page.getByRole('alert').filter({ hasText: 'Save or cancel feedback for the current mark first' }).waitFor();
+      assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
+      assert.deepEqual(await storedSession(page, attempt.id), beforeSave);
       await page.screenshot({ path: '/tmp/markinator-authority-storage-blocked.png', fullPage: true });
       await failSessionWrites(page, false);
       await page.getByRole('button', { name: 'Retry save', exact: true }).click();

@@ -9,7 +9,7 @@ const source = await readFile(new URL('./classroomEvidencePopupSmoke.ts', import
 let harness = source.match(/const harness = `([\s\S]*?)`;\nconst server/)![1].replace("const [open,setOpen]=useState(false)","const [readOnly,setReadOnly]=useState(false),[busy,setBusy]=useState(false);window.setFictionalReadOnly=setReadOnly;window.setFictionalBusy=setBusy; const [open,setOpen]=useState(false)").replace("e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:false})","e(ImageMarkup,{pages,feedback:image,onChange:setImage,rubric,disabled:readOnly||busy,readOnly,onFeedbackActiveChange:active=>{window.fictionalFeedbackActive=active}})");
 // Exercise delayed fixture state delivery without altering the real component.
 if (process.env.ANNOTATION_DELAY_READONLY_COMMIT === '1') harness = harness.replace('window.setFictionalReadOnly=setReadOnly;', 'window.setFictionalReadOnly=value=>setTimeout(()=>setReadOnly(value),100);');
-const server = await createServer({ server: { host: '127.0.0.1', port: 0 }, plugins: [{name:'annotation-fixture',configureServer(instance){instance.middlewares.use('/__annotation', async (_request,response)=>{response.setHeader('Content-Type','text/html');response.end(await instance.transformIndexHtml('/__annotation',harness));});}}]});
+const server = await createServer({ server: { host: '127.0.0.1', port: 0, watch: null, hmr: false }, plugins: [{name:'annotation-fixture',configureServer(instance){instance.middlewares.use('/__annotation', async (_request,response)=>{response.setHeader('Content-Type','text/html');response.end(await instance.transformIndexHtml('/__annotation',harness));});}}]});
 await server.listen();
 const address = server.httpServer!.address(); assert.ok(address && typeof address !== 'string');
 const browser = await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium'});
@@ -36,6 +36,11 @@ try {
  assert.equal(await page.evaluate(()=>document.activeElement?.tagName),focus,'opening editor never steals focus');
  const editor=image.getByLabel('Image comment text',{exact:true});
  assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'reason');
+ await image.getByRole('button',{name:'Save feedback',exact:true}).focus();await page.keyboard.press('Shift+Digit3');
+ assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'voice','open photo feedback accepts confirmed category shortcut');
+ await editor.focus();await page.keyboard.press('Shift+Digit2');
+ assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'voice','typing never switches photo category');
+ await image.getByLabel('Image criterion',{exact:true}).selectOption('reason');
  for(const level of CLASSROOM_LEVEL_LABELS){
   await image.getByRole('button',{name:level,exact:true}).click();
   assert.equal(await image.getByRole('button',{name:level,exact:true}).getAttribute('aria-pressed'),'true');
@@ -54,6 +59,7 @@ try {
  await image.getByRole('button',{name:'Save feedback',exact:true}).click();
  const saved=(await state()).at(-1);assert.equal(saved.text,'Fictional selected pen feedback');assert.equal(saved.criterionId,'voice');assert.equal(saved.level,'3+');
  assert.equal(await editor.count(),0,'save clearly finishes active item');
+ const afterSaveShortcut=await state();await image.getByRole('button',{name:'Highlight',exact:true}).focus();await page.keyboard.press('Shift+Digit2');assert.deepEqual(await state(),afterSaveShortcut,'saved photo feedback disables category shortcut');
  await image.getByLabel('Select saved mark').selectOption(saved.id);
  await editor.fill('Unconfirmed replacement');await image.getByRole('button',{name:'1−',exact:true}).click();
  await image.getByRole('button',{name:'Cancel feedback',exact:true}).click();

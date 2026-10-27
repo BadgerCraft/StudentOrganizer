@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 27 — full focused UI and personal-device recovery implementation
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-FOCUSED-ORGANIZER | Tyler explicitly approved implementing the canonical UI guide and all agreed Student Organizer decisions, including optional two-computer offline Drive reconciliation and automatic dated backups. Separate live credential/access setup, student-data transmission, merge/release/deployment remain excluded. | Running on `codex/focused-organizer-20261027`, stacked on unmerged PR48 `f86d661`. [Acceptance checklist and source evidence](work-orders/FOCUSED-ORGANIZER-2026-10-27.md). Complete implementation, fictional/mocked verification, independent review and separate draft PR; no claim of user/device/live-provider acceptance. |
+
 ## October 24 — independent full QA and architecture review
 
 | Stable ID | Disposition | Next action / gate |

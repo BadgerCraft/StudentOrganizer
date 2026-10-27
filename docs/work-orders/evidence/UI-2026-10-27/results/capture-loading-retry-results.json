@@ -1,0 +1,12 @@
+{
+  "status": "pass",
+  "checks": [
+    "initial context failure visible",
+    "explicit Retry",
+    "authorized file import recovers without remount",
+    "same-epoch membership denial hides protected content",
+    "retry quarantine survives older context success/new lifecycle denial",
+    "authorized retry restores retained package and receipts unchanged",
+    "no unhandled browser error"
+  ]
+}

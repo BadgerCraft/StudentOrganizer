@@ -1,0 +1,15 @@
+{
+  "status": "pass",
+  "scenarios": [
+    "Default removal: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation",
+    "Explicit retain: UI matching/marking/finalization, cancel safety, archive names/feedback/marks/read-only, official grade preservation",
+    "Draft-only archive discards unpublished content without creating official results or reports",
+    "Former-student pending draft remains discoverable read-only across close/reload/reopen; no revision, marks, audit or enrollment writes",
+    "Reload retains the explicit teacher session and preserves separate Archive listing",
+    "Actual downloaded backup contains no removed source text/base64; deliberately kept source remains",
+    "Clean-profile backup preview and restore preserve final records without resurrecting discarded drafts"
+  ],
+  "browserErrors": [],
+  "externalRequests": [],
+  "nativeDeviceVerified": false
+}

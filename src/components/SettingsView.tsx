@@ -1,7 +1,9 @@
+import { BackupSyncSettings } from '../sync/BackupSyncSettings';
+import { AppearanceSettings } from './AppearanceSettings';
 import { ManualWindowsUpdate } from './ManualWindowsUpdate';
 import { MarkScalePreview } from './MarkScalePreview';
 import { ClassSettingsService } from '../services/classSettingsService';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Settings,
@@ -42,6 +44,8 @@ interface SettingsViewProps {
   userId?: UUID;
   deviceId?: UUID;
   onRefresh: () => void;
+  onOpenPortability?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -50,8 +54,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   activeSectionId,
   userId,
   deviceId,
-  onRefresh
+  onRefresh,
+  onOpenPortability,
+  onDirtyChange
 }) => {
+  const [section, setSection] = useState<'appearance' | 'participation' | 'grading' | 'recovery' | 'updates'>(() => {
+    try { const saved = sessionStorage.getItem('organizer-settings-section'); if (saved && ['appearance','participation','grading','recovery','updates'].includes(saved)) return saved as 'appearance' | 'participation' | 'grading' | 'recovery' | 'updates'; } catch { /* Appearance and navigation remain usable without session storage. */ }
+    return 'participation';
+  });
   const [identityEpoch] = useState(getIdentityEpoch);
   const [weightK, setWeightK] = useState(policy?.weightK ?? 25);
   const [weightT, setWeightT] = useState(policy?.weightT ?? 25);
@@ -88,6 +98,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [editMode, setEditMode] = useState<ParticipationRecordingMode>('quick_tally');
   const [editPoints, setEditPoints] = useState(1);
   const [editCategory, setEditCategory] = useState<AchievementCategoryCode | 'NONE'>('NONE');
+
+  const policyDirty = !!policy && (weightK !== policy.weightK || weightT !== policy.weightT || weightC !== policy.weightC || weightA !== policy.weightA || excludeFormative !== policy.excludeFormative || missingPolicy !== policy.missingWorkPolicy);
+  useEffect(() => { onDirtyChange?.(policyDirty || pendingWrites > 0); return () => onDirtyChange?.(false); }, [policyDirty, pendingWrites, onDirtyChange]);
+  const chooseSection = (next: typeof section) => {
+    if (next !== section && pendingWrites > 0) return;
+    setSection(next);
+    try { sessionStorage.setItem('organizer-settings-section', next); } catch { /* Noncritical navigation preference. */ }
+  };
 
   const totalWeight = weightK + weightT + weightC + weightA;
   const isWeightValid = Math.abs(totalWeight - 100) < 0.001;
@@ -301,13 +319,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
           <Sliders className="w-6 h-6 text-blue-600" />
-          <span>Grading Policies &amp; Observation Settings</span>
+          <span>Settings</span>
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Configure Ontario Achievement Chart weights, customize participation dock buttons, and inspect mark scale presets.
+          Appearance, classroom preferences, grading policies and recovery.
         </p>
       </div>
 
+      <nav aria-label="Settings sections" className="flex flex-wrap gap-2">
+        {(['appearance', 'participation', 'grading', 'recovery', 'updates'] as const).map(item => <button key={item} type="button" aria-pressed={section === item} onClick={() => chooseSection(item)} className="border rounded-lg px-3 py-2 capitalize aria-pressed:bg-blue-100">{item === 'recovery' ? 'Backups & import / export' : item}</button>)}
+      </nav>
+      {section === 'appearance' && <AppearanceSettings />}
+      {section === 'recovery' && <BackupSyncSettings database={db} userId={userId} />}
+      {section === 'recovery' && onOpenPortability && <section className="bg-white border border-slate-200 rounded-2xl p-6">
+        <h2 className="text-lg font-semibold mb-2">Import, export &amp; recovery</h2>
+        <p className="text-sm text-slate-500 mb-4">Import a class roster, export records, or review a complete backup before restoring.</p>
+        <button type="button" data-testid="nav-portability-btn" onClick={onOpenPortability} className="border rounded-lg px-4 py-2">Open import / export &amp; manual restore</button>
+      </section>}
       {savedSuccess && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold p-3 rounded-xl flex items-center space-x-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -335,7 +363,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       )}
 
       {/* Participation Buttons Configuration Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+      {section === 'participation' && <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
@@ -704,10 +732,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Policy Form */}
-      <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+      {section === 'grading' && <><form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
         <h2 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100">
           Achievement Chart Category Weights (K / T / C / A)
         </h2>
@@ -805,11 +833,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </form>
 
-      <MarkScalePreview versionId={policy?.defaultMarkScaleVersionId ?? null} />
+      <MarkScalePreview versionId={policy?.defaultMarkScaleVersionId ?? null} /></>}
 
-      <ManualWindowsUpdate installationBlocked={pendingWrites > 0 || showCreateModal || !!editingType || !!confirmArchiveType ||
+      {section === 'updates' && <ManualWindowsUpdate installationBlocked={pendingWrites > 0 || showCreateModal || !!editingType || !!confirmArchiveType ||
         (!!policy && (weightK !== policy.weightK || weightT !== policy.weightT || weightC !== policy.weightC || weightA !== policy.weightA ||
-          excludeFormative !== policy.excludeFormative || missingPolicy !== policy.missingWorkPolicy))} />
+          excludeFormative !== policy.excludeFormative || missingPolicy !== policy.missingWorkPolicy))} />}
 
       {/* Create Button Modal */}
       <ModalDialog

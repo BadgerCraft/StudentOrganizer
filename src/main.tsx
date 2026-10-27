@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { applyTheme, readTheme } from './services/theme';
+applyTheme(readTheme());
 import { DocumentErrorBoundary } from './components/DocumentErrorBoundary';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

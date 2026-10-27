@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   RotateCcw,
@@ -15,6 +15,7 @@ import type {
   ClassEnrollment,
   Student,
   ParticipationEventType,
+  ParticipationEvent,
   UUID
 } from '../types/schema';
 import { getSchoolLocalDate } from '../utils/dateUtils';
@@ -32,7 +33,9 @@ interface ParticipationDockProps {
     achievementLevel?: AchievementLevel;
     categoryOverride?: AchievementCategoryCode | null | 'DEFAULT';
     note?: string | null;
-  }) => void;
+  }) => void | boolean | Promise<void | boolean>;
+  todayEvents?: ParticipationEvent[];
+  onRetractEvent?: (event: ParticipationEvent) => Promise<void>;
   onClearSelection: () => void;
   onConfigureButtons?: () => void;
   lastBatchUndo: {
@@ -52,11 +55,16 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
   historicalLocalTime = '09:00',
   onHistoricalTimeChange,
   onRecordEvent,
+  todayEvents = [],
+  onRetractEvent,
   onClearSelection,
   onConfigureButtons,
   lastBatchUndo,
   onUndo
 }) => {
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [categoryOverride, setCategoryOverride] = useState<AchievementCategoryCode | null | 'DEFAULT'>('DEFAULT');
   const [note, setNote] = useState('');
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -90,34 +98,39 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
     .filter(e => e.classification === 'needs_followup' && !e.isArchived)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const handleEventClick = (et: ParticipationEventType) => {
-    if (et.recordingMode === 'level_1_4') {
-      // Level 1-4 requires selecting a level first; 0 writes before level chosen
-      setPendingLevelEventType(et);
-      return;
-    }
+  const saveObservation = async (et: ParticipationEventType, level?: AchievementLevel) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(true); setError(null);
+    try {
+      const saved = await onRecordEvent({ eventTypeId: et.id, achievementLevel: level, categoryOverride, note: note.trim() || null });
+      if (saved === false) return;
+      setPendingLevelEventType(null); setNote(''); setShowNoteInput(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Feedback could not be saved. Your choices are still here.');
+    } finally { busyRef.current = false; setBusy(false); }
+  };
 
-    // Quick-Tally mode records immediately
-    onRecordEvent({
-      eventTypeId: et.id,
-      categoryOverride,
-      note: note.trim() || null
-    });
-    setNote('');
-    setShowNoteInput(false);
+  const handleEventClick = (et: ParticipationEventType) => {
+    if (busyRef.current) return;
+    if (et.recordingMode === 'level_1_4') { setPendingLevelEventType(et); return; }
+    void saveObservation(et);
   };
 
   const handleSelectLevel = (level: AchievementLevel) => {
-    if (!pendingLevelEventType) return;
-    onRecordEvent({
-      eventTypeId: pendingLevelEventType.id,
-      achievementLevel: level,
-      categoryOverride,
-      note: note.trim() || null
-    });
-    setPendingLevelEventType(null);
-    setNote('');
-    setShowNoteInput(false);
+    if (pendingLevelEventType) void saveObservation(pendingLevelEventType, level);
+  };
+
+  // Each retained chip is one existing event, never a toggle for all identical feedback.
+  const recordedToday = isHistorical ? [] : todayEvents.filter(event =>
+    event.deletedAt === null && event.localSchoolDate === today &&
+    selectedEnrollments.some(item => item.enrollment.id === event.classEnrollmentId)
+  ).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id));
+  const retract = async (event: ParticipationEvent) => {
+    if (!onRetractEvent || busyRef.current) return;
+    busyRef.current = true; setBusy(true); setError(null);
+    try { await onRetractEvent(event); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Feedback could not be removed. Reopen and try again.'); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   const handleCancelLevel = () => {
@@ -126,7 +139,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
 
   return (
     <div className={`participation-dock fixed bottom-0 left-0 right-0 z-50 ${selectedEnrollments.length ? 'pointer-events-auto' : 'pointer-events-none'} flex flex-col items-center pb-4 px-4`}
-      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); pendingLevelEventType ? handleCancelLevel() : onClearSelection(); } }}>
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if (!busyRef.current) pendingLevelEventType ? handleCancelLevel() : onClearSelection(); } }}>
       {/* Non-Blocking Undo Toast Banner */}
       {lastBatchUndo && (
         <div
@@ -151,7 +164,10 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
 
       {/* Main Participation Control Dock (Visible when students selected) */}
       {selectedEnrollments.length > 0 && (
-        <div className="pointer-events-auto bg-white border border-slate-300/80 rounded-2xl shadow-2xl p-4 max-w-5xl w-full mx-auto max-h-[75dvh] overflow-y-auto animate-in slide-in-from-bottom-5 duration-150">
+        <div className="pointer-events-auto bg-white border border-slate-300/80 rounded-2xl shadow-2xl p-4 max-w-3xl w-full mx-auto max-h-[45dvh] overflow-y-auto animate-in slide-in-from-bottom-5 duration-150">
+          {error && <p role="alert" className="mb-3 rounded-lg border border-rose-300 p-3 text-sm text-rose-700">{error}</p>}
+          {busy && <p role="status" className="mb-2 text-sm">Saving feedback…</p>}
+          <fieldset disabled={busy} className="min-w-0">
           {/* Historical Date Notice Banner */}
           {isHistorical && (
             <div
@@ -257,6 +273,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
 
               {/* Close / Deselect */}
               <button
+                disabled={busy}
                 onClick={onClearSelection}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
                 title="Close"
@@ -267,6 +284,22 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
             </div>
           </div>
 
+          {!isHistorical && recordedToday.length > 0 && <section aria-label="Today's selected feedback" className="mb-4 rounded-xl border border-slate-300 p-3">
+            <h3 className="text-sm font-semibold mb-2">Today's selected feedback</h3>
+            <p className="text-xs text-slate-600 mb-2">Click a highlighted observation to remove that occurrence. Record buttons below add another observation.</p>
+            <div className="flex flex-wrap gap-2">{recordedToday.map(event => {
+              const student = selectedEnrollments.find(item => item.enrollment.id === event.classEnrollmentId)?.student;
+              const time = new Date(event.occurredAt).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit' });
+              return <button key={event.id} type="button" data-testid="today-feedback-chip" data-event-id={event.id} aria-pressed="true"
+                aria-label={`Remove today's ${event.snapshottedName} at ${time}${selectedEnrollments.length > 1 ? ` for ${student?.firstName} ${student?.lastName}` : ''}`}
+                disabled={busy || !onRetractEvent} onClick={() => void retract(event)}
+                className="min-h-[44px] rounded-xl border-2 border-blue-500 bg-blue-50 px-3 py-2 text-left text-sm text-blue-900">
+                {event.snapshottedName}{event.achievementLevel ? ` · Level ${event.achievementLevel}` : ''} · {time}
+                {selectedEnrollments.length > 1 && <span className="block text-xs">{student?.firstName} {student?.lastName}</span>}
+                <span aria-hidden="true" className="ml-2">×</span>
+              </button>;
+            })}</div>
+          </section>}
           {/* Level 1-4 Selection Overlay / Tray */}
           {pendingLevelEventType && (
             <div
@@ -295,6 +328,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                 <button
                   data-testid="level-1-btn"
+                  disabled={busy}
                   onClick={() => handleSelectLevel(1)}
                   className="flex flex-col items-center justify-center p-2.5 bg-white hover:bg-amber-50 border-2 border-amber-300 hover:border-amber-500 rounded-xl transition shadow-sm group active:scale-95"
                 >
@@ -303,6 +337,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                 </button>
                 <button
                   data-testid="level-2-btn"
+                  disabled={busy}
                   onClick={() => handleSelectLevel(2)}
                   className="flex flex-col items-center justify-center p-2.5 bg-white hover:bg-sky-50 border-2 border-sky-300 hover:border-sky-500 rounded-xl transition shadow-sm group active:scale-95"
                 >
@@ -311,6 +346,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                 </button>
                 <button
                   data-testid="level-3-btn"
+                  disabled={busy}
                   onClick={() => handleSelectLevel(3)}
                   className="flex flex-col items-center justify-center p-2.5 bg-white hover:bg-emerald-50 border-2 border-emerald-400 hover:border-emerald-600 rounded-xl transition shadow-sm group active:scale-95"
                 >
@@ -319,6 +355,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                 </button>
                 <button
                   data-testid="level-4-btn"
+                  disabled={busy}
                   onClick={() => handleSelectLevel(4)}
                   className="flex flex-col items-center justify-center p-2.5 bg-white hover:bg-purple-50 border-2 border-purple-400 hover:border-purple-600 rounded-xl transition shadow-sm group active:scale-95"
                 >
@@ -382,6 +419,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                   <button
                     key={et.id}
                     data-testid="participation-event-btn"
+                    disabled={busy}
                     aria-label={`Record ${et.name}`}
                     title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
@@ -416,6 +454,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                   <button
                     key={et.id}
                     data-testid="participation-event-btn"
+                    disabled={busy}
                     aria-label={`Record ${et.name}`}
                     title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
@@ -454,6 +493,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
                   <button
                     key={et.id}
                     data-testid="participation-event-btn"
+                    disabled={busy}
                     aria-label={`Record ${et.name}`}
                     title={describeButton(et)}
                     onClick={() => handleEventClick(et)}
@@ -477,6 +517,7 @@ export const ParticipationDock: React.FC<ParticipationDockProps> = ({
               </div>
             </div>
           </div>
+          </fieldset>
         </div>
       )}
     </div>

@@ -20,7 +20,9 @@ async function snapshot(page: Page, tables: string[]): Promise<Record<string, an
 
 /** Actual controls with generated fictional raster input; IndexedDB access observes only. */
 export async function runUiPhotoRosterAcceptance(page: Page): Promise<void> {
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByTestId('classroom-tools-toggle').click();
   const firstCard = page.getByTestId('student-seat-card').first();
   await firstCard.waitFor();
   const displayName = await firstCard.getByTestId('student-seat-name').innerText();

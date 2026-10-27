@@ -1,0 +1,14 @@
+{
+  "status": "pass",
+  "completed": [
+    "At 1280×720 the result editor scrolls naturally to Save and Cancel, saves the selected level and feedback, and Cancel preserves the saved result.",
+    "Real TXT/DOCX guided import: explicit multi-student matching, several pages per student, Back, Undo, unsupported .doc, file-read retry, partial-save retry and failed-opening recovery without duplicates.",
+    "All 17 level choices select visibly; failed final save retains draft and rolls back results; Save and next/return update Markbook, feedback-only stays ungraded, and saved results survive restart.",
+    "Single-student pasted-text flow requires explicit student confirmation, skips matching, and retains entered content on Back without duplicate imports.",
+    "Picture import preserves exact local bytes and opens image marking; historical results are unchanged; no external requests or browser errors.",
+    "Save and return protects unsaved rubric and import preparation: Cancel preserves exact preparation/draft/official records; explicit discard alone finalizes and returns to Markbook."
+  ],
+  "errors": [],
+  "external": [],
+  "nativeDesktopVerified": false
+}

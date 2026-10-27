@@ -1,0 +1,15 @@
+{
+  "status": "pass",
+  "checks": [
+    "staged mouse handles",
+    "crop page-departure guard",
+    "cancel unchanged",
+    "rotated original-coordinate apply",
+    "geometry undo preserves marks",
+    "keyboard corner",
+    "busy retains crop draft",
+    "remount retained crop",
+    "resize ends ink without bridge",
+    "original bytes unchanged"
+  ]
+}

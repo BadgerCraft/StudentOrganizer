@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "completed": [
+    "Single replaces target; explicit Group retains/adds/removes; Single clears group; target changes reset note/level only after explicit discard; Cancel/Escape/Close without edits write nothing.",
+    "Unsaved note: Cancel preserves exact text/target on student, deselect, mode, class, day, view, teacher, Close and overlay actions; accepted mode/context changes discard deliberately with zero writes. Pending level and category-only edits are also guarded.",
+    "Historical two-student level event persisted one batch/session/date/time/note; Undo retracts both; historical events and formal result tables unchanged.",
+    "Default single quick tally writes exactly one event; Undo remains available after leaving and returning to Class View.",
+    "View/class/day/teacher cancel and actual teacher switch reset selection; profile/teacher overlays and dock padding prevent background activation."
+  ],
+  "errors": [],
+  "external": [],
+  "nativeDesktopVerified": false
+}

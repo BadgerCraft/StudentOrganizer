@@ -47,6 +47,7 @@ try {
   assert.ok(alerts.some(message => message.includes('Read-only')));
   assert.equal(await snapshot(), denied);
   await page.evaluate('window.qa.renderSeating()');
+  await page.getByRole('button', { name: 'Attendance & seating tools', exact: true }).click();
   for (const title of ['Add Row', 'Remove Row', 'Add Column', 'Remove Column', 'Toggle Card Size']) {
     await page.getByTitle(title, { exact: true }).click();
     await page.getByRole('alert').filter({ hasText: 'Read-only' }).waitFor();

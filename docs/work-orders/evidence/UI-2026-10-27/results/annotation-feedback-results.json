@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "levels": [
+    "R",
+    "1−",
+    "1",
+    "1+",
+    "2−",
+    "2",
+    "2+",
+    "3−",
+    "3",
+    "3+",
+    "4−(low)",
+    "4−(High)",
+    "4(low)",
+    "4(high)",
+    "4+(low)",
+    "4+(med)",
+    "4+(high)"
+  ],
+  "checks": [
+    "automatic pen/highlight selection",
+    "no focus/scroll movement",
+    "all 17 clickable exact levels",
+    "visible changeable criterion",
+    "new-mark and existing-mark switching guard",
+    "save finishes",
+    "cancel new removes only new",
+    "cancel saved retains feedback",
+    "reopen preserves",
+    "original bytes preserved",
+    "busy preserves active guard and cancel snapshot",
+    "read-only close without writes or departure guard"
+  ]
+}

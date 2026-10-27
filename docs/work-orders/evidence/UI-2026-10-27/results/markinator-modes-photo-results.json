@@ -1,0 +1,23 @@
+{
+  "status": "pass",
+  "startedAt": "2026-10-27T11:35:42.236Z",
+  "completedScenarios": [
+    "delayed real image decoder during page switch, rotation and crop hides stale pixels/surface and blocks pointer marks until exact preview is ready; raw original axes recover after reset.",
+    "side-by-side independent work/feedback scrolling; pen selects feedback without autofocus; focus/scroll/window blur/cancel/pointer loss retain partial strokes without downward lines.",
+    "explicit Back/teacher confirmation saves exact photo draft; dismiss retains active editor; another teacher cannot rewrite the owner draft.",
+    "desktop four-page chooser cancellation retains files and retry avoids duplicate pages; explicit student review/import renders original EXIF6/3/8/2 pixel axes including mirror metadata; real pointer pen/highlight/comment, crop, rotation, reorder and autosave; retained JPEG bytes and manual grade unchanged.",
+    "reload recovered complete photo draft; comment edit kept original bytes; preview/confirmed finalization preserved K, wrote reviewed T once; revision two leaves official grades and finalized history intact.",
+    "oral mode created against confirmed rubric/student; custom checklist, private notes, removal cancellation and rubric evidence saved/reopened after reload without grade changes.",
+    "rubric mode created against confirmed rubric/student; rubric evidence saved/reopened after reload without grade changes.",
+    "legacy optional rubric evidence absent: editing one of two pinned criteria saves/reloads a complete criterion matrix without grade changes.",
+    "domain boundary regressions reject remote/data/file image URIs, unconfirmed student and wrong-teacher open/write; finalized retry returns same commit; attempts, drafts, commits, audit and official grades unchanged.",
+    "oral Save and return to Markbook saves only the confirmed student's 3+ (78%) and feedback-only category with exact receipt/result IDs and feedback; prior students/history unchanged and restart preserves records.",
+    "rubric Save and return to Markbook saves only the confirmed student's 4+(med) (98%) and feedback-only category with exact receipt/result IDs and feedback; prior students/history unchanged and restart preserves records.",
+    "actual full backup download and clean-profile preview/confirmed restore recover exact photo bytes/transforms/edited marks, finalized history and revision, oral checklist/private notes, finalized oral/rubric evidence and all three modes' official records; reopened UI verifies evidence.",
+    "zero external requests and browser exceptions; physical Windows/Mac interactions remain unverified; iPad and camera work remain shelved."
+  ],
+  "browserErrors": [],
+  "externalRequests": [],
+  "physicalCameraVerified": false,
+  "nativeDeviceVerified": false
+}

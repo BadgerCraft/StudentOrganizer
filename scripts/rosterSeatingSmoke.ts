@@ -1,3 +1,5 @@
+import { installFictionalClassroom } from './helpers/classroomFixture';
+import { openRecovery, showClassTools } from './helpers/organizerNavigation';
 import { preview } from 'vite';
 import { chromium, type Page } from 'playwright';
 import assert from 'node:assert/strict';
@@ -23,17 +25,21 @@ try {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('http://127.0.0.1:4186');
+  await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().click();
+  await showClassTools(page);
   await page.locator('[data-testid="student-seat-card"]').first().waitFor();
   const before = await records(page, 'seatPositions');
-  await page.getByTestId('nav-portability-btn').click();
+  await openRecovery(page);
   await page.getByTestId('roster-csv-textarea').fill('Pilot, Fictional\tFICT-SEATING-01\nSample, Fictional\tFICT-SEATING-02');
   await page.getByTestId('preview-roster-btn').click();
   await page.getByTestId('roster-preview-step').waitFor();
   await page.getByTestId('import-roster-btn').click();
   await page.getByTestId('roster-import-success').waitFor();
   await page.getByRole('button', { name: 'Open Class View', exact: true }).click();
+  await showClassTools(page);
   const populate = page.getByRole('button', { name: 'Populate seating', exact: true });
   await populate.waitFor();
   assert.ok((await populate.boundingBox())!.y < 768, 'Populate must be visible without scrolling');
@@ -74,6 +80,8 @@ try {
     };
   }));
   await page.reload();
+  await page.getByTestId('classroom-tools-toggle').waitFor();
+  await showClassTools(page);
   await populate.waitFor();
   assert.equal(await randomize.isDisabled(), true);
   await populate.click();
@@ -84,6 +92,6 @@ try {
   console.log('PASS: fictional roster import → visible population → working randomize; preserved seats/roster, actor audit, empty/locked guards, no browser exceptions.');
 } finally {
   await browser.close();
-  server.httpServer.closeAllConnections();
+  if ('closeAllConnections' in server.httpServer) server.httpServer.closeAllConnections();
   await new Promise<void>(resolve => server.httpServer.close(() => resolve()));
 }

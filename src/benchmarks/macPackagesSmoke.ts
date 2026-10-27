@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runReportPdfDesktopAcceptance } from './reportPdfDesktopAcceptance';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
@@ -49,15 +50,15 @@ async function openClass(page: Page) {
   await page.locator('[data-testid="nav-dashboard-btn"]').click();
   await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().click();
   await page.locator('[data-testid="student-seat-card"]').first().waitFor();
+    await showClassTools(page);
 }
 async function openHub(page: Page) {
   await page.getByTitle('Manage Assessments & Rubrics', { exact: true }).click();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor();
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor();
 }
 async function createAssessment(page: Page, title: string) {
   await openHub(page);
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
-  const form = page.getByRole('heading', { name: 'Create New Assessment' }).locator('..').locator('form');
+  const form = await openAssignmentCreation(page);
   if (await form.getByText('Code', { exact: true }).count()) throw new Error('Unexpected Code field');
   await form.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
   await form.getByRole('button', { name: 'Create Assessment', exact: true }).click();
@@ -173,7 +174,7 @@ async function checkApp(appPath: string, format: string) {
     assert.equal(await reopened.form.getByPlaceholder('Optional constructive feedback for this category...').inputValue(), feedback);
     await reopened.form.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-    await page.locator('[data-testid="nav-portability-btn"]').click();
+    await openRecovery(page);
     const backupPath = path.join(evidence, `${format}-fictional-backup.json`);
     // Observe the actual Electron download. CI chooses only the save destination;
     // it does not exercise the native save dialog or fabricate backup bytes.
@@ -228,7 +229,7 @@ async function checkApp(appPath: string, format: string) {
     await laterEditor.form.getByRole('button', { name: 'Save Result', exact: true }).click();
     await laterEditor.form.waitFor({ state: 'hidden' });
     await assertCategoryResult(page, studentAssessment.id, category.id, feedback, '2');
-    await page.locator('[data-testid="nav-portability-btn"]').click();
+    await openRecovery(page);
     await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: 'fictional-backup.json', mimeType: 'application/json', buffer: body });
     await page.locator('[data-testid="restore-confirm-dialog"]').waitFor();
     assert.ok((await records(page, 'assessments')).some(row => row.title === laterTitle), 'Restore preview must not replace data');

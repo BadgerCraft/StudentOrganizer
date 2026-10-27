@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
 import { canonicalLegacyReport } from './legacyReportComparison';
@@ -66,7 +67,7 @@ async function openHub(page: Page) {
   await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.locator('button[title="Manage Assessments & Rubrics"]').click();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor();
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor();
 }
 async function snapshotAll(page: Page): Promise<Record<string, any[]>> {
   return page.evaluate(() => new Promise((resolve, reject) => {
@@ -394,7 +395,7 @@ async function runLegacyBootstrap() {
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
     await leaveMarkingWithDraft(running.page);
-    await running.page.getByTestId('nav-portability-btn').click();
+    await openRecovery(running.page);
     await running.page.getByTestId('restore-file-input').setInputFiles(backupPath);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();
     assert.deepEqual(await snapshotAll(running.page), changed, 'Legacy backup preview must leave the later bootstrapped edit intact');
@@ -507,7 +508,7 @@ async function runInstallRecovery() {
     const before = await snapshotAll(running.page);
     assert.equal(Object.keys(before).length, 41, 'Install recovery must cover every current-schema table');
     const profileA = running.userData;
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     const updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: failureFilename, bytes: failureBytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
@@ -576,7 +577,7 @@ async function runInstallRecovery() {
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
     await leaveMarkingWithDraft(running.page);
-    await running.page.getByTestId('nav-portability-btn').click();
+    await openRecovery(running.page);
     await running.page.getByTestId('restore-file-input').setInputFiles(safetyBackup);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();
     assert.deepEqual(await snapshotAll(running.page), changed, 'Safety-backup preview must not change the repaired database');
@@ -743,7 +744,7 @@ async function main() {
     running = await launchInstalled(executable, versions.A);
     await openHub(running.page);
     marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     let updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     await observeStatusBoundary(running.app);
@@ -788,7 +789,7 @@ async function main() {
     assert.deepEqual(await snapshotAll(running.page), beforeOrdinaryQuit, 'Ordinary A restart must preserve data and leave A installed');
     assert.equal(requests.length, requestsBeforeQuit, 'Restart must not check or resume update traffic');
     await openHub(running.page);
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: filename, bytes: bytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
@@ -798,11 +799,17 @@ async function main() {
     assert.equal((await waitState(running.page, ['downloaded'])).signature, 'unsigned');
     const installButton = updates.getByRole('button', { name: 'Backup and install', exact: true });
     await installButton.waitFor();
+    const gradingSection = running.page.getByRole('button', { name: 'grading', exact: true });
+    if (await gradingSection.isVisible()) await gradingSection.click();
     const weight = running.page.getByText('Knowledge (K) %', { exact: true }).locator('..').getByRole('spinbutton');
     const previousWeight = await weight.inputValue();
     await weight.fill(String(Number(previousWeight) + 1));
+    const updatesSection = running.page.getByRole('button', { name: 'updates', exact: true });
+    if (await updatesSection.isVisible()) await updatesSection.click();
     assert.equal(await installButton.isEnabled(), false, 'Unsaved Settings changes must block installation');
+    if (await gradingSection.isVisible()) await gradingSection.click();
     await weight.fill(previousWeight);
+    if (await updatesSection.isVisible()) await updatesSection.click();
     await waitUntil(async () => await installButton.isEnabled() ? true : undefined, 'restored Settings installation eligibility');
     const metadataRequests = [...metadataBeforeQuit, ...await running.app.evaluate(() => (globalThis as any).__upgradeMetadataRequests)];
     assert.equal(metadataRequests.filter((request: any) => request.destination.endsWith('/latest')).length, 4, 'Only four explicit release-check clicks may query latest; explicit download verification also reads pinned approval/tag metadata');

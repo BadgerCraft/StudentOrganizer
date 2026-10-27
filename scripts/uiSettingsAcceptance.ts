@@ -22,9 +22,8 @@ async function untilRows(page: Page, table: string, matches: (records: any[]) =>
   throw new Error(`Settings acceptance did not observe expected ${table} write`);
 }
 async function settings(page: Page) {
-  await page.locator('button[title="Grading Policies & Scale Presets"]').click();
-  await page.getByRole('heading', { name: 'Grading Policies & Observation Settings', exact: true }).waitFor();
-  await page.getByTestId('mark-scale-entry').first().waitFor();
+  await page.getByTestId('nav-settings-btn').click();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
 }
 async function noOverflow(page: Page) {
   const width = await page.evaluate(() => ({ viewport: innerWidth, page: document.documentElement.scrollWidth }));
@@ -33,8 +32,11 @@ async function noOverflow(page: Page) {
 
 /** Fresh disposable fictional context only. Actual UI writes; fixture setup is explicitly labelled. */
 export async function runUiSettingsAcceptance(page: Page): Promise<void> {
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await settings(page);
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'grading', exact: true }).click();
+  await page.getByTestId('mark-scale-entry').first().waitFor();
   const entries = await rows(page, 'markScaleEntries');
   const policies = await rows(page, 'gradingPolicies');
   const sectionId = await page.getByTestId('header-class-select').inputValue();
@@ -49,6 +51,7 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
     if (entry.isNumeric) assert.ok((await cell.innerText()).includes(`${entry.benchmarkPercentage}%`));
     else assert.ok((await cell.innerText()).includes('No numeric conversion'));
   }
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'participation', exact: true }).click();
   const initialTypes = await rows(page, 'participationEventTypes');
   const initialEvents = await rows(page, 'participationEvents');
   const formalResults = await rows(page, 'categoryResults');
@@ -65,7 +68,7 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   assert.deepEqual((await rows(page, 'participationEventTypes')).filter(t => initialTypes.some(i => i.id === t.id)), initialTypes);
   assert.deepEqual(await rows(page, 'participationEvents'), initialEvents);
   assert.deepEqual(await rows(page, 'categoryResults'), formalResults);
-  await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+  await page.getByRole('button', { name: 'Class View', exact: true }).click();
   await page.getByTestId('student-seat-name').first().click();
   for (const classification of ['positive', 'neutral', 'needs_followup']) {
     const button = page.getByRole('button', { name: `Record Fictional ${classification} button`, exact: true });
@@ -82,7 +85,7 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   await page.getByTestId('configure-participation-btn').waitFor({ state: 'hidden' });
   await page.getByTestId('student-seat-name').first().click();
   await page.getByTestId('configure-participation-btn').click();
-  await page.getByRole('heading', { name: 'Grading Policies & Observation Settings', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
 
   // Bound fixture: empty only the fictional button configuration to exercise a workspace with no presets.
   // Successful setup remains a real UI action through the authorized transaction. No production cleanup is invoked.
@@ -111,7 +114,7 @@ export async function runUiSettingsAcceptance(page: Page): Promise<void> {
   assert.deepEqual(await rows(page, 'participationEvents'), withObservation);
   assert.deepEqual(await rows(page, 'categoryResults'), formalResults);
   // A settings revisit is read-only and does not double-create defaults.
-  await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+  await page.getByRole('button', { name: 'Class View', exact: true }).click();
   await settings(page);
   assert.deepEqual(await rows(page, 'participationEventTypes'), starters);
   await page.setViewportSize({ width: 390, height: 844 });
