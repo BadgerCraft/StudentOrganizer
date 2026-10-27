@@ -52,7 +52,7 @@
     "test:analytics:browser": "node --import tsx scripts/analytics/browserSmoke.ts",
     "dictation:prepare": "node scripts/prepareDictation.cjs",
     "test:dictation:browser": "node --import tsx scripts/dictationSmoke.ts",
-    "test:qa:integrity": "node --import tsx scripts/qaMarkbookConcurrencySmoke.ts && node --import tsx scripts/qaClassroomAuthorizationSmoke.ts && node --import tsx scripts/qaCustomAssessmentSmoke.ts",
+    "test:qa:integrity": "node --import tsx scripts/qaMarkbookConcurrencySmoke.ts && node --import tsx scripts/qaClassroomAuthorizationSmoke.ts && node --import tsx scripts/qaCustomAssessmentSmoke.ts && node --import tsx scripts/qaReportingScopeSmoke.ts",
     "test:focused-organizer": "node --import tsx scripts/focusedOrganizerSmoke.ts && node --import tsx scripts/focusedMarkingSmoke.ts && node --import tsx scripts/participationCorrectionSmoke.ts && node --import tsx scripts/personalSyncSmoke.ts"
   },
   "dependencies": {
