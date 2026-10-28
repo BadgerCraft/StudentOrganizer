@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "checks": [
+    "unconfigured setup",
+    "offline and expired access",
+    "permission and invalid backup",
+    "uncertain committed upload without duplicate retry",
+    "local merge before upload failure",
+    "checkpoint failure blocks restore before record replacement; explicit confirmed retry",
+    "verified upload before list failure",
+    "no private error leakage or external requests"
+  ]
+}

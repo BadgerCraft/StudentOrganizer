@@ -1,4 +1,5 @@
-import { useFeedbackCategoryShortcut } from './useFeedbackCategoryShortcut';
+import { useFeedbackPressedKeys, type FeedbackPressedKeys } from './useFeedbackPressedKeys';
+import { FeedbackKeyboardControl } from './FeedbackKeyboardControl';
 import { DictationFeedback } from '../../dictation/DictationFeedback';
 import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
@@ -21,6 +22,9 @@ export interface ImageMarkupProps {
   rubric: MarkingRubric;
   disabled: boolean;
   readOnly?: boolean;
+  /** Only the annotation stage owns evidence keyboard actions. */
+  keyboardActive?: boolean;
+  pressedKeys?: FeedbackPressedKeys;
   /** Reorders retained pages only; the original fields and bytes are never changed. */
   onReorder?: (pageIds: string[]) => void;
   actor?: MarkingActor;
@@ -31,7 +35,9 @@ export interface ImageMarkupProps {
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ dictationScope = '', commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
+export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, keyboardActive = true, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
+  const localPressedKeys = useFeedbackPressedKeys(!pressedKeys);
+  const feedbackPressedKeys = pressedKeys ?? localPressedKeys;
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
   const pages = feedback.map(item => originalPages.find(page => page.id === item.pageId)).filter((page): page is MarkingImagePage => Boolean(page));
   for (const page of originalPages) if (!pages.some(item => item.id === page.id)) pages.push(page);
@@ -261,10 +267,6 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
     if (onReorder) onReorder(ids);
   }
 
-  useFeedbackCategoryShortcut(Boolean(selectedAnnotation) && !disabled && !readOnly, rubric, category => {
-    const criterion = rubric.criteria.find(item => item.id === selectedAnnotation?.criterionId && item.categoryCode === category) ?? rubric.criteria.find(item => item.categoryCode === category);
-    if (criterion && criterion.id !== selectedAnnotation?.criterionId) editAnnotation({ criterionId: criterion.id, level: '' });
-  });
 
   if (!page || !current) return <p className="text-sm text-gray-600">Import local page images to add visual feedback.</p>;
   return <section aria-label="Image markup" data-testid="image-markup" style={{ overflowAnchor: 'none' }} className="image-markup-layout rounded border border-gray-300 bg-gray-50 p-3">
@@ -326,6 +328,7 @@ export function ImageMarkup({ dictationScope = '', commentContainer, pages: orig
     {!selectedAnnotation && <div className="flex flex-wrap items-center gap-2"><label className="text-sm">Saved marks <select aria-label="Select saved mark" value={selected ?? ''} className="rounded border p-2" onChange={event => selectMark(event.target.value || null)}><option value="">Select a mark</option>{current.annotations.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.kind}{item.text ? `: ${item.text.slice(0, 40)}` : ''}</option>)}</select></label>
     </div>}
     {selectedAnnotation && <fieldset key={selectedAnnotation.id} disabled={disabled} className="space-y-2 rounded border bg-white p-3"><legend className="text-sm font-semibold">Write a comment for this mark</legend>
+      {!readOnly && <FeedbackKeyboardControl pressedKeys={feedbackPressedKeys} key={`${dictationScope}:${actor?.userId}:${actor?.epoch}:${page.id}:${selectedAnnotation.id}`} categories={rubric.criteria.map(item => item.categoryCode)} category={rubric.criteria.find(item => item.id === selectedAnnotation.criterionId)?.categoryCode} level={selectedAnnotation.level} disabled={disabled || !keyboardActive} onCategory={category => { const criterion = rubric.criteria.find(item => item.id === selectedAnnotation.criterionId && item.categoryCode === category) ?? rubric.criteria.find(item => item.categoryCode === category); if (criterion && criterion.id !== selectedAnnotation.criterionId) editAnnotation({ criterionId: criterion.id, level: '' }); }} onLevel={level => { if (selectedAnnotation.criterionId) editAnnotation({ level }); }} />}
       <div className="block text-sm">Comment text <DictationFeedback target={`${dictationScope}:${actor?.userId}:${actor?.epoch}:${page.id}:${selectedAnnotation.id}`} aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} disabled={disabled || readOnly} value={selectedAnnotation.text} onValue={text => editAnnotation({ text })} /></div>
       <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name} ({item.categoryCode})</option>)}</select></label>
         </div>

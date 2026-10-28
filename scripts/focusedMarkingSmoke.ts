@@ -35,7 +35,7 @@ try {
  assert.equal(await page.getByRole('complementary',{name:'Final category decisions'}).count(),0,'category sidebar exists only in final grading');
  assert.equal(await page.getByRole('region',{name:'Current official results'}).count(),0,'no live/official score while annotating');
  const select=async(start:number,end:number)=>{await page.waitForFunction(()=>Array.from(window.document.querySelectorAll('button')).some(button=>button.textContent==='Save now'&&!button.disabled));await document.evaluate((root,{start,end})=>{const walk=window.document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n:Node|null,o=0,b:[Node,number]|null=null,f:[Node,number]|null=null;while(n=walk.nextNode()){const next=o+(n.textContent?.length||0);if(!b&&start<next)b=[n,start-o];if(end<=next){f=[n,end-o];break;}o=next;}if(!b||!f)throw new Error('Invalid fixture range');const r=window.document.createRange();r.setStart(...b);r.setEnd(...f);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(r);root.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));},{start,end});await page.getByTestId('marking-feedback').waitFor();};
- await select(30,46);await document.focus();await page.keyboard.press('Shift+Digit2');
+ await select(30,46);await page.getByTestId('feedback-keyboard-control').focus();await page.keyboard.press('Shift+Digit2');
  assert.equal(await page.getByLabel('Criterion',{exact:true}).inputValue(),'criterion-T');
  const feedback=page.getByTestId('marking-feedback');await feedback.fill('Late evidence');await feedback.focus();await page.keyboard.press('Shift+Digit1');
  assert.equal(await page.getByLabel('Criterion',{exact:true}).inputValue(),'criterion-T','typing cannot switch category');

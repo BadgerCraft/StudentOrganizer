@@ -1,3 +1,4 @@
+import { RecoveryActionError, type RecoveryCode } from './recoveryGuidance';
 import type { OntarioTeacherDB } from '../db/database';
 import { PortabilityService } from '../services/portabilityService';
 import { getIdentityEpoch } from '../services/identityService';
@@ -10,14 +11,14 @@ export interface DriveBridge {
   list():Promise<DriveResult<RemoteSnapshot[]>>; download(id:string):Promise<DriveResult<{json:string}>>;
   upload(json:string):Promise<DriveResult<{id:string}>>; disconnect():Promise<DriveResult<DriveStatus>>;
 }
-export type DriveResult<T>={ok:true;value:T}|{ok:false;message:string};
+export type DriveResult<T>={ok:true;value:T}|{ok:false;message:string;code?:RecoveryCode};
 declare global { interface Window { desktopOrganizerDrive?:DriveBridge } }
-export async function unwrap<T>(promise:Promise<DriveResult<T>>):Promise<T> {const r=await promise;if(!r.ok)throw new Error(r.message);return r.value;}
+export async function unwrap<T>(promise:Promise<DriveResult<T>>):Promise<T> {const r=await promise;if(!r.ok)throw new RecoveryActionError(r.message,r.code??'unknown');return r.value;}
 export interface SyncPreview { plan:MergePlan; remote:RemoteSnapshot; remoteJSON:string; epoch:number; userId:string }
 export async function previewSync(database:OntarioTeacherDB,userId:string,remote:RemoteSnapshot,bridge:DriveBridge,store:RecoveryStore=recoveryStore):Promise<SyncPreview> {
   const epoch=getIdentityEpoch();await assertWorkspaceAccess(database,userId,epoch);
   const {json}=await unwrap(bridge.download(remote.id));
-  new PortabilityService(database).validateBackupJSON(json);
+  try { new PortabilityService(database).validateBackupJSON(json); } catch { throw new RecoveryActionError('Invalid Drive backup.','invalid','unchanged'); }
   const target=JSON.parse(json) as Snapshot,local=await readSnapshot(database),state=await store.state.get('sync');
   // A local checkpoint is a base only when the selected remote is that exact version,
   // or carries a matching immutable ancestor identity and content digest.
@@ -57,6 +58,8 @@ export async function finishSync(database:OntarioTeacherDB,preview:SyncPreview,c
   await saveBackup(database,preview.userId,'before-sync',store);
   await applySnapshot(database,merged,preview.plan.local,preview.userId,preview.epoch);
   // Persist locally first. Offline/upload failures leave merged work and a recovery snapshot intact.
+  let uploaded=false;
+  try {
   const actual=await readSnapshot(database);
   const state=await store.state.get('sync');
   const remote=JSON.parse(preview.remoteJSON) as Snapshot;
@@ -64,9 +67,10 @@ export async function finishSync(database:OntarioTeacherDB,preview:SyncPreview,c
   if(state?.base&&state.lastRemoteId) ancestors.push({id:state.lastRemoteId,digest:await snapshotDigest(state.base)});
   actual.organizerSync={ancestors:Array.from(new Map(ancestors.filter(a=>typeof a.id==='string'&&typeof a.digest==='string'&&/^[a-f0-9]{64}$/.test(a.digest)).map(a=>[a.id,a])).values()).slice(-100)};
   await assertWorkspaceAccess(database,preview.userId,preview.epoch);
-  const result=await unwrap(bridge.upload(JSON.stringify(actual)));
+  const result=await unwrap(bridge.upload(JSON.stringify(actual)));uploaded=true;
   await store.state.put({id:'sync',lastRemoteId:result.id,base:actual});
   return result.id;
+  } catch(error) { throw new RecoveryActionError('Local merge completed; Drive verification or checkpoint failed.',error instanceof RecoveryActionError?error.code:'unknown',uploaded?'merged-uploaded':'merged'); }
 }
 export async function publishFirstSnapshot(database:OntarioTeacherDB,userId:string,bridge:DriveBridge,store:RecoveryStore=recoveryStore):Promise<string> {
   const epoch=getIdentityEpoch();await assertWorkspaceAccess(database,userId,epoch);
@@ -75,6 +79,6 @@ export async function publishFirstSnapshot(database:OntarioTeacherDB,userId:stri
   new PortabilityService(database).validateBackupJSON(JSON.stringify(snapshot));
   await assertWorkspaceAccess(database,userId,epoch);
   const result=await unwrap(bridge.upload(JSON.stringify(snapshot)));
-  await store.state.put({id:'sync',lastRemoteId:result.id,base:snapshot});
+  try{await store.state.put({id:'sync',lastRemoteId:result.id,base:snapshot});}catch{throw new RecoveryActionError('Uploaded; checkpoint failed.','storage','uploaded');}
   return result.id;
 }

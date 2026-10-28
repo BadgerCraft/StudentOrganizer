@@ -26,6 +26,25 @@ Device identity, device preferences and outbound transport bookkeeping stay loca
 
 Applying a reviewed merge rechecks teacher epoch, local revision, remote bytes and full backup relationships before an atomic local restore. A failed upload after local application leaves merged work and the safety backup on this computer; it reports failure and leaves the last successful sync checkpoint unchanged. The next operation starts with a fresh review. All Drive versions remain available, including concurrent offline branches; none is overwritten.
 
+## Setup and recovery guidance (October 28)
+
+Keep personal sync off until separate desktop setup, privacy approval and actual-device testing are completed. In Settings → Backups & import / export, **Check setup again** only checks configuration; it does not authorize or connect an account. Capture access is separate. Local backups and authorized file export remain available without Drive.
+
+| What Settings reports | Supported next step |
+| --- | --- |
+| Setup unavailable | Keep sync off and use local backups/export. After separately approved desktop configuration, Check setup again. |
+| Disconnected or expired access | Select the intended teacher; reconnect only with the approved account and explicit session consent, then refresh versions. |
+| Offline/network read failure | Check the connection and retry the read/refresh. No upload is automatically repeated. |
+| Teacher/account/private-file permission denied | Use an already authorized teacher/account and permitted private version, or authorized class export. Do not broaden permissions to bypass the check. |
+| Conflicts or stale review | Resolve every displayed choice, or cancel; refresh changed versions and review again before applying. |
+| Invalid backup/version | Choose an intact backup or supported export. Validation failure does not replace classroom records. Do not edit bytes to evade validation. |
+| Restore could not finish | Read the stated stage. Validation, safety-backup and old-checkpoint cleanup must succeed before replacing records; confirmed restore remains atomic. If replacement fails after checkpoint cleanup, a later sync uses a fresh conservative review. |
+| Upload outcome unconfirmed | A Drive file may already exist. Refresh and inspect the newest version; review an existing upload instead of sending it again. |
+| Merge completed locally, upload unconfirmed | Local merged records and the pre-sync safety snapshot remain. Refresh and start a new review; do not replay the old apply action. |
+| Upload verified, list/checkpoint update failed | The new version already exists. Refresh/review it; the failed bookkeeping or list refresh is not an instruction to upload again. |
+
+Actionable errors stay in Settings with the failed action, known local/remote state and next steps. Provider bodies, credentials and record-bearing exception text are not displayed. Failed upload/apply attempts disable another write until a fresh version list is obtained; retries are user-driven, and immutable versions are not overwritten. These checks do not establish that an offline or interrupted request never reached Drive. A successful local backup also cannot guarantee protection from device loss.
+
 ## Verified and remaining acceptance
 
 Fictional-data unit tests cover independent edits, explicit conflicts, verified ancestry/concurrent forks, unique linked-record fallback, actor/archive/organization boundaries, local staleness, relational rollback, backup retention/failure notification and upload uncertainty/privacy checks. `scripts/personalSyncSmoke.ts` exercises the production Settings flow, backup/restore confirmation/cancel, safety snapshot, preferences after reload, disabled setup and no external network requests. Native wiring uses the existing trusted-renderer IPC guard.

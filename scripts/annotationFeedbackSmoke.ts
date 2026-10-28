@@ -36,7 +36,7 @@ try {
  assert.equal(await page.evaluate(()=>document.activeElement?.tagName),focus,'opening editor never steals focus');
  const editor=image.getByLabel('Image comment text',{exact:true});
  assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'reason');
- await image.getByRole('button',{name:'Save feedback',exact:true}).focus();await page.keyboard.press('Shift+Digit3');
+ await image.getByTestId('feedback-keyboard-control').focus();await page.keyboard.press('Shift+Digit3');
  assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'voice','open photo feedback accepts confirmed category shortcut');
  await editor.focus();await page.keyboard.press('Shift+Digit2');
  assert.equal(await image.getByLabel('Image criterion',{exact:true}).inputValue(),'voice','typing never switches photo category');

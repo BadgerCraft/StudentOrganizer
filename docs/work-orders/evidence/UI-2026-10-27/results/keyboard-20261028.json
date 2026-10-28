@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "engine": "chromium",
+  "checks": [
+    "category/level phase",
+    "approved Shift4 to4(low), releasedTab to4(high) in text/photo",
+    "all-keys release gate",
+    "held/repeat/rapid/unknown/dual Shift guards",
+    "standalone Shift release",
+    "native Shift+Tab and Escape exit",
+    "typing/contenteditable/outside controls",
+    "blur/refocus and externally held keys",
+    "all Ctrl/Alt/Meta combinations and native/held Tab focus entry",
+    "preopen key lifetime quarantine",
+    "all17 exactscale increments/decrements and clamps",
+    "closed/reopened/final-review negatives",
+    "different attempt and photo-page contexts",
+    "no automatic finalization"
+  ],
+  "screenshots": [
+    "text-keyboard.png",
+    "photo-keyboard.png"
+  ]
+}

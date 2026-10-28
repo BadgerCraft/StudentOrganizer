@@ -153,7 +153,7 @@ describe('dated local recovery',()=>{
   const base=await readSnapshot(db);await store.state.put({id:'sync',base,lastRemoteId:'base-id'});const remote=structuredClone(base);remote.organizerSync={ancestors:[{id:'base-id',digest:await snapshotDigest(base)}]};remote.tables.students[0].firstName='Remote Fiction';const json=JSON.stringify(remote);
   const bridge={download:async()=>({ok:true,value:{json}}),upload:async()=>({ok:false,message:'offline'})} as unknown as DriveBridge;
   const preview=await previewSync(db,'user-tyler',{id:'remote-1',name:'Fictional snapshot',modifiedTime:'2026-10-27'},bridge,store);
-  await expect(finishSync(db,preview,{},bridge,store)).rejects.toThrow('offline');expect((await db.students.get(remote.tables.students[0].id))?.firstName).toBe('Remote Fiction');expect(await store.backups.where('reason').equals('before-sync').count()).toBe(1);
+  await expect(finishSync(db,preview,{},bridge,store)).rejects.toMatchObject({localState:'merged'});expect((await db.students.get(remote.tables.students[0].id))?.firstName).toBe('Remote Fiction');expect(await store.backups.where('reason').equals('before-sync').count()).toBe(1);
   expect((await store.state.get('sync'))?.base).toEqual(base);
  });
  it('does not treat divergent offline uploads or historical versions as a shared base',async()=>{

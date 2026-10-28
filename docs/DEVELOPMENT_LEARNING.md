@@ -412,3 +412,14 @@ Prepared questions for Tyler's review: (1) What changes an official grade after 
 A participation record includes a school-day session, event, summary, audit and queued mutation. The repaired transaction now rolls them all back together if the teacher changes mid-write; the UI also holds its context until the action settles so Undo retains the newest target. Archiving a teacher hides/deactivates an identity but does not transfer ownership of retained confidential notes. Full-workspace backup and sync keep that ownership boundary.
 
 Prepared review question: how does an atomic transaction differ from disabling navigation while a save is pending? Both are used here: one protects committed data, the other preserves the teacher’s current task and Undo target. Review/recall remains deferred; no understanding or PR49 merge approval inferred.
+
+
+## October 28 — focused keyboard gestures and truthful recovery messages (review pending)
+
+The feedback control has an explicit phase: Shift+1–4 first chooses a category, then the same chord chooses a level. Tab and standalone Shift step through the unchanged exact scale only while that control has focus. A gesture is one complete press/release sequence: the Shift from a category chord cannot also lower a level. Escape leaves the control; ordinary navigation and typing continue elsewhere. Tyler confirmed Shift+4 starts at 4(low); the next Tab selects 4(high), using the existing scale.
+
+Independent browser review found that a key held outside the control could be missed when focus entered it. Passive observation of currently held key codes during marking now quarantines that entry until release. It performs no shortcuts outside the control, saves no key history/text, and clears on window/context departure. Physical keys held before the browser could observe them are not OS-global knowledge. New regression coverage tests the actual focus transfer, not only a helper function.
+
+Recovery messages distinguish a failed read from a locally completed merge with an unconfirmed upload. Retrying a read is different from repeating a write that might already have reached Drive. The guidance work preserves that distinction and the separate approval for live setup. No live provider/device acceptance is inferred.
+
+Walkthrough prepared for this material PR49 increment; no understanding or acceptance inferred. Deferred learning check for the continuing product review: after a category chord, what must happen before a standalone Shift can lower the evidence level? Existing PR walkthrough remains the same review, not a new merge gate.

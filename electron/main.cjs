@@ -34,7 +34,7 @@ for (const method of ['status', 'connect', 'list', 'download', 'upload', 'discon
   ipcMain.handle(`organizer-drive:${method}`, async (event, ...args) => {
     requireUpdateCaller(event, args, ['download', 'upload'].includes(method) ? 1 : 0);
     try { return { ok: true, value: await organizerDrive[method](...args) }; }
-    catch (error) { return { ok: false, message: error instanceof DriveError ? error.message : 'Personal sync failed. Local work is retained; refresh versions before retrying.' }; }
+    catch (error) { return { ok: false, code: error instanceof DriveError && ['setup','auth','permission','network','uncertain','invalid','stale','conflict','storage'].includes(error.code) ? error.code : 'unknown', message: 'Personal sync did not complete. Check Settings for recovery steps.' }; }
   });
 }
 
