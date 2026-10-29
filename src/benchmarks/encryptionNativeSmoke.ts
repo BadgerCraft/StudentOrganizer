@@ -11,7 +11,8 @@ const env=Object.fromEntries(Object.entries(process.env).filter((v):v is [string
 const app=await electron.launch({executablePath:path.resolve('release/win-unpacked/Ontario Teacher Assessment.exe'),args:[`--user-data-dir=${profile}`],env,timeout:45000});
 try{
  const result=await app.evaluate(async({app},profile)=>{
-  const path=require('node:path'),fs=require('node:fs'),{DatabaseSync}=require('node:sqlite');
+  const path=(process as any).getBuiltinModule('path'),fs=(process as any).getBuiltinModule('fs'),{DatabaseSync}=(process as any).getBuiltinModule('node:sqlite');
+  const require=(process as any).getBuiltinModule('module').createRequire(path.join(app.getAppPath(),'package.json'));
   if(typeof DatabaseSync!=='function')throw Error('Packaged SQLite unavailable');
   const root=app.getAppPath();const cryptoApi=require(path.join(root,'electron/generated/encryption/shared/encryption/index.js'));
   const {createSqliteEncryptedVaultStore}=require(path.join(root,'electron/sqliteEncryptedVaultStore.cjs'));
