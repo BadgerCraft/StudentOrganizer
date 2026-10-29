@@ -14,6 +14,7 @@ let updateWindow;
 let installerUpdates;
 let encryptionRuntime, encryptionController, encryptedOrganizerDrive, activeLaunchPolicy;
 let replacingWorkspaceWindow = false;
+let encryptionShuttingDown = false;
 const { createEncryptionLaunchPolicy, attachEncryptionWindowGuards } = require('./encryptionLaunchPolicy.cjs');
 const { createEncryptionController, attachEncryptionIpc } = require('./encryptionIpc.cjs');
 function protectedWorkspace() {
@@ -24,7 +25,7 @@ function disconnectWorkspaceTransports() {
   captureDrive.disconnect(); organizerDrive.disconnect(); encryptedOrganizerDrive?.disconnect();
 }
 function lockWorkspace() {
-  encryptionController?.lockNow();
+  if (!encryptionShuttingDown) encryptionController?.lockNow();
   disconnectWorkspaceTransports();
 }
 const { createCaptureDrive, DriveError } = require('./captureDrive.cjs');
@@ -39,7 +40,10 @@ for (const method of ['status', 'connect', 'list', 'download', 'cancel', 'discon
     catch (error) { return { ok: false, message: error instanceof DriveError ? error.message : 'Drive action failed. Retry or use a local ZIP.' }; }
   });
 }
-app.on('before-quit', () => { lockWorkspace(); encryptionRuntime?.close(); });
+app.on('before-quit', () => {
+  if (encryptionShuttingDown) return;
+  lockWorkspace(); encryptionShuttingDown = true; encryptionRuntime?.close();
+});
 const { createOrganizerDrive } = require('./organizerDrive.cjs');
 // Separate purpose-specific operator approval. Capture access cannot enable full-workspace uploads.
 const organizerConfig = () => readConfig(path.join(app.getPath('userData'), 'organizer-sync-oauth.json'));
@@ -214,10 +218,14 @@ app.whenReady().then(async () => {
     assertFullAuthority: validation.assertMainFullWorkspaceAuthority,
     enrollFromRecovery: (...args) => encryptionRuntime.enrollFromRecovery(...args),
     cancelEnrollment: () => encryptionRuntime.cancelEnrollment(),
+    prepareRecoveryFile: (...args) => encryptionRuntime.prepareRecoveryFile(...args),
+    authorizeOfflineRecovery: (...args) => encryptionRuntime.authorizeOfflineRecovery(...args),
+    applyOfflineRecovery: (...args) => encryptionRuntime.applyOfflineRecovery(...args),
+    cancelOfflineRecovery: () => encryptionRuntime.cancelOfflineRecovery(),
     onLock: () => encryptionRuntime.lockNow(),
     files: require('./encryptedBackupFiles.cjs').createEncryptedBackupFiles({ dialog, parent: () => updateWindow }),
     replaceProtectedWindow: replaceWorkspaceWindow,
-    onContextChange: disconnectWorkspaceTransports
+    onContextChange: () => { disconnectWorkspaceTransports(); if (!encryptionShuttingDown) encryptionRuntime.cancelOfflineRecovery(); }
   });
   attachEncryptionIpc({ ipcMain, requireCaller: requireUpdateCaller, controller: encryptionController });
   encryptedOrganizerDrive = require('./encryptedOrganizerDrive.cjs').createEncryptedOrganizerDrive({

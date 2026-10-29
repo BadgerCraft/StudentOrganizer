@@ -10,8 +10,9 @@ function createEncryptedOrganizerDrive({ host, parseEnvelope, ...options }) {
   if(!host||!['status','sealTransfer','openTransfer','captureTransferContext','assertTransferContext'].every(key=>typeof host[key]==='function'))throw failure('setup');
   if(!parseEnvelope){try{parseEnvelope=require('./generated/encryption/shared/encryption/index.js').parseEnvelope;}catch{throw failure('setup');}}
   if(typeof parseEnvelope!=='function')throw failure('setup');
+  function hostStatus(){try{return host.status();}catch{return null;}}
   function scope(){
-    const value=host.status();
+    const value=hostStatus();
     if(!value||value.state!=='unlocked'||value.appId!=='student-organizer'||typeof value.vaultId!=='string'||!Number.isSafeInteger(value.keyVersion)||value.keyVersion<1)throw failure('auth');
     return {appId:value.appId,vaultId:value.vaultId,keyVersion:value.keyVersion};
   }
@@ -26,7 +27,7 @@ function createEncryptedOrganizerDrive({ host, parseEnvelope, ...options }) {
     if(!value||value.schemaVersion!==5||value.version!==2||!value.tables||typeof value.tables!=='object'||Array.isArray(value.tables))throw failure();
     return value;
   }
-  async function guarded(action){try{return await action();}catch(error){if(error?.code==='auth')transport?.disconnect();if(error instanceof DriveError)throw error;throw failure();}}
+  async function guarded(action){try{return await action();}catch(error){if(error?.code==='auth'){try{transport?.disconnect();}catch{ /* Preserve the safe authentication failure after cancellation. */ }}if(error instanceof DriveError)throw error;throw failure();}}
   const transport=createOrganizerDrive({...options,codec:{
     purpose:'personal-sync-encrypted-v1',namePrefix:'StudentOrganizer-Encrypted-',
     capture:async()=>{const expected=scope();try{const token=await host.captureTransferContext();await host.assertTransferContext(token);return Object.freeze({token,scope:expected});}catch{throw failure('auth');}},
@@ -49,10 +50,19 @@ function createEncryptedOrganizerDrive({ host, parseEnvelope, ...options }) {
       const current=scope();if(JSON.stringify(current)!==JSON.stringify(expected))throw failure('auth');return json;
     })
   }});
-  const status=()=>{const unlocked=host.status()?.state==='unlocked';const value=transport.status();return {...value,connected:value.connected&&unlocked,protection:'encrypted-v1',workspaceUnlocked:unlocked};};
+  const status=()=>{
+    const unlocked=hostStatus()?.state==='unlocked';let value;
+    try{value=transport.status();}catch{value={configured:false,connected:false};}
+    return {...value,connected:value.connected&&unlocked,protection:'encrypted-v1',workspaceUnlocked:unlocked};
+  };
   return Object.freeze({
     status,
-    disconnect:()=>({...transport.disconnect(),protection:'encrypted-v1',workspaceUnlocked:host.status()?.state==='unlocked'}),
+    disconnect:()=>{
+      // A closed window can make host/configuration status unavailable. Aborting
+      // and clearing access must still happen, and shutdown must remain nonthrowing.
+      try{transport.disconnect();}catch{ /* Base transport clears access before querying status. */ }
+      return {...status(),connected:false};
+    },
     connect:()=>guarded(async()=>{scope();await transport.connect();return status();}),
     list:()=>guarded(async()=>{scope();return transport.list();}),
     download:id=>guarded(async()=>{scope();return transport.download(id);}),

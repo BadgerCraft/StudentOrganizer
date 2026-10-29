@@ -25,6 +25,10 @@ export interface DesktopEncryption {
   verifyDeviceResponse(deviceId: string, ciphertext: string): Promise<EncryptionResult<null>>;
   completeMigration(snapshot: StudentOrganizerWorkingBundle): Promise<EncryptionResult<{ revision: number }>>;
   enrollFromRecovery(code: string, wrappedKey: string, challenge: unknown): Promise<EncryptionResult<{ deviceId: string; ciphertext: string }>>;
+  previewOfflineRecoveryFile(code: string): Promise<EncryptionResult<PickedEncryptedFile>>;
+  authorizeOfflineRecovery(token: string, userId: string): Promise<EncryptionResult<EncryptedFilePreview>>;
+  applyOfflineRecovery(token: string): Promise<EncryptionResult<{ revision: number }>>;
+  cancelOfflineRecovery(): Promise<EncryptionResult<null>>;
   previewRecoveryFile(): Promise<EncryptionResult<PickedEncryptedFile>>;
   authorizeRecovery(token: string, userId: string): Promise<EncryptionResult<EncryptedFilePreview>>;
   previewImportFile(): Promise<EncryptionResult<PickedEncryptedFile>>;

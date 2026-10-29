@@ -67,7 +67,8 @@ describe('complete streamed immutable workspace archive',()=>{
     let largestWrite=0;const wire:Buffer[]=[];const meta=await exportWorkspaceArchive({...f.exportOptions,root:f.root(),sourceHead:{revision:4,hash:hash(f.root().ciphertext)},write:async(bytes:Uint8Array)=>{largestWrite=Math.max(largestWrite,bytes.length);wire.push(Buffer.from(bytes));}});
     expect(largestWrite).toBeLessThan(8*1024*1024);expect(parse(wire).filter(v=>v.type==='chunk').some(v=>v.index===1)).toBe(true);expect(meta.bytes).toBeGreaterThan(body.length);
     const restored=await importWorkspaceArchive({...await f.target(),read:source(wire)});let total=0;await restored.workspace.readRecordStream({namespace:'recovery',table:'backup-content',key:'legacy'},async(bytes:Uint8Array)=>{total+=bytes.length;});expect(total).toBe(new TextEncoder().encode(JSON.stringify(body)).length);restored.workspace.lock();
-  },30000);
+  // Real multi-megabyte AEAD/SQLite roundtrip shares CPU on Intel CI.
+  },90000);
   it('rejects truncated, reordered, duplicate and corrupted streams without returning a preview',async()=>{
     const f=await fixture(), out=await exported(f), values=parse(out.wire);const chunk=values.findIndex(v=>v.type==='chunk');
     for(const mutate of [(v:any[])=>v.slice(0,-1),(v:any[])=>v.concat([v.at(-1)]),(v:any[])=>{v[chunk].ciphertext=v[chunk].ciphertext.slice(0,-1)+'x';return v;},(v:any[])=>{v.splice(chunk,0,v[chunk]);return v;},(v:any[])=>{[v[chunk],v[chunk-1]]=[v[chunk-1],v[chunk]];return v;}]){

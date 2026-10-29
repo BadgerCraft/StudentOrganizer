@@ -1,7 +1,7 @@
 // Main-owned assembly. Default activation is off; a renderer cannot change it.
 const fs = require('node:fs');
 const path = require('node:path');
-const { randomUUID, createHash } = require('node:crypto');
+const { randomUUID, createHash, timingSafeEqual } = require('node:crypto');
 const { createEncryptionProfile } = require('./encryptionProfile.cjs');
 const { createSqliteEncryptedVaultStore, inspectSqliteVaultDescriptor } = require('./sqliteEncryptedVaultStore.cjs');
 const { createProtectedRevisionLedger } = require('./protectedRevisionLedger.cjs');
@@ -13,13 +13,14 @@ const fail = (code = 'ENCRYPTION_RUNTIME_LOCKED') => Object.assign(Error('Protec
 async function createNativeEncryptionRuntime({ directory, platform = process.platform, activationGate = () => false, createHost,
   createProfile = createEncryptionProfile, profileOptions = {}, createStore = createSqliteEncryptedVaultStore,
   inspectDescriptor = inspectSqliteVaultDescriptor, createLedger = createProtectedRevisionLedger,
-  createChunks = createCipherChunkStore, createMarker = createApplicationProtectionMarker, cryptoRuntime, DatabaseSync, loadLedgerBinding = () => require('./generated/windowsCredentialLedger.node'), loadMacBinding }) {
+  createChunks = createCipherChunkStore, createMarker = createApplicationProtectionMarker, prepareOfflineRecovery = input => require('./structuredEncryptionHost.cjs').prepareOfflineRecovery(input), cryptoRuntime, DatabaseSync, loadLedgerBinding = () => require('./generated/windowsCredentialLedger.node'), loadMacBinding }) {
   if (!path.isAbsolute(directory) || typeof createHost !== 'function' || typeof activationGate !== 'function') throw fail();
   const working = path.join(directory, 'working'), keyDirectory = path.join(directory, 'device-keys');
   const profile = createProfile({ ...profileOptions, directory: keyDirectory, platform, activationGate });
   const marker = createMarker({ appId: APP, platform, loadWindowsBinding: loadLedgerBinding, loadMacBinding });
-  const api = cryptoRuntime || require('./generated/encryption/shared/encryption/index.js');
+  const api = cryptoRuntime || { ...require('./generated/encryption/shared/encryption/index.js'), ...require('./generated/encryption/src/security/encryptedWorkspace.js') };
   let selected = { appId: APP, vaultId: randomUUID(), keyVersion: 1 }, identity = null, host = null, raw = null, coordinated = null, closed = false, epoch = 0;
+  let offlineReview = null, offlinePreparation = null;
   let mode = 'legacy', initializationError = null, freshAuthority = null, activationReady = false, enrollmentResponse = null, explicitLegacyReturn = false;
   function open() { if (closed) throw fail(); }
   function present(filename) { try { fs.lstatSync(filename); return true; } catch (e) { return e.code !== 'ENOENT'; } }
@@ -33,13 +34,37 @@ async function createNativeEncryptionRuntime({ directory, platform = process.pla
     const st = fs.lstatSync(directory); if (!st.isDirectory() || st.isSymbolicLink() || (process.platform !== 'win32' && st.mode & 0o077)) throw fail();
   }
   async function allowed() { open(); if (await activationGate() !== true) throw fail('ENCRYPTION_ACTIVATION_REQUIRED'); }
-  function lockNow() { epoch++; freshAuthority = null; host?.lock(); }
+  function disposeOffline(selected) {
+    if (!selected) return;
+    selected.proof?.close();
+    // Only a generated child of the main-owned staging directory is removed.
+    // Abandoned staging contains ciphertext only and is never a working root.
+    if (selected.stagingDirectory) fs.promises.rm(selected.stagingDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+  function revokeOffline() { const selected = offlineReview; offlineReview = null; offlinePreparation = null; disposeOffline(selected); }
+  function lockNow() { epoch++; freshAuthority = null; revokeOffline(); host?.lock(); }
   function hostScope() { return { appId: selected.appId, vaultId: selected.vaultId, keyVersion: selected.keyVersion }; }
+  async function enrollEmptyReceipt(scope, current, requireAbsent = false, allowCreate = false) {
+    const artifactsBeforeLease = protectedArtifacts(), registry = profile.profileStore(scope);
+    const state = await registry.withExclusiveProfileLock(async () => {
+      current(); const ledger = createLedger({ scope, platform, assertProfileLease: registry.assertProfileLease, loadWindowsBinding: loadLedgerBinding, loadMacBinding });
+      const existing = await ledger.read(); current();
+      if (existing === null) {
+        if (artifactsBeforeLease || !allowCreate) throw fail('ENCRYPTION_ENROLLMENT_RECEIPT_MISSING');
+        await ledger.compareAndSwap(null, { head: null, pending: null }); current(); return 'enrolled';
+      }
+      return existing.head === null && existing.pending === null && !requireAbsent ? 'empty' : 'established';
+    }); current();
+    if (state === 'established') throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED');
+  }
   async function withFreshEnrollment(assertCurrent, action) {
     await allowed(); if (typeof assertCurrent !== 'function' || typeof action !== 'function' || freshAuthority) throw fail();
     const entered = epoch; assertCurrent();
+    const marked = await marker.read(); open(); if (entered !== epoch) throw fail(); assertCurrent();
     await marker.markProtected(() => { open(); if (entered !== epoch) throw fail(); assertCurrent(); });
     assertCurrent(); ensureRoot();
+    const current = () => { open(); if (entered !== epoch) throw fail(); assertCurrent(); };
+    await enrollEmptyReceipt(hostScope(), current, false, !marked); current();
     freshAuthority = () => { open(); if (entered !== epoch) throw fail(); assertCurrent(); };
     try { return await action(); } finally { freshAuthority = null; }
   }
@@ -83,12 +108,28 @@ async function createNativeEncryptionRuntime({ directory, platform = process.pla
       if (result.status !== 'durable') { lockNow(); throw fail(result.status === 'uncertain' ? 'ENCRYPTED_STORAGE_COMMIT_UNCERTAIN' : 'ENCRYPTED_STORAGE_STALE'); }
       trustedHead = result.head;
     }
-    coordinated = Object.freeze({ read, commit, initialize: async () => { await allowed(); await ensureProtectionIntent(); ensureRoot(); await raw.initialize(); },
+    async function readForPreparation() {
+      open(); const entered = epoch, current = () => { open(); if (entered !== epoch) throw fail('ENCRYPTION_CONTEXT_CHANGED'); };
+      if (mode !== 'legacy' || initializationError) throw fail('ENCRYPTION_ENROLLMENT_REQUIRED');
+      if (!protectedArtifacts()) {
+        const policy = await activationGate(); current();
+        if (policy !== true && policy !== false) throw fail();
+        // The staged default-off binary cannot activate. Once configured, OS
+        // presence discovery is mandatory even for prospective preparation.
+        if (policy && await marker.read()) throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED'); current();
+        if (protectedArtifacts()) throw fail('ENCRYPTION_CONTEXT_CHANGED');
+        return { kind: 'fresh', checkpoint: null };
+      }
+      if (!explicitLegacyReturn) throw fail('ENCRYPTION_ENROLLMENT_REQUIRED');
+      await allowed(); current(); await coordinated.inspectEmptyEnrollment(current); current();
+      return { kind: 'pending', checkpoint: null };
+    }
+    coordinated = Object.freeze({ read, readForPreparation, commit, initialize: async () => { await allowed(); await ensureProtectionIntent(); ensureRoot(); await raw.initialize(); },
       readAux: kind => raw.readAux(kind), saveAux: (kind, value) => raw.saveAux(kind, value),
       getTrustedHead: () => trustedHead, reconcile: protocol.reconcile,
       inspectEmptyEnrollment: assertCurrent => profileStore.withExclusiveProfileLock(async () => {
         assertCurrent(); const state = await ledger.read(); assertCurrent(); const checkpoint = await raw.read(); assertCurrent();
-        if (checkpoint !== null || state && (state.head !== null || state.pending !== null)) throw fail('ENCRYPTION_RECONCILIATION_REQUIRED');
+        if (checkpoint !== null || state === null || state.head !== null || state.pending !== null) throw fail('ENCRYPTION_RECONCILIATION_REQUIRED');
       }) });
     return coordinated;
   }
@@ -125,8 +166,8 @@ async function createNativeEncryptionRuntime({ directory, platform = process.pla
         const inspected = createStore({ directory: working, scope: hostScope(), deviceId: identity.deviceId, DatabaseSync });
         const checkpoint = await inspected.read();
         if (checkpoint === null) {
-          mode = 'enrollment-pending';
-          if (explicitLegacyReturn) { const entered = epoch; await assembleStore().inspectEmptyEnrollment(() => { open(); if (entered !== epoch) throw fail(); }); mode = 'legacy'; }
+          const entered = epoch; await assembleStore().inspectEmptyEnrollment(() => { open(); if (entered !== epoch) throw fail(); });
+          mode = explicitLegacyReturn ? 'legacy' : 'enrollment-pending';
           const saved = await inspected.readAux('enrollment-response');
           if (saved !== null) {
             const value = JSON.parse(saved), c = api.parseEnvelope(value.ciphertext).context;
@@ -142,21 +183,117 @@ async function createNativeEncryptionRuntime({ directory, platform = process.pla
     } catch (e) { initializationError = e?.code || 'ENCRYPTION_RUNTIME_LOCKED'; mode = protectionRequired ? 'encrypted' : 'legacy'; lockNow(); }
     return status();
   }
-  async function enrollFromRecovery(code, wrappedKey, challenge) {
-    await allowed(); const entered = epoch;
-    if (workspaceArtifacts() || !identity || host?.status?.().state === 'preparing') throw fail();
-    const context = api.parseEnvelope(wrappedKey).context;
-    if (context.appId !== APP || context.purpose !== 'recovery-key' || context.recordId !== 'master-key' || context.revision !== 0 || challenge?.deviceId !== identity.deviceId || challenge?.context?.appId !== APP || challenge.context.vaultId !== context.vaultId || challenge.context.keyVersion !== context.keyVersion) throw fail();
-    let recovered;
+  async function assertFreshRecovery(current) {
+    current(); await allowed(); current();
+    if (mode !== 'legacy' || initializationError || !identity || identity.enrolled || protectedArtifacts() || host?.status?.().state === 'preparing') throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED');
+    const marked = await marker.read(); current();
+    if (marked || protectedArtifacts()) throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED');
+  }
+  function privateStagingDirectory() {
+    ensureRoot(); const base = path.join(directory, 'recovery-staging');
+    try { fs.mkdirSync(base, { mode: 0o700 }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    const st = fs.lstatSync(base); if (!st.isDirectory() || st.isSymbolicLink() || (process.platform !== 'win32' && st.mode & 0o077)) throw fail();
+    // The ciphertext store creates this generated private child lazily.
+    return path.join(base, randomUUID());
+  }
+  async function prepareRecoveryFile(code, read) {
+    open(); if (offlinePreparation || offlineReview?.applying) throw fail('ENCRYPTION_BUSY');
+    const entered = epoch, preparation = {}; offlinePreparation = preparation;
+    const current = () => { open(); if (entered !== epoch || offlinePreparation !== preparation && offlineReview?.token !== preparation) throw fail('ENCRYPTION_CONTEXT_CHANGED'); };
+    let proof = null, stagingDirectory = null;
+    const old = offlineReview; offlineReview = null; disposeOffline(old);
     try {
-      recovered = await api.recoverMasterKey(code, wrappedKey, APP, context.vaultId, context.keyVersion);
-      await api.answerEnrollmentChallenge(recovered, challenge);
-      if (entered !== epoch || workspaceArtifacts()) throw fail(); ensureRoot();
-      host?.lock(); host = null; coordinated = null; raw = null; selected = { appId: APP, vaultId: context.vaultId, keyVersion: context.keyVersion };
-      const result = await withFreshEnrollment(() => { open(); if (entered !== epoch) throw fail(); }, () => getHost().enrollFromRecovery(code, wrappedKey, challenge));
-      await raw.saveAux('recovery-wrapper', wrappedKey); await raw.saveAux('enrollment-response', JSON.stringify({ deviceId: result.deviceId, ciphertext: result.ciphertext }));
-      mode = 'enrollment-pending'; enrollmentResponse = result; return result;
-    } finally { recovered?.fill(0); }
+      await assertFreshRecovery(current); current();
+      if (typeof code !== 'string' || typeof read?.[Symbol.asyncIterator] !== 'function' || typeof prepareOfflineRecovery !== 'function') throw fail();
+      stagingDirectory = privateStagingDirectory(); current();
+      proof = await prepareOfflineRecovery({ code, read, assertCurrent: current,
+        createPrivateChunkStore: (scope, verifyManifest, assertPublication) => {
+          current(); if (scope?.appId !== APP || typeof verifyManifest !== 'function' || typeof assertPublication !== 'function') throw fail();
+          return createChunks({ directory: stagingDirectory, scope, DatabaseSync, verifyManifest, hooks: { beforeCommit: () => { current(); assertPublication(); } } });
+        } }); current();
+      if (!proof || proof.scope?.appId !== APP || typeof proof.publicReview !== 'function' || typeof proof.authorize !== 'function' || typeof proof.assertAuthorized !== 'function' || typeof proof.close !== 'function') throw fail();
+      const review = structuredClone(proof.publicReview()), handle = Object.freeze({});
+      offlineReview = { handle, proof, stagingDirectory, epoch: entered, token: preparation, actor: null };
+      proof = null; stagingDirectory = null;
+      return { handle, ...review };
+    } finally {
+      if (offlinePreparation === preparation) offlinePreparation = null;
+      disposeOffline({ proof, stagingDirectory });
+    }
+  }
+  function selectedRecovery(handle, actor) {
+    open(); const selected = offlineReview;
+    if (!selected || selected.handle !== handle || selected.epoch !== epoch || (actor !== undefined && selected.actor !== actor)) throw fail('ENCRYPTION_REVIEW_EXPIRED');
+    return selected;
+  }
+  async function authorizeOfflineRecovery(handle, actor) {
+    const selected = selectedRecovery(handle), entered = epoch;
+    if (selected.applying) throw fail('ENCRYPTION_BUSY');
+    const current = () => { open(); if (entered !== epoch || offlineReview !== selected) throw fail('ENCRYPTION_REVIEW_EXPIRED'); };
+    await assertFreshRecovery(current); if (typeof actor !== 'string') throw fail();
+    const result = await selected.proof.authorize(actor); current(); selected.proof.assertAuthorized(actor); selected.actor = actor;
+    return { handle, ...structuredClone(result) };
+  }
+  async function applyOfflineRecovery(handle, actor) {
+    if (typeof actor !== 'string') throw fail('ENCRYPTION_REVIEW_EXPIRED');
+    const selected = selectedRecovery(handle, actor), entered = epoch;
+    if (selected.applying) throw fail('ENCRYPTION_BUSY'); selected.applying = true;
+    const current = () => { open(); if (entered !== epoch || offlineReview !== selected) throw fail('ENCRYPTION_REVIEW_EXPIRED'); };
+    let intent = false;
+    try {
+      await assertFreshRecovery(current); selected.proof.assertAuthorized(actor); current();
+      // No keys or live metadata are provisioned by preview. The explicit apply
+      // installs sticky OS intent before the first actual profile lease/artifact.
+      intent = true;
+      await marker.markProtected(current); current(); ensureRoot();
+      // This remains a genuinely fresh recovery path: a preexisting empty
+      // receipt is rejected too. Resume belongs to the explicit setup path.
+      await enrollEmptyReceipt(selected.proof.scope, current, true, true); current();
+      host?.lock(); host = null; coordinated = null; raw = null;
+      selected.proof.assertAuthorized(actor);
+      selected.scope = Object.freeze({ appId: APP, vaultId: selected.proof.scope.vaultId, keyVersion: selected.proof.scope.keyVersion });
+      // This adoption is main-only and follows complete archive authentication
+      // plus explicit operator choice and confirmation. Headers alone never select it.
+      const adopted = selected.scope;
+      mode = 'enrollment-pending'; explicitLegacyReturn = false;
+      selectedScope(adopted);
+      const target = getHost(); if (typeof target.applyOfflineRecovery !== 'function') throw fail();
+      const result = await target.applyOfflineRecovery(selected.proof, actor); current();
+      if (result?.revision !== 1) throw fail('ENCRYPTION_RECOVERY_UNCONFIRMED');
+      mode = 'encrypted'; offlineReview = null; return result;
+    } catch (error) {
+      if (intent) { initializationError = 'ENCRYPTION_RECOVERY_UNCONFIRMED'; mode = 'encrypted'; activationReady = false; lockNow(); }
+      throw error;
+    } finally { if (offlineReview === selected) offlineReview = null; disposeOffline(selected); }
+  }
+  function selectedScope(scope) { selected = { appId: APP, vaultId: scope.vaultId, keyVersion: scope.keyVersion }; }
+  function cancelOfflineRecovery() { open(); if (offlinePreparation || offlineReview?.applying) lockNow(); else revokeOffline(); return null; }
+  async function enrollFromRecovery(code, wrappedKey, challenge) {
+    open(); const entered = epoch;
+    const current = () => { open(); if (entered !== epoch) throw fail('ENCRYPTION_CONTEXT_CHANGED'); };
+    await allowed(); current();
+    const pending = (mode === 'enrollment-pending' || mode === 'legacy' && explicitLegacyReturn) && workspaceArtifacts();
+    if (initializationError || !identity || host?.status?.().state === 'preparing' || workspaceArtifacts() && !pending) throw fail();
+    if (pending) { getHost(); await coordinated.inspectEmptyEnrollment(current); current(); }
+    else { if (protectedArtifacts() || await marker.read()) throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED'); current(); }
+    const context = api.parseEnvelope(wrappedKey).context;
+    if (context.appId !== APP || context.purpose !== 'recovery-key' || context.recordId !== 'master-key' || context.revision !== 0 || challenge?.deviceId !== identity.deviceId || challenge?.context?.appId !== APP || challenge.context.vaultId !== context.vaultId || challenge.context.keyVersion !== context.keyVersion || pending && (context.vaultId !== selected.vaultId || context.keyVersion !== selected.keyVersion)) throw fail();
+    let recovered, retained;
+    try {
+      recovered = await api.recoverMasterKey(code, wrappedKey, APP, context.vaultId, context.keyVersion); current();
+      await api.answerEnrollmentChallenge(recovered, challenge); current();
+      if (pending) {
+        retained = await profile.vaultKeys(hostScope()).load(hostScope()); current();
+        if (!retained) throw fail('DEVICE_KEY_ENROLLMENT_REQUIRED');
+        if (retained.length !== 32 || !timingSafeEqual(retained, recovered)) throw fail('DEVICE_KEY_CONTEXT_CHANGED');
+        await coordinated.inspectEmptyEnrollment(current); current();
+      } else if (protectedArtifacts()) throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED');
+      host?.lock(); host = null; coordinated = null; raw = null;
+      selected = { appId: APP, vaultId: context.vaultId, keyVersion: context.keyVersion };
+      const result = await withFreshEnrollment(current, () => getHost().enrollFromRecovery(code, wrappedKey, challenge)); current();
+      // The host owns confirmed auxiliary writes under the same proof guard.
+      mode = 'enrollment-pending'; explicitLegacyReturn = false; enrollmentResponse = result; return result;
+    } finally { recovered?.fill(0); retained?.fill(0); }
   }
   async function cancelEnrollment() {
     open(); const entered = epoch;
@@ -170,7 +307,7 @@ async function createNativeEncryptionRuntime({ directory, platform = process.pla
     explicitLegacyReturn = true; mode = 'legacy'; return null;
   }
   await refreshMode();
-  return Object.freeze({ getHost, status, refreshMode, enrollFromRecovery, cancelEnrollment, lockNow,
+  return Object.freeze({ getHost, status, refreshMode, enrollFromRecovery, cancelEnrollment, prepareRecoveryFile, authorizeOfflineRecovery, applyOfflineRecovery, cancelOfflineRecovery, lockNow,
     prepareLaunch: refreshMode, requireProtection: () => { open(); lockNow(); explicitLegacyReturn = false; if (mode === 'legacy') mode = 'enrollment-pending'; return status(); },
     close: () => { if (!closed) { lockNow(); closed = true; profile.close(); } } });
 }

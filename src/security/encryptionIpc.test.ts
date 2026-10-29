@@ -25,6 +25,40 @@ describe('native encrypted IPC boundary', () => {
     const f = fixture(); let runtimeLocks = 0; f.options.onLock = () => { runtimeLocks++; }; const c = createEncryptionController(f.options);
     await c.invoke('lock', []); expect(runtimeLocks).toBe(1); expect(f.host.status().state).toBe('locked');
   });
+  it('keeps the legacy teacher separate from a code-only archive owner and exposes only an opaque review ticket', async () => {
+    const f = fixture(), handle = Object.freeze({}), metadata = { exportedAt: '2026-10-29T00:00:00Z', totalRecords: 3, tableCount: 2 }, operators = [{ id: 'archive-owner', name: 'Fictional owner' }];
+    const calls: unknown[] = []; f.options.getStatus = () => ({ mode: 'legacy', ephemeralPartition: false });
+    f.options.files = { previewFile: async (read: any) => ({ cancelled: false, ...await read({ [Symbol.asyncIterator]: async function* () {} }) }) };
+    f.options.prepareRecoveryFile = async (code: string) => { expect(code).toBe('synthetic-private-code'); return { handle, metadata, operators }; };
+    f.options.cancelOfflineRecovery = () => {};
+    f.options.authorizeOfflineRecovery = async (selected: object, actor: string) => { expect(selected).toBe(handle); expect(actor).toBe('archive-owner'); return { metadata, operators }; };
+    f.options.applyOfflineRecovery = async (...args: unknown[]) => { calls.push(args); return { revision: 1 }; };
+    const c = createEncryptionController(f.options); await c.invoke('selectActingTeacher', ['owner']);
+    const preview = await c.invoke('previewOfflineRecoveryFile', ['synthetic-private-code']); expect(preview).toMatchObject({ cancelled: false, metadata, operators }); expect(JSON.stringify(preview)).not.toContain('synthetic-private-code'); expect(preview.handle).toBeUndefined();
+    await expect(c.invoke('applyOfflineRecovery', [preview.token])).rejects.toThrow(); // authorization is required and consumes no other actor
+    const second = await c.invoke('previewOfflineRecoveryFile', ['synthetic-private-code']), authorized = await c.invoke('authorizeOfflineRecovery', [second.token, 'archive-owner']);
+    expect(c.getBoundActor()).toBe('owner'); expect(await c.invoke('applyOfflineRecovery', [authorized.token])).toEqual({ revision: 1 }); expect(calls).toEqual([[handle, 'archive-owner']]); expect(f.switches).toBe(1);
+  });
+  it('invalidates a code-only recovery ticket when the legacy teacher changes', async () => {
+    const f = fixture(); f.options.getStatus = () => ({ mode: 'legacy', ephemeralPartition: false });
+    f.options.files = { previewFile: async (read: any) => ({ cancelled: false, ...await read({}) }) }; f.options.prepareRecoveryFile = async () => ({ handle: {}, metadata: {}, operators: [] });
+    const c = createEncryptionController(f.options); const preview = await c.invoke('previewOfflineRecoveryFile', ['synthetic']); await c.invoke('selectActingTeacher', ['co-teacher']);
+    await expect(c.invoke('authorizeOfflineRecovery', [preview.token, 'archive-owner'])).rejects.toMatchObject({ code: 'ENCRYPTION_REVIEW_EXPIRED' }); expect(f.switches).toBe(0);
+  });
+  it('revokes private recovery material when an invalid apply consumes the review token', async () => {
+    const f = fixture(); let cancels = 0, applies = 0; f.options.getStatus = () => ({ mode: 'legacy', ephemeralPartition: false });
+    f.options.files = { previewFile: async (read: any) => ({ cancelled: false, ...await read({}) }) }; f.options.prepareRecoveryFile = async () => ({ handle: {}, metadata: {}, operators: [] });
+    f.options.authorizeOfflineRecovery = async () => ({ metadata: {}, operators: [] }); f.options.cancelOfflineRecovery = () => { cancels++; }; f.options.applyOfflineRecovery = async () => { applies++; };
+    const c = createEncryptionController(f.options), preview = await c.invoke('previewOfflineRecoveryFile', ['synthetic']), authorized = await c.invoke('authorizeOfflineRecovery', [preview.token, 'archive-owner']);
+    await expect(c.invoke('applyOfflineRecovery', ['stale-' + authorized.token])).rejects.toMatchObject({ code: 'ENCRYPTION_REVIEW_EXPIRED' }); expect(cancels).toBe(1); expect(applies).toBe(0); expect(f.switches).toBe(0);
+  });
+  it('cancels held code-only verification before a late private handle can be accepted', async () => {
+    const f = fixture(); let release!: () => void, cancelled = 0; const held = new Promise<void>(resolve => { release = resolve; });
+    f.options.getStatus = () => ({ mode: 'legacy', ephemeralPartition: false }); f.options.files = { previewFile: async (read: any) => ({ cancelled: false, ...await read({}) }) };
+    f.options.prepareRecoveryFile = async () => { await held; return { handle: {}, metadata: {}, operators: [] }; }; f.options.cancelOfflineRecovery = () => { cancelled++; };
+    const c = createEncryptionController(f.options), preview = c.invoke('previewOfflineRecoveryFile', ['synthetic']); await c.invoke('cancelOfflineRecovery', []); release();
+    await expect(preview).rejects.toMatchObject({ code: 'ENCRYPTION_CONTEXT_CHANGED' }); expect(cancelled).toBe(1); expect(f.switches).toBe(0);
+  });
   it('preserves ordinary co-teacher persistence while requiring a separately selected operator for full export', async () => {
     const f = fixture(); await f.controller.invoke('read', []); await f.controller.invoke('selectActingTeacher', ['co-teacher']);
     await f.controller.invoke('commit', [1, original]); expect(f.commits).toBe(1); expect(f.authorizations).toBe(0);

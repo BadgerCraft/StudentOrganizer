@@ -4,6 +4,9 @@ const { createHash, randomUUID } = require('node:crypto');
 const { StructuredWorkspace, measureRecord } = require('./structuredWorkspace.cjs');
 const { recordsFromBundle, bundleFromRecords, bundleViewFromRecords, recordChangesFromLegacyDelta } = require('./studentOrganizerRecords.cjs');
 const { exportWorkspaceArchive, importWorkspaceArchive } = require('./structuredWorkspaceArchive.cjs');
+const { readRootView, verifyRootView } = require('./encryptionRootValidation.cjs');
+const { prepareOfflineRecovery, copyOfflineRecoveryGraph, offlineProofDetails, preflightOfflineProof } = require('./offlineRecovery.cjs');
+const { preflightStartupRecords } = require('./startupBudget.cjs');
 const APP_ID = 'student-organizer';
 const fail = (code = 'ENCRYPTION_HOST_LOCKED') => Object.assign(new Error('The protected action was not verified. Reopen the verified workspace before retrying an uncertain write.'), { code });
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -15,17 +18,18 @@ function sourceHash(bundle) {
   for (const record of records) digest.update(JSON.stringify([record.id, record.measurement.bytes, record.measurement.contentHash]) + '\n');
   return digest.digest('hex');
 }
-function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, keyStore, workspaceStore, rawStore = workspaceStore, createChunkStore, activationGate = () => false, withFreshEnrollment, cryptoRuntime, validationRuntime, structuredRuntime = StructuredWorkspace }) {
+function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, keyStore, workspaceStore, rawStore = workspaceStore, createChunkStore, activationGate = () => false, withFreshEnrollment, cryptoRuntime, validationRuntime, structuredRuntime = StructuredWorkspace, startupLimits = {} }) {
   if (typeof vaultId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(vaultId) || typeof deviceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(deviceId) || !Number.isSafeInteger(keyVersion) || keyVersion < 1 || !keyStore || !workspaceStore || typeof createChunkStore !== 'function' || typeof withFreshEnrollment !== 'function') throw fail('ENCRYPTION_HOST_CONFIG');
   const scope = Object.freeze({ appId: APP_ID, vaultId, keyVersion });
   const api = cryptoRuntime || { ...require('./generated/encryption/shared/encryption/index.js'), ...require('./generated/encryption/src/security/encryptedWorkspace.js') };
   const validation = validationRuntime || require('./generated/encryption/src/security/mainBundleValidation.js');
   const cache = validation.createMainBundleValidationCache();
+  let measurements = new WeakMap();
   let session = null, preparation = null, snapshot = null, records = null, backupCatalog = [], safetyRoots = new Map(), epoch = 0, transferEpoch = 0, queue = Promise.resolve(), receiverVerified = false, archiveReview = null;
   const tokens = new WeakMap();
   function closePreparation() { preparation?.migration.close(); preparation?.key.fill(0); preparation = null; }
   function closeArchiveReview() { archiveReview?.workspace.lock(); archiveReview = null; }
-  function lock() { epoch++; transferEpoch++; session?.lock(); session = null; snapshot = null; records = null; backupCatalog = []; safetyRoots = new Map(); receiverVerified = false; closeArchiveReview(); closePreparation(); cache.clear(); }
+  function lock() { epoch++; transferEpoch++; session?.lock(); session = null; snapshot = null; records = null; backupCatalog = []; safetyRoots = new Map(); receiverVerified = false; closeArchiveReview(); closePreparation(); cache.clear(); measurements = new WeakMap(); }
   function run(action) {
     const entered = epoch;
     const task = queue.then(async () => {
@@ -35,12 +39,51 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
         // A failed engine read/export can lock its private key. Reflect that
         // state in the host instead of retaining an apparently unlocked shell.
         if (session) { try { session.getRevision(); } catch { lock(); } }
+        if (error?.code === 'STRUCTURED_WORKSPACE_READ_LIMIT') throw fail('ENCRYPTION_CAPACITY_LIMIT');
         if (typeof error?.code === 'string' && /^(ENCRYPTION_|DEVICE_KEY_|ENCRYPTED_STORAGE_)[A-Z_]+$/.test(error.code)) throw error; throw fail();
       }
     }); queue = task.catch(() => {}); return task;
   }
   async function activation(current) { if (await activationGate() !== true) { lock(); throw fail('ENCRYPTION_ACTIVATION_REQUIRED'); } current(); }
-  function options(key, current, recoveryWrapperHash) { return { scope, key, checkpointStore: workspaceStore, createChunkStore, assertCurrent: current, ...(recoveryWrapperHash ? { recoveryWrapperHash } : {}) }; }
+  function options(key, current, recoveryWrapperHash) { return { scope, key, checkpointStore: workspaceStore, createChunkStore, assertCurrent: current, ...(startupLimits.maxRecordBytes ? { maxReadRecordBytes: startupLimits.maxRecordBytes } : {}), ...(startupLimits.maxAllBytes ? { maxReadAllBytes: startupLimits.maxAllBytes } : {}), ...(recoveryWrapperHash ? { recoveryWrapperHash } : {}) }; }
+  function measureSelection(selected) { return preflightStartupRecords(selected, { ...startupLimits, measurements }); }
+  function selectedBundle(value) {
+    const selected = [];
+    for (const record of recordsFromBundle(value)) {
+      if (record.namespace === 'recovery' && record.table === 'backup-content') {
+        // Lazy history is not part of startup's aggregate, but each legacy body
+        // must remain readable for a verified manual recovery/export.
+        preflightStartupRecords([record], { ...startupLimits, maxAllBytes: undefined });
+      } else selected.push(record);
+    }
+    measureSelection(selected); return selected;
+  }
+  function currentSelection() {
+    const selected = new Map(records || []);
+    for (const [id, value] of safetyRoots) {
+      const record = { namespace: 'metadata', key: (id.startsWith('snapshot/') ? 'internal-backup/' : 'internal-safety/') + value.id, value };
+      selected.set(identity(record), record);
+    }
+    return selected;
+  }
+  function preflightChanges(changes, base = currentSelection()) {
+    const selected = new Map(base);
+    for (const change of changes) {
+      if (change.namespace === 'recovery' && change.table === 'backup-content') {
+        if (change.deleted !== true) preflightStartupRecords([{ namespace: change.namespace, table: change.table, key: change.key, value: change.value }], { ...startupLimits, maxAllBytes: undefined });
+        continue;
+      }
+      if (change.deleted === true) selected.delete(identity(change));
+      else selected.set(identity(change), { namespace: change.namespace, ...(change.table === undefined ? {} : { table: change.table }), key: change.key, value: change.value });
+    }
+    measureSelection(selected.values());
+  }
+  function safetyRecord(root, id = randomUUID()) { return { namespace: 'metadata', key: 'internal-safety/' + id, value: Object.freeze({ id, createdAt: new Date().toISOString(), revision: root.revision, ciphertext: root.ciphertext }) }; }
+  async function preflightOpened(opened, current, extra = []) {
+    const view = await readRootView(opened, scope, api, current); current();
+    const selected = [...view.records, ...view.controls.map(item => ({ namespace: 'metadata', key: (item.id.startsWith('snapshot/') ? 'internal-backup/' : 'internal-safety/') + item.value.id, value: item.value })), ...extra];
+    measureSelection(selected); return view;
+  }
   async function enroll(key, current) {
     await rawStore.initialize(); current();
     const existing = await keyStore.load(scope);
@@ -51,7 +94,11 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
   function accept(value, startupRecords) {
     snapshot = value;
     if (startupRecords) {
-      records = new Map(startupRecords.map(record => [identity(record), record]));
+      // Use the validator's detached, frozen current rows as the accepted
+      // baseline. Reusing the pre-validation aliases would rehash unchanged
+      // photo/document rows on the first edit after every reopen.
+      records = new Map([...recordsFromBundle(value)].map(record => [identity(record), record]));
+      for (const record of startupRecords) if (record.namespace === 'recovery' && record.table === 'backups') records.set(identity(record), record);
       backupCatalog = bundleViewFromRecords(startupRecords).backupCatalog;
     } else {
       const next = new Map([...recordsFromBundle(value)].map(record => [identity(record), record]));
@@ -61,24 +108,9 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     }
   }
   async function startupRecords(opened, current, rememberSafety = true) {
-    const descriptors = await opened.list(); current(); const loaded = [], bodies = new Set(), safeties = new Map();
-    for (const descriptor of descriptors) {
-      if (descriptor.namespace === 'metadata' && (descriptor.key.startsWith('internal-safety/') || descriptor.key.startsWith('internal-backup/'))) {
-        const value = await opened.readRecord(descriptor); current();
-        const backup = descriptor.key.startsWith('internal-backup/'), keys = backup ? 'ciphertext|createdAt|id|primaryHash|reason|revision' : 'ciphertext|createdAt|id|revision';
-        if (!value || Object.keys(value).sort().join('|') !== keys || descriptor.key !== (backup ? 'internal-backup/' : 'internal-safety/') + value.id || typeof value.id !== 'string' || !/^[a-f0-9-]{36}$/.test(value.id) || typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)) || !Number.isSafeInteger(value.revision) || value.revision < 1 || typeof value.ciphertext !== 'string' || backup && (!['manual', 'automatic', 'before-sync', 'before-restore'].includes(value.reason) || typeof value.primaryHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.primaryHash))) throw fail();
-        const envelope = api.parseEnvelope(value.ciphertext), expected = { ...scope, purpose: 'working-data', recordId: 'workspace', revision: value.revision };
-        const ceiling = opened.getObjectRevisionCeiling?.() ?? opened.getRevision();
-        if (Object.keys(expected).some(key => expected[key] !== envelope.context[key]) || value.revision > ceiling) throw fail();
-        safeties.set((backup ? 'snapshot/' : 'workspace/') + value.id, value); continue;
-      }
-      if (descriptor.namespace === 'recovery' && descriptor.table === 'backup-content') { bodies.add(descriptor.key); continue; }
-      const value = await opened.readRecord(descriptor); current(); loaded.push({ ...descriptor, value });
-    }
-    const catalog = bundleViewFromRecords(loaded).backupCatalog;
-    if (catalog.length !== bodies.size || catalog.some(item => !bodies.has(item.id))) throw fail();
-    if (rememberSafety) safetyRoots = safeties;
-    return loaded;
+    const view = await readRootView(opened, scope, api, current); current();
+    if (rememberSafety) safetyRoots = new Map(view.controls.map(item => [item.id, item.value]));
+    return view.records;
   }
   async function loadSession(key, current) {
     const opened = await structuredRuntime.open(options(key, current));
@@ -118,14 +150,7 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     finally { key?.fill(0); }
   }
   async function verifyArchiveRoot(opened, current, actor) {
-    const loaded = await startupRecords(opened, current, false), view = bundleViewFromRecords(loaded), checked = await validation.validateMainBundleIntegrity(view.bundle); current();
-    if (actor !== undefined) { await validation.assertMainFullWorkspaceAuthority(checked, actor); current(); }
-    for (const item of view.backupCatalog) {
-      const json = await opened.readRecord({ namespace: 'recovery', table: 'backup-content', key: item.id }); current();
-      const historical = await validation.validateMainBundleIntegrity({ ...checked, primary: JSON.parse(json) }); current();
-      if (actor !== undefined) { await validation.assertMainFullWorkspaceAuthority(historical, actor); current(); }
-    }
-    return checked;
+    return (await verifyRootView(opened, scope, api, validation, current, actor)).snapshot;
   }
   function metadata(value, exportedAt = value.primary.exportedAt) { return { exportedAt, totalRecords: Object.values(value.primary.tables).reduce((sum, rows) => sum + rows.length, 0), tableCount: Object.keys(value.primary.tables).length }; }
   return Object.freeze({
@@ -134,9 +159,23 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     captureTransferContext: () => { if (!session) throw fail(); const token = Object.freeze({}); tokens.set(token, { epoch, transferEpoch }); return token; },
     assertTransferContext: async token => { const state = token && typeof token === 'object' ? tokens.get(token) : null; if (await activationGate() !== true || !session || !state || state.epoch !== epoch || state.transferEpoch !== transferEpoch) throw fail('ENCRYPTION_CONTEXT_CHANGED'); },
     prepareMigration: value => run(async current => {
-      if (session || preparation || await workspaceStore.read() !== null) throw fail();
+      if (session || preparation) throw fail();
+      const binding = typeof workspaceStore.readForPreparation === 'function'
+        ? await workspaceStore.readForPreparation()
+        : { kind: 'fresh', checkpoint: await workspaceStore.read() };
+      current(); if (!binding || Object.keys(binding).sort().join('|') !== 'checkpoint|kind' || binding.checkpoint !== null || !['fresh', 'pending'].includes(binding.kind)) throw fail();
       const checked = await cache.initialize(value); current(); const source = sourceHash(checked); const key = api.generateMasterKey(); let migration;
       try {
+        const existing = await keyStore.load(scope);
+        try {
+          current();
+          if (existing && (!(existing instanceof Uint8Array) || existing.length !== 32)) throw fail('DEVICE_KEY_UNAVAILABLE');
+          if (binding.kind === 'pending' && !existing) throw fail('DEVICE_KEY_ENROLLMENT_REQUIRED');
+          if (binding.kind === 'fresh' && existing) throw fail('ENCRYPTION_RECONCILIATION_REQUIRED');
+          // Only independently proven empty pending enrollment can retain its
+          // protected master and start a new recovery/device-proof ceremony.
+          if (existing) key.set(existing);
+        } finally { existing?.fill(0); }
         const recoveryCode = await api.generateRecoveryCode(), wrappedKey = await api.wrapMasterKey(key, recoveryCode, APP_ID, vaultId, keyVersion);
         const descriptor = { sourceHash: source }, validate = candidate => { if (!candidate || Object.keys(candidate).join('|') !== 'sourceHash' || !/^[a-f0-9]{64}$/.test(candidate.sourceHash)) throw fail(); };
         migration = await api.WorkspaceMigration.prepare({ withReadLock: read => read(descriptor) }, scope, key, wrappedKey, deviceId, validate); current();
@@ -150,6 +189,7 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     completeMigration: value => run(async current => {
       const selected = preparation; if (!selected?.recoveryVerified || !selected.deviceVerified) throw fail();
       await activation(current); const checked = await cache.initialize(value); current(); if (sourceHash(checked) !== selected.source) { lock(); throw fail('ENCRYPTION_SOURCE_CHANGED'); }
+      selectedBundle(checked); current();
       try {
         const assertProof = () => { current(); if (preparation !== selected || !selected.recoveryVerified || !selected.deviceVerified) throw fail(); };
         const opened = await withFreshEnrollment(assertProof, async () => {
@@ -198,7 +238,7 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
             const checked = await verifyArchiveRoot(opened, current, receiver ? undefined : actor); current();
             if (!mainView) mainView = checked;
             if (receiver) {
-              if (candidates === null) candidates = checked.primary.tables.users.filter(user => user.deletedAt === null).map(user => ({ id: user.id, name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.name || user.id }));
+              if (candidates === null) candidates = checked.primary.tables.users.filter(user => user.deletedAt === null).map(user => ({ id: user.id, name: user.displayName || user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.id }));
               const permitted = [];
               for (const candidate of candidates) { try { await verifyArchiveRoot(opened, current, candidate.id); current(); permitted.push(candidate); } catch (error) { current(); } }
               candidates = permitted;
@@ -225,6 +265,10 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
       // chunks are immutable staging only until this one protected root commit.
       await selected.workspace.visitArchiveGraph(selected.root, { onRoot: opened => verifyArchiveRoot(opened, current, actor), onObject: async () => {}, onChunk: async () => {} }, current); current();
       const guard = () => { current(); if (archiveReview !== selected || selected.actor !== actor) throw fail('ENCRYPTION_REVIEW_EXPIRED'); };
+      const previous = expectedRevision === null ? null : await workspaceStore.read(); guard();
+      if (expectedRevision !== null && (!previous || previous.revision !== expectedRevision)) throw fail('ENCRYPTION_REVISION_CONFLICT');
+      const safety = previous ? safetyRecord(previous) : null;
+      await preflightOpened(selected.workspace, guard, safety ? [safety] : []); guard();
       let opened;
       try {
         if (expectedRevision === null) {
@@ -236,11 +280,34 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
           guard(); session = opened; opened = null;
         } else {
           if (typeof session.importAuthenticatedCheckpoint !== 'function') throw fail();
-          await session.importAuthenticatedCheckpoint(expectedRevision, selected.root, { namespace: 'metadata', key: 'internal-safety/' + randomUUID() }, guard); guard();
+          await session.importAuthenticatedCheckpoint(expectedRevision, selected.root, { namespace: 'metadata', key: safety.key }, guard); guard();
         }
         const loaded = await startupRecords(session, current), view = bundleViewFromRecords(loaded), checked = await cache.initialize(view.bundle); current(); accept(checked, loaded);
         const result = { revision: session.getRevision() }; closeArchiveReview(); return result;
       } catch (error) { opened?.lock(); lock(); throw error; }
+    }),
+    applyOfflineRecovery: (proof, actor) => run(async current => {
+      if (typeof actor !== 'string' || !actor) throw fail('ENCRYPTION_RECOVERY_PROOF_INVALID');
+      await activation(current);
+      if (session || preparation || archiveReview || await rawStore.read() !== null) throw fail('ENCRYPTION_FRESH_DEVICE_REQUIRED'); current();
+      const details = offlineProofDetails(proof, actor);
+      const guard = () => { current(); proof.assertAuthorized(actor); };
+      try {
+        if (Object.keys(scope).some(key => scope[key] !== details.scope[key])) throw fail('ENCRYPTION_RECOVERY_PROOF_INVALID'); guard();
+        await preflightOfflineProof(proof, actor, { ...startupLimits, measurements }); guard();
+        const opened = await withFreshEnrollment(guard, async () => {
+          // Original plaintext sources are never opened or converted by this
+          // path. Only a fully authenticated encrypted graph is copied.
+          await enroll(details.key, guard); await rawStore.saveAux('recovery-wrapper', details.recoveryWrapper); guard();
+          const copied = await copyOfflineRecoveryGraph(proof, actor, { createChunkStore, assertCurrent: guard });
+          try {
+            guard(); return await structuredRuntime.importAuthenticatedCheckpoint(options(details.key, guard, hash(details.recoveryWrapper)), copied.root, guard);
+          } finally { copied.workspace.lock(); }
+        });
+        try {
+          guard(); const loaded = await startupRecords(opened, guard), view = bundleViewFromRecords(loaded), checked = await cache.initialize(view.bundle); guard(); session = opened; accept(checked, loaded); return { revision: opened.getRevision() };
+        } catch (error) { opened.lock(); throw error; }
+      } catch (error) { lock(); throw error; } finally { details.key.fill(0); }
     }),
     createBackup: (reason, expectedRevision) => run(async current => {
       await activation(current); if (!session || session.getRevision() !== expectedRevision || !['automatic', 'manual', 'before-restore', 'before-sync'].includes(reason)) throw fail();
@@ -255,13 +322,14 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
         if (previousHash === primaryHash) return { revision: expectedRevision, backup: null };
       }
       const previousRoot = await workspaceStore.read(); current(); if (!previousRoot || previousRoot.revision !== expectedRevision) throw fail('ENCRYPTION_REVISION_CONFLICT');
-      const backup = { id: randomUUID(), createdAt: now.toISOString(), reason }, saved = { ...backup, primaryHash, revision: previousRoot.revision, ciphertext: previousRoot.ciphertext };
+      const backup = { id: randomUUID(), createdAt: now.toISOString(), reason }, saved = Object.freeze({ ...backup, primaryHash, revision: previousRoot.revision, ciphertext: previousRoot.ciphertext });
       const changes = [{ namespace: 'metadata', key: 'internal-backup/' + backup.id, value: saved }];
       const expired = reason === 'automatic' ? [...backupCatalog.filter(item => item.reason === 'automatic'), ...pinned.filter(item => item.reason === 'automatic'), backup].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(options.retain) : [];
       for (const item of expired) {
         if (item.publicId) changes.push({ namespace: 'metadata', key: 'internal-backup/' + item.id, deleted: true });
         else changes.push(...recordChangesFromLegacyDelta([{ namespace: 'recovery', table: 'backups', key: item.id, deleted: true }]));
       }
+      preflightChanges(changes); current();
       try {
         await session.commitDelta(expectedRevision, changes, current); current();
         for (const item of expired) { records.delete(identity({ namespace: 'recovery', table: 'backups', key: item.id })); if (item.publicId) safetyRoots.delete(item.publicId); }
@@ -294,12 +362,18 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
       const json = await session.readRecord({ namespace: 'recovery', table: 'backup-content', key: id }); current();
       const checked = await validation.validateMainBundleIntegrity({ ...snapshot, primary: JSON.parse(json), recovery: { ...snapshot.recovery, backups: [] } }); current(); return { snapshot: checked };
     }),
-    restoreCheckpoint: (expectedRevision, historicalCheckpoint) => run(async current => {
+    restoreCheckpoint: (expectedRevision, historicalCheckpoint, actor) => run(async current => {
       await activation(current); if (!session || session.getRevision() !== expectedRevision) throw fail('ENCRYPTION_REVISION_CONFLICT');
+      if (typeof actor !== 'string' || !actor) throw fail('ENCRYPTION_TEACHER_REQUIRED');
+      const previous = await workspaceStore.read(); current(); if (!previous || previous.revision !== expectedRevision) throw fail('ENCRYPTION_REVISION_CONFLICT');
+      const safety = safetyRecord(previous), key = await keyStore.load(scope); let historical;
       try {
-        await session.restoreCheckpoint(expectedRevision, structuredClone(historicalCheckpoint), { namespace: 'metadata', key: 'internal-safety/' + randomUUID() }, current); current();
+        if (!key) throw fail(); historical = await structuredRuntime.open({ ...options(key, current, session.getRecoveryWrapperHash()), checkpointStore: { read: async () => historicalCheckpoint } }); current();
+        await historical.visitArchiveGraph(historicalCheckpoint, { onRoot: opened => verifyArchiveRoot(opened, current, actor), onObject: async () => {}, onChunk: async () => {} }, current); current();
+        await preflightOpened(historical, current, [safety]); current();
+        await session.restoreCheckpoint(expectedRevision, structuredClone(historicalCheckpoint), { namespace: 'metadata', key: safety.key }, current); current();
         const loaded = await startupRecords(session, current), view = bundleViewFromRecords(loaded), checked = await cache.initialize(view.bundle); current(); accept(checked, loaded); return { revision: session.getRevision() };
-      } catch (error) { lock(); throw error; }
+      } catch (error) { lock(); throw error; } finally { historical?.lock(); key?.fill(0); }
     }),
     restoreBundle: (expectedRevision, value, { preserveHistory = false } = {}) => run(async current => {
       await activation(current); if (!session || session.getRevision() !== expectedRevision) throw fail('ENCRYPTION_REVISION_CONFLICT');
@@ -320,7 +394,8 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
       // The old root references all its already durable immutable objects. Its
       // encrypted safety reference is published atomically WITH the replacement
       // root through the protected-head coordinator, not a second best-effort file.
-      const id = randomUUID(); changes.push({ namespace: 'metadata', key: 'internal-safety/' + id, value: { id, createdAt: new Date().toISOString(), revision: previous.revision, ciphertext: previous.ciphertext } });
+      changes.push(safetyRecord(previous));
+      preflightChanges(changes); current();
       try {
         await session.commitDelta(expectedRevision, changes, current); current();
         const loaded = await startupRecords(session, current), view = bundleViewFromRecords(loaded), verified = await cache.initialize(view.bundle); current(); accept(verified, loaded);
@@ -330,6 +405,7 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     commitDelta: (expectedRevision, changes) => run(async current => {
       await activation(current); if (!session || session.getRevision() !== expectedRevision) throw fail('ENCRYPTION_REVISION_CONFLICT');
       const active = session, candidate = applyChanges(changes), checked = await cache.validateCandidate(candidate.candidate); current();
+      preflightChanges(candidate.changes); current();
       try { await active.commitDelta(expectedRevision, candidate.changes, current); current(); accept(checked); return { revision: active.getRevision() }; }
       catch (error) { lock(); throw error; }
     }),
@@ -339,6 +415,7 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
       const checked = await cache.initialize(value); current(); if (checked.recovery.backups.length) throw fail(); const next = new Map([...recordsFromBundle(checked)].map(record => [identity(record), record])), changes = [];
       for (const [id, previous] of records) if (!next.has(id) && !(previous.namespace === 'recovery' && previous.table === 'backups')) changes.push({ namespace: previous.namespace, ...(previous.table ? { table: previous.table } : {}), key: previous.key, deleted: true });
       for (const [id, record] of next) if (!records.has(id) || measureRecord(record.value).contentHash !== measureRecord(records.get(id).value).contentHash) changes.push(record);
+      preflightChanges(changes); current();
       try { await session.commitDelta(expectedRevision, changes, current); current(); accept(checked); return { revision: session.getRevision() }; } catch (error) { lock(); throw error; }
     }),
     exportEncrypted: (purpose, recordId) => run(async current => {
@@ -380,4 +457,4 @@ function createStructuredEncryptionHost({ directory, vaultId, deviceId, keyVersi
     })
   });
 }
-module.exports = { createStructuredEncryptionHost, sourceHash };
+module.exports = { createStructuredEncryptionHost, sourceHash, prepareOfflineRecovery };

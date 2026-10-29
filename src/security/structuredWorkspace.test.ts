@@ -3,21 +3,23 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import * as cryptoRuntime from '../../shared/encryption';
 import * as chunkRuntime from '../../shared/encryption/chunks';
 const require = createRequire(import.meta.url), { StructuredWorkspace } = require('../../electron/structuredWorkspace.cjs'), { createCipherChunkStore } = require('../../electron/cipherChunkStore.cjs');
 const directories: string[] = [];
+const shardHashes = new Set(Array.from({length:256},(_,index)=>createHash('sha256').update('shard/'+index.toString(16).padStart(2,'0')).digest('hex')));
 const scope = { appId: 'student-organizer', vaultId: 'fictional-structured', keyVersion: 1 };
 function row(id: string, value: unknown) { return { namespace: 'primary', table: 'students', key: id, value }; }
 async function fixture(extra: Record<string, unknown> = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'synthetic-structured-')); directories.push(directory); const key = cryptoRuntime.generateMasterKey();
-  let checkpoint: any = null, commits = 0, stages = 0, reads = 0, failed = false, lost = false, held: Promise<void> | null = null;
+  let checkpoint: any = null, commits = 0, stages = 0, reads = 0, bodyReads = 0, failed = false, lost = false, held: Promise<void> | null = null;
   const checkpointStore = { read: async () => structuredClone(checkpoint), commit: async (expected: number | null, next: any) => { if (held) await held; if (failed) throw Error('synthetic rejection'); if ((checkpoint?.revision ?? null) !== expected) throw Error('stale'); commits++; checkpoint = structuredClone(next); if (lost) throw Error('synthetic lost reply'); } };
   const options = { scope, key, checkpointStore, recoveryWrapperHash: 'e'.repeat(64), cryptoRuntime, chunkRuntime, createChunkStore: (verifyManifest: unknown, assertPublication: () => void) => {
     const native = createCipherChunkStore({ directory, scope, parseEnvelope: cryptoRuntime.parseEnvelope, verifyManifest, hooks: { beforeCommit: assertPublication } });
-    return { ...native, stage: async (...args: any[]) => { stages++; return native.stage(...args); }, read: async (...args: any[]) => { reads++; return native.read(...args); } };
+    return { ...native, stage: async (...args: any[]) => { stages++; return native.stage(...args); }, read: async (...args: any[]) => { reads++; if (!shardHashes.has(args[1]?.split('/')[1])) bodyReads++; return native.read(...args); } };
   }, ...extra };
-  return { options, directory, key, checkpointStore, checkpoint: () => checkpoint, stages: () => stages, reads: () => reads, commits: () => commits, fail: () => { failed = true; }, lose: () => { lost = true; }, hold: () => { let release!: () => void; held = new Promise<void>(r => release = r); return () => { held = null; release(); }; } };
+  return { options, directory, key, checkpointStore, checkpoint: () => checkpoint, stages: () => stages, reads: () => reads, bodyReads:()=>bodyReads, commits: () => commits, fail: () => { failed = true; }, lose: () => { lost = true; }, hold: () => { let release!: () => void; held = new Promise<void>(r => release = r); return () => { held = null; release(); }; } };
 }
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }); });
 describe('structured immutable object workspace', () => {
@@ -135,6 +137,27 @@ describe('structured immutable object workspace', () => {
     expect(f.reads() - reads).toBeLessThanOrEqual(2); // Metadata shards only, no large body read.
     expect(f.checkpoint().revision).toBe(1);
   }, 30000);
+  it('preflights the entire selected hydration before any body and excludes unselected large history',async()=>{
+    const f=await fixture({maxReadRecordBytes:4096,maxReadAllBytes:1000});
+    await StructuredWorkspace.create(f.options,[row('a',{text:'a'.repeat(600)}),row('b',{text:'b'.repeat(600)}),{namespace:'recovery',table:'backup-content',key:'large-history',value:'fictional history'.repeat(20000)}]);
+    const selection=[{namespace:'primary',table:'students',key:'b'},{namespace:'primary',table:'students',key:'a'}];
+    const limited=await StructuredWorkspace.open(f.options),before=f.bodyReads();await expect(limited.readSelected(selection)).rejects.toMatchObject({code:'STRUCTURED_WORKSPACE_READ_LIMIT'});expect(f.bodyReads()).toBe(before);
+    const bounded=await StructuredWorkspace.open({...f.options,maxReadAllBytes:3000}),values=await bounded.readSelected(selection);expect(values.map((value:any)=>value.key)).toEqual(['b','a']);expect(values[0].value.text).toBe('b'.repeat(600));expect(f.bodyReads()-before).toBe(2);
+    const recordLimited=await StructuredWorkspace.open({...f.options,maxReadRecordBytes:512,maxReadAllBytes:3000}),beforeRecord=f.bodyReads();await expect(recordLimited.readSelected([selection[0]])).rejects.toMatchObject({code:'STRUCTURED_WORKSPACE_READ_LIMIT'});expect(f.bodyReads()).toBe(beforeRecord);expect(f.checkpoint().revision).toBe(1);
+  });
+  it('rejects duplicate, malformed and missing selections before any selected body is read',async()=>{
+    const f=await fixture();await StructuredWorkspace.create(f.options,[row('a',{text:'fictional'})]);const selected={namespace:'primary',table:'students',key:'a'};
+    for(const selection of [[selected,selected],[{...selected,value:'untrusted'}],[{...selected,key:'missing'}],[{namespace:'storage',table:'students',key:'a'}]]) {
+      const opened=await StructuredWorkspace.open(f.options),before=f.bodyReads();await expect(opened.readSelected(selection)).rejects.toThrow();expect(f.bodyReads()).toBe(before);
+    }
+    const opened=await StructuredWorkspace.open(f.options);expect(await opened.readSelected([])).toEqual([]);expect(f.checkpoint().revision).toBe(1);
+  });
+  it('owns selected identities and serializes hydration after durable saves while invalidating closed reads',async()=>{
+    const f=await fixture(),session=await StructuredWorkspace.create(f.options,[row('a',{text:'old'})]),release=f.hold();
+    const saving=session.commitDelta(1,[row('a',{text:'new'})]),selection=[{namespace:'primary',table:'students',key:'a'}];let done=false;
+    const reading=session.readSelected(selection).then((value:any)=>{done=true;return value;});selection[0].key='changed caller alias';await new Promise(resolve=>setTimeout(resolve,10));expect(done).toBe(false);release();await saving;expect((await reading)[0].value.text).toBe('new');
+    const reopened=await StructuredWorkspace.open(f.options),before=f.bodyReads(),closed=reopened.readSelected([{namespace:'primary',table:'students',key:'a'}]);reopened.lock();await expect(closed).rejects.toMatchObject({code:'STRUCTURED_WORKSPACE_LOCKED'});expect(f.bodyReads()).toBe(before);
+  });
   it('does not complete a streaming read after its workspace is locked', async () => {
     const f = await fixture(); const session = await StructuredWorkspace.create(f.options, [row('a', { text: 'fictional' })]); let chunks = 0;
     await expect(session.readRecordStream({ namespace: 'primary', table: 'students', key: 'a' }, async () => { chunks++; session.lock(); })).rejects.toMatchObject({ code: 'STRUCTURED_WORKSPACE_LOCKED' });

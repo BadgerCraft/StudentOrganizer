@@ -20,10 +20,11 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, onSavingChan
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const busy = useRef(false);
   const lifecycle = useRef(0);
   useEffect(() => {
-    lifecycle.current++; busy.current = false; setImporting(false);
+    lifecycle.current++; busy.current = false; setImporting(false); setSaving(false);
     setBank([]); setView('closed'); setReview(null); setPaste(''); setError(''); setMessage('');
     const started = lifecycle.current;
     void readFeedbackBank(actor).then(value => { if (started === lifecycle.current) setBank(value); }, cause => { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); });
@@ -90,21 +91,21 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, onSavingChan
         </div>)}</div>
         <div className="flex gap-2 flex-wrap">
           <button type="button" className={button} onClick={async () => {
-            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); onSavingChange?.(true);
+            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); setSaving(true); onSavingChange?.(true);
             try { const value = await writeFeedbackBank(actor, review, 'add'); if (started !== lifecycle.current) return; setBank(value); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comments added to your bank.'); }
             catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
-            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); } }
+            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); setSaving(false); } }
           }}>Add reviewed comments to bank</button>
           <button type="button" className={button} onClick={async () => {
-            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); onSavingChange?.(true);
+            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); setSaving(true); onSavingChange?.(true);
             try { const value = await writeFeedbackBank(actor, review, 'replace'); if (started !== lifecycle.current) return; setBank(value); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comment bank saved.'); }
             catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
-            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); } }
+            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); setSaving(false); } }
           }}>Replace bank with reviewed comments</button>
         </div>
       </div>}
     </fieldset>}
-    {importing && <p role="status" className="text-sm">Reading or saving comment bank…</p>}
+    {importing && <p role="status" className="text-sm">{saving ? 'Saving comment bank…' : 'Reading comment bank…'}</p>}
     {message && <p role="status" className="text-sm text-emerald-800">{message}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {view !== 'closed' && <p className="text-xs text-slate-600">{rendererStorageMode() === 'legacy' ? 'This teacher’s bank is saved on this device. It is separate from student records and is not included in the application backup. Export the bank to keep a transferable copy.' : 'This teacher’s bank is included in encrypted workspace backups. Keep a verified encrypted backup and its recovery code separately.'}</p>}

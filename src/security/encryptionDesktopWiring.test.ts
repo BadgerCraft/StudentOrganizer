@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 async function fixture(mode: 'legacy' | 'encrypted' | 'enrollment-pending', failStart = false) {
   const handlers = new Map<string, any>(), windows: any[] = [], violations: string[] = [], routes: string[] = [];
-  let runtimeLocks = 0, hostLocks = 0, quits = 0;
+  let runtimeLocks = 0, hostLocks = 0, quits = 0, runtimeClosed = false;
   const app: any = Object.assign(new EventEmitter(), { requestSingleInstanceLock: () => true, quit: () => { quits++; }, isPackaged: false, getVersion: () => '1.0.0', getPath: (name: string) => path.resolve('/synthetic-desktop', name), whenReady: () => Promise.resolve() });
   class FakeWindow extends EventEmitter {
     static getAllWindows() { return windows.filter(w => !w.destroyed); }
@@ -22,7 +22,7 @@ async function fixture(mode: 'legacy' | 'encrypted' | 'enrollment-pending', fail
     show() {} hide() { this.hidden = true; } isMinimized() { return false; } restore() {} focus() {}
   }
   const host = { status: () => ({ state: 'locked', appId: 'student-organizer', vaultId: 'synthetic', keyVersion: 1, revision: null }), lock: () => { hostLocks++; } };
-  const runtime = { status: () => ({ mode, activationReady: false, deviceId: 'device-synthetic', appId: 'student-organizer', vaultId: 'synthetic', keyVersion: 1 }), getHost: () => host, refreshMode: async () => {}, lockNow: () => { runtimeLocks++; }, close() {}, cancelEnrollment: async () => {} };
+  const runtime = { status: () => ({ mode, activationReady: false, deviceId: 'device-synthetic', appId: 'student-organizer', vaultId: 'synthetic', keyVersion: 1 }), getHost: () => { if (runtimeClosed) throw Error('closed native runtime'); return host; }, refreshMode: async () => {}, lockNow: () => { runtimeLocks++; }, close() { runtimeClosed = true; }, cancelEnrollment: async () => {}, cancelOfflineRecovery: () => { if (runtimeClosed) throw Error('closed native runtime'); } };
   const transport = (label: string) => Object.fromEntries(['status', 'connect', 'list', 'download', 'upload', 'cancel', 'disconnect'].map(method => [method, () => { routes.push(label + ':' + method); return { configured: false }; }]));
   const localRequire = (id: string): any => {
     if (id === 'electron') return { app, BrowserWindow: FakeWindow, Menu: { setApplicationMenu() {}, buildFromTemplate: (x: any) => x }, ipcMain: { handle: (name: string, fn: any) => handlers.set(name, fn) }, session: {}, dialog: { showErrorBox: (_title: string, detail: string) => violations.push(detail) }, shell: {}, systemPreferences: {} };
@@ -64,5 +64,9 @@ describe('actual Electron main wiring with synthetic native dependencies', () =>
   it('locks both host and runtime on missing preload and same-document marker removal', async () => {
     const f = await fixture('encrypted'), window = f.windows[0]; window.webContents.emit('preload-error', {}, 'privatepath', Error('PRIVATE')); expect(window.hidden).toBe(true); expect(f.locks().runtimeLocks).toBeGreaterThan(0);
     expect(f.violations.join()).not.toContain('PRIVATE');
+  });
+  it('does not reopen or query a closed runtime when windows finish closing after quit', async () => {
+    const f = await fixture('encrypted'); expect(() => f.app.emit('before-quit')).not.toThrow(); const locks = f.locks().runtimeLocks;
+    expect(() => f.windows[0].emit('closed')).not.toThrow(); expect(() => f.app.emit('before-quit')).not.toThrow(); expect(f.locks().runtimeLocks).toBe(locks);
   });
 });

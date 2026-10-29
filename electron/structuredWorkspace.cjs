@@ -328,10 +328,29 @@ class StructuredWorkspace {
   }
   list() { return this.#scheduleRead(() => this.#list()); }
   readRecordStream(record, sink) { let key; try { key = logical(record); if (typeof sink !== 'function') throw fail(); } catch (cause) { return Promise.reject(cause); } return this.#scheduleRead(async () => { const ref = (await this.#shard(bucketFor(key))).get(key); return ref ? this.#streamObject(ref, key, this.#config.maxRecordBytes, sink) : undefined; }); }
-  readAll() { return this.#scheduleRead(async () => {
-    const records = await this.#list(); let allocation = 0;
-    for (const record of records) { const key = logical(record), ref = (await this.#shard(bucketFor(key))).get(key); allocation += ref.bytes + encoder.encode(key).length + 128; if (ref.bytes > this.#config.maxReadRecordBytes || allocation > this.#config.maxReadAllBytes) throw fail('STRUCTURED_WORKSPACE_READ_LIMIT'); }
-    const result = []; for (const record of records) result.push({ ...record, value: await this.#readRecord(logical(record)) }); return result;
-  }); }
+  async #readSelection(keys) {
+    let allocation = 0; const recordLimit = Math.min(this.#config.maxRecordBytes,this.#config.maxReadRecordBytes);
+    // Authenticate every selected reference and budget the complete selection before any body read.
+    for (const key of keys) {
+      const ref = (await this.#shard(bucketFor(key))).get(key); if (!ref) throw fail();
+      allocation += ref.bytes + encoder.encode(key).length + 128;
+      if (ref.bytes > recordLimit || allocation > this.#config.maxReadAllBytes) throw fail('STRUCTURED_WORKSPACE_READ_LIMIT');
+    }
+    const result = []; for (const key of keys) result.push({...parsedLogical(key),value:await this.#readRecord(key)}); return result;
+  }
+  readSelected(records) {
+    let keys;
+    try {
+      if (!Array.isArray(records) || records.length > MAX_RECORDS) throw fail(); const seen = new Set(); let metadataBytes = 0;
+      keys = records.map(record => {
+        if (!exact(record,['namespace',...(record?.table === undefined ? [] : ['table']),'key'])) throw fail();
+        const key = logical(record); metadataBytes += encoder.encode(key).length + 128;
+        if (seen.has(key) || metadataBytes > 64 * 1024 * 1024) throw fail(); seen.add(key); return key;
+      });
+    } catch (cause) { return Promise.reject(cause); }
+    return this.#scheduleRead(()=>this.#readSelection(keys));
+  }
+  readAll() { return this.#scheduleRead(async()=>this.#readSelection((await this.#list()).map(logical))); }
+
 }
 module.exports = { StructuredWorkspace, structuredRecordKey: logical, measureRecord: value => measured(value, MAX_RECORD_BYTES), ROOT_LIMIT, MAX_RECORD_BYTES, MATERIALIZED_RECORD_BYTES, MATERIALIZED_ALL_BYTES };
