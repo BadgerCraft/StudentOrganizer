@@ -118,6 +118,7 @@ jobs:
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
           npm run test:focused-organizer
           BROWSER_ENGINE=webkit npm run test:marking:keyboard
+          npm run test:encryption:browser
       - name: Check bundled classroom and recovery flows in Chromium
         run: node --import tsx scripts/nativePilotSmoke.ts
       - name: Check Markinator production and expanded acceptance
