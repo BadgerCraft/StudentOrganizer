@@ -52,9 +52,33 @@ describe('canonical profile leases outside movable workspaces',()=>{
     await f.right.withExclusiveProfileLock(async()=>expect(await f.right.read('cancelled-slot')).toBeNull());await expect(f.left.initialize()).rejects.toThrow();
   });
   it.each(['workspace','root'])('detects %s replacement across an awaited lease without adopting the new path',async location=>{
-    const f=await fixture();const selected=location==='workspace'?f.a:f.root;
-    await expect(f.left.withExclusiveProfileLock(async()=>{await fs.rename(selected,selected+'-old');await fs.mkdir(selected,{mode:0o700});f.left.assertProfileLease();})).rejects.toThrow();
+    const f=await fixture(),selected=location==='workspace'?f.a:f.root,previous=selected+'-old';
+    const original=await fs.lstat(selected,{bigint:true});
+    let renamed=false,replaced=false,renameFailure:any=null,guardFailure:any=null;
+    const outcome=await f.left.withExclusiveProfileLock(async()=>{
+      // SQLite's live Windows handles can prevent renaming their parent root.
+      // Do not let that filesystem rejection masquerade as lease revocation.
+      try { await fs.rename(selected,previous);renamed=true; }
+      catch(error) { renameFailure=error;return; }
+      await fs.mkdir(selected,{mode:0o700});replaced=true;
+      try { f.left.assertProfileLease(); } catch(error) { guardFailure=error;throw error; }
+    }).then(()=>({status:'resolved' as const}),(error:unknown)=>({status:'rejected' as const,error}));
+    if(renameFailure){
+      // Accept only the known Windows live-registry rename restriction. A
+      // mandatory successful rename after close distinguishes it from a bad
+      // path or permanent permission failure; other mutation failures fail.
+      if(process.platform!=='win32'||location!=='root'||!['EPERM','EACCES','EBUSY'].includes(renameFailure.code))throw renameFailure;
+      expect(renamed).toBe(false);expect(replaced).toBe(false);expect(outcome.status).toBe('resolved');
+      const unchanged=await fs.lstat(selected,{bigint:true});expect(unchanged.dev).toBe(original.dev);expect(unchanged.ino).toBe(original.ino);
+      await expect(fs.lstat(previous)).rejects.toMatchObject({code:'ENOENT'});expect(()=>f.left.assertCurrent()).not.toThrow();
+      console.info(`[canonical-profile] live Windows root rename blocked code=${renameFailure.code}; testing replacement after lease close`);
+      await fs.rename(selected,previous);await fs.mkdir(selected,{mode:0o700});
+    }else{
+      expect(renamed).toBe(true);expect(replaced).toBe(true);expect(outcome.status).toBe('rejected');
+      expect(guardFailure).toMatchObject({code:'CANONICAL_PROFILE_CONTEXT_CHANGED'});
+    }
     expect(()=>f.left.assertCurrent()).toThrow();await expect(f.left.initialize()).rejects.toThrow();
+    expect(await fs.readdir(selected)).toEqual([]);
   });
   it('expires a queued waiter without ever running its callback later and refuses nested leases',async()=>{
     const f=await fixture(),other=createCanonicalProfileLease({canonicalProfileRoot:f.root,scope,waitMilliseconds:10}).forWorkspace(f.b);
