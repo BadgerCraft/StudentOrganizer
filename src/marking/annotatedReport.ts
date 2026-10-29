@@ -1,3 +1,4 @@
+import { assertReadableExportAllowed } from '../security/readableExports';
 import { markingImageDecodeBytes } from './importImages';
 import { imageDisplaySize, originalToDisplay } from './imageGeometry';
 import type { MarkingImagePage, MarkingPageFeedback } from './types';
@@ -83,9 +84,11 @@ export async function renderAnnotatedMarkingReport(input: MarkingReportInput): P
 
 /** Desktop writes genuine PDF bytes. Browser fallback is deliberately named printable HTML. */
 export async function exportAnnotatedMarkingReport(input: MarkingReportInput, assertAuthorized?: () => void): Promise<boolean> {
+  assertReadableExportAllowed();
   const html = await renderAnnotatedMarkingReport(input);
   const filename = `marked-assessment-${input.commit.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   assertAuthorized?.();
+  assertReadableExportAllowed();
   if (supportsDesktopPdfExport()) return window.desktopReports!.exportPdf(`${filename}.pdf`, html);
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${filename}-print-to-pdf.html`;

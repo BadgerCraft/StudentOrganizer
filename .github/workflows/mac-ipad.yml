@@ -120,6 +120,10 @@ jobs:
           BROWSER_ENGINE=webkit npm run test:marking:keyboard
           npm run test:encryption:browser
           npm run test:encryption:storage-browser
+      - name: Verify protected App, native SQLite and mocked transfer acceptance
+        run: npm run test:encryption:app-browser
+        env:
+          ENCRYPTION_ARTIFACT_DIR: release/encryption-acceptance
       - name: Check bundled classroom and recovery flows in Chromium
         run: node --import tsx scripts/nativePilotSmoke.ts
       - name: Check Markinator production and expanded acceptance
@@ -159,6 +163,7 @@ jobs:
           name: shared-browser-evidence-${{ github.run_number }}
           path: |
             screenshots/**
+            release/encryption-acceptance/**
             /tmp/annotation-feedback-results.json
             /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json

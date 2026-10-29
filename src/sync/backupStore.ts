@@ -1,3 +1,5 @@
+import { rendererStorageMode } from '../security/rendererStorageMode';
+import { memoryDatabaseRequired } from '../security/rendererStorageMode';
 import Dexie, { type Table } from 'dexie';
 import type { OntarioTeacherDB } from '../db/database';
 import { assertWorkspaceAccess, dataSignature, readSnapshot, type Snapshot } from './snapshot';
@@ -7,7 +9,7 @@ export interface RecoveryOptions { id:'options'; automatic:boolean; intervalHour
 export interface SyncState { id:'sync'; lastRemoteId?:string; base?:Snapshot }
 export class RecoveryStore extends Dexie {
   backups!:Table<SavedBackup,string>; options!:Table<RecoveryOptions,string>; state!:Table<SyncState,string>;
-  constructor(name='OntarioTeacherRecovery') { super(name); this.version(1).stores({backups:'id,createdAt,reason',options:'id',state:'id'}); }
+  constructor(name='OntarioTeacherRecovery') { super(name,memoryDatabaseRequired()?{cache:'disabled'}:undefined); this.version(1).stores({backups:'id,createdAt,reason',options:'id',state:'id'}); }
 }
 export const recoveryStore=new RecoveryStore();
 export const DEFAULT_OPTIONS:RecoveryOptions={id:'options',automatic:true,intervalHours:24,retain:7};
@@ -17,6 +19,7 @@ export async function saveRecoveryOptions(options:RecoveryOptions,store=recovery
   await store.options.put({...options,id:'options'});
 }
 export async function saveBackup(database:OntarioTeacherDB,userId:string,reason:SavedBackup['reason'],store=recoveryStore,now=new Date()):Promise<SavedBackup|null> {
+  if(rendererStorageMode()!=='legacy') throw new Error('Protected backups must use the native encrypted version catalog.');
   const epoch=getIdentityEpoch(); await assertWorkspaceAccess(database,userId,epoch);
   const snapshot=await readSnapshot(database), options=await getRecoveryOptions(store);
   const previous=await store.backups.orderBy('createdAt').last();

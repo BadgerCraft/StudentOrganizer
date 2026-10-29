@@ -29,13 +29,14 @@ export interface ImageMarkupProps {
   onReorder?: (pageIds: string[]) => void;
   actor?: MarkingActor;
   onComposerDirtyChange?: (dirty: boolean) => void;
+  onBankSavingChange?: (saving: boolean) => void;
   onFeedbackActiveChange?: (active: boolean) => void;
   onCropEditingChange?: (editing: boolean) => void;
 }
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, keyboardActive = true, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
+export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, keyboardActive = true, onReorder, actor, onComposerDirtyChange, onBankSavingChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
   const localPressedKeys = useFeedbackPressedKeys(!pressedKeys);
   const feedbackPressedKeys = pressedKeys ?? localPressedKeys;
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
@@ -332,7 +333,7 @@ export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer
       <div className="block text-sm">Comment text <DictationFeedback target={`${dictationScope}:${actor?.userId}:${actor?.epoch}:${page.id}:${selectedAnnotation.id}`} aria-label="Image comment text" className="mt-1 w-full rounded border p-2" maxLength={4000} disabled={disabled || readOnly} value={selectedAnnotation.text} onValue={text => editAnnotation({ text })} /></div>
       <div className="flex flex-wrap gap-2"><label className="text-sm">Criterion <select aria-label="Image criterion" className="rounded border p-2" value={selectedAnnotation.criterionId ?? ''} onChange={event => editAnnotation({ criterionId: event.target.value || null, level: '' })}><option value="">General feedback</option>{rubric.criteria.map(item => <option key={item.id} value={item.id}>{item.name} ({item.categoryCode})</option>)}</select></label>
         </div>
-      {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
+      {actor && <CommentBankPicker actor={actor} onSavingChange={onBankSavingChange} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
         const combined = `${selectedAnnotation.text}${selectedAnnotation.text ? '\n' : ''}${text}`;
         if (combined.length > 4000) throw new Error('This bank comment exceeds the 4,000-character limit. Shorten the current comment or choose a shorter bank comment.');
         editAnnotation({ text: combined });

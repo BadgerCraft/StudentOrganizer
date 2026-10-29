@@ -1,4 +1,4 @@
-import { decryptBytes, encryptBytes, generateMasterKey, recoverMasterKey, type EncryptionContext } from '../../shared/encryption';
+import { decryptBytes, encryptBytes, generateMasterKey, recoverMasterKey, MAX_PLAINTEXT_BYTES, type EncryptionContext } from '../../shared/encryption';
 
 export const STUDENT_ORGANIZER_APP_ID = 'student-organizer';
 const encoder = new TextEncoder();
@@ -90,6 +90,41 @@ export class EncryptedWorkspaceSession<T> {
         if (epoch !== this.epoch || !this.key) throw new WorkspaceLockedError();
         return { revision: this.revision, ciphertext };
       } finally { key.fill(0); plaintext.fill(0); }
+    };
+    const pending = this.queue.then(run); this.queue = pending.catch(() => {}); return pending;
+  }
+  /** Main-process only: seals a validated transfer payload; callers never receive key bytes. */
+  sealExternal(purpose: 'backup' | 'transfer', recordId: string, input: Uint8Array): Promise<EncryptedCheckpoint> {
+    if (!(input instanceof Uint8Array) || input.length > MAX_PLAINTEXT_BYTES) return Promise.reject(new WorkspaceLockedError());
+    const plaintext = new Uint8Array(input), requestedEpoch = this.epoch;
+    const run = async () => {
+      if (!this.key || this.value === null || requestedEpoch !== this.epoch || !['backup', 'transfer'].includes(purpose)) throw new WorkspaceLockedError();
+      const key = new Uint8Array(this.key), revision = this.revision;
+      try {
+        const ciphertext = await encryptBytes(key, context(this.scope, purpose, recordId, revision), plaintext);
+        if (requestedEpoch !== this.epoch || !this.key) throw new WorkspaceLockedError();
+        return { revision, ciphertext };
+      } finally { key.fill(0); }
+    };
+    const pending = this.queue.then(run).finally(() => plaintext.fill(0)); this.queue = pending.catch(() => {}); return pending;
+  }
+  /**
+   * Main-process only. The caller supplies the explicitly selected immutable artifact's
+   * expected identity/revision, then validates all decrypted data before exposing it.
+   * This permits deliberate historical review; it does not infer rollback protection.
+   */
+  openExternal(expected: { purpose: 'backup' | 'transfer'; recordId: string; revision: number }, ciphertext: string): Promise<Uint8Array> {
+    expected = { ...expected }; const requestedEpoch = this.epoch;
+    const run = async () => {
+      if (!this.key || this.value === null || requestedEpoch !== this.epoch || !['backup', 'transfer'].includes(expected.purpose)) throw new WorkspaceLockedError();
+      const key = new Uint8Array(this.key);
+      let plaintext: Uint8Array | undefined;
+      try {
+        plaintext = await decryptBytes(key, context(this.scope, expected.purpose, expected.recordId, expected.revision), ciphertext);
+        if (requestedEpoch !== this.epoch || !this.key) throw new WorkspaceLockedError();
+        return plaintext;
+      } catch (error) { plaintext?.fill(0); throw error; }
+      finally { key.fill(0); }
     };
     const pending = this.queue.then(run); this.queue = pending.catch(() => {}); return pending;
   }
