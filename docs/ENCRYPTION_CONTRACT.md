@@ -30,6 +30,18 @@ ServeTrack currently allows20GiB recordings,32GiB legacy backups and100GiB proje
 
 The library does not implement filesystem staging/rename, streaming JSON export or disk quota handling. Actual20GiB/100GiB file IO, power-loss recovery and OS storage tests are separate acceptance gates. A forged/unverified plan must never be accepted as trusted manifest metadata. The API does not automatically fetch or transmit anything.
 
+## Indexed reads from an authenticated final seal
+
+`openSealedChunkIndex(master,expectedContext,finalSeal)` reuses the existing strict final-seal parser and produces an opaque, frozen **in-memory** proof. Draft manifests are rejected. The proof retains frozen scope, plan and ordered ciphertext commitments; it retains no raw master, file contents or persistence authority. Serialized, cloned, proxied, copied or fabricated objects are not proofs. The wire format, algorithm, 4 MiB chunk boundary and 128 GiB planning ceiling are unchanged.
+
+`describeSealedChunkIndex(proof)` returns fresh frozen `{context,plan}` metadata for a native immutable-file lookup. The description is not a proof and cannot be passed back in its place. The consumer must obtain the final seal from an independently trusted published artifact and pin that file UUID/context through its native lease; opening an arbitrary valid seal is not evidence that it is the currently published file. Do not accept a renderer-supplied “verified” flag.
+
+`openIndexedChunk(master,expectedContext,proof,position,ciphertext)` checks the exact expected context, integer position and encoded-length bound, then verifies the selected ciphertext’s committed SHA-256 hash **before** AEAD decryption. It also applies the existing full-plan/file/position binding and exact plaintext-length check. Another valid encryption for the same position is rejected when it disagrees with the selected final seal. A successful call returns at most 4 MiB; it neither reads nor verifies every other chunk, and it does not authorize full-file publication. This supports seek operations without whole-file verification per seek. Missing/corrupt other chunks remain detectable only when accessed or when the existing full-stream verifier runs.
+
+`closeSealedChunkIndex(proof)` is idempotent for a known proof and revokes future/pending indexed reads. A read checks revocation after async hash and decryption work and wipes a late plaintext result before rejection. Every operation owns a temporary input-key copy and best-effort wipes it when finished; the proof never keeps that key. Native leases must close the proof on lock, teacher/context change or file replacement, check their own epoch after awaited calls, and wipe any plaintext they already received when its use ends. Closing a proof cannot recall bytes previously returned to a caller or guarantee erasure of Web Crypto internals.
+
+Native ciphertext access must remain bounded before allocating a BLOB and must use the proof’s immutable context/plan/file UUID snapshot. Storage shape checks alone do not authenticate ciphertext. Do not create plaintext temporary files or weaken immutable collision refusal. Tests exercise actual first/last chunks, empty and maximum-size metadata plans without huge allocation, altered proofs/context/key/position/length, alternate valid ciphertext, and revocation during hash/decrypt. Actual multi-gigabyte IO, native seek/playback behavior and packaged-device acceptance remain separate gates.
+
 ## Consumer preservation checklist
 
 - Opt-in conversion writes a separate encrypted target; preserve existing plaintext source until validated recovery, second-device verification and complete byte/record comparison succeed. Never overwrite the only recoverable source.
