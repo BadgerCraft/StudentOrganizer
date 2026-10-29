@@ -109,6 +109,8 @@ describe('structured immutable object workspace', () => {
     expect(session.getRevision()).toBe(4); expect((await session.readRecord({ namespace: 'primary', table: 'students', key: 'a' })).text).toBe('new');
     expect(await session.readRecord({ namespace: 'recovery', table: 'backup-content', key: 'new-history' })).toBe('new exact history');
   });
+  // Five real encrypted SQLite setup/restore/reopen scenarios exceeded the
+  // default 5s on Windows CI; retain every case under one bounded I/O allowance.
   it('rejects invalid or revoked retained-root restore without advancing current data', async () => {
     for (const scenario of ['wrong-key', 'wrong-wrapper', 'future', 'guard', 'lost-reply']) {
       const f = await fixture(); const session = await StructuredWorkspace.create(f.options, [row('a', { text: 'old' })]); const original = structuredClone(f.checkpoint()); await session.commitDelta(1, [row('a', { text: 'new' })]);
@@ -123,7 +125,7 @@ describe('structured immutable object workspace', () => {
       expect(() => session.getRevision()).toThrow(); const reopened = await StructuredWorkspace.open(f.options);
       expect(reopened.getRevision()).toBe(scenario === 'lost-reply' ? 3 : 2); expect((await reopened.readRecord({ namespace: 'primary', table: 'students', key: 'a' })).text).toBe(scenario === 'lost-reply' ? 'old' : 'new');
     }
-  });
+  }, 30000);
   // Mac Intel CI exceeded the old 30s while processing real encrypted chunks.
   // Keep a bounded allowance for the minimum two-chunk FULL-SQLite fixture.
   it('preflights materialization budgets while retaining a bounded authenticated streaming path', async () => {

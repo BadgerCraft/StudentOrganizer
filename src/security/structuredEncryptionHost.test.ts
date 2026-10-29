@@ -26,10 +26,27 @@ afterEach(async () => {
   // uncertain encrypted write. Exhausted cleanup still fails the test.
   for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
+function focusedHostSnapshot(full: any) {
+  // Host protocol coverage needs a valid owner graph, a changed student, an
+  // unchanged student and retained history. Encrypting the entire classroom
+  // demo here caused hundreds of unrelated WAL/FULL fsyncs per fixture on CI.
+  // Keep every canonical table and real validators; large payload/graph tests
+  // remain in the structured-workspace and archive suites.
+  const students=full.tables.students.slice(0,2),user=full.tables.users.find((row:any)=>row.id==='user-tyler');
+  expect(students).toHaveLength(2);expect(user).toBeDefined();
+  const memberships=full.tables.organizationMemberships.filter((row:any)=>row.userId===user.id&&students.some((student:any)=>student.organizationId===row.organizationId));
+  expect(memberships).toHaveLength(1);
+  const organizationIds=new Set<string>(students.map((row:any)=>row.organizationId));
+  for(const membership of memberships)organizationIds.add(membership.organizationId);
+  for(const id of organizationIds){const organization=full.tables.organizations.find((row:any)=>row.id===id);expect(organization).toBeDefined();if(organization.parentOrganizationId)organizationIds.add(organization.parentOrganizationId);}
+  const tables:Record<string,any[]>=Object.fromEntries(Object.keys(full.tables).map(name=>[name,[]]));
+  tables.organizations=full.tables.organizations.filter((row:any)=>organizationIds.has(row.id));tables.users=[user];tables.organizationMemberships=memberships;tables.students=students;
+  return{...full,tables};
+}
 async function fixture(gate = () => true, deviceId = 'fictional-computer-A', extraOptions: any = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'fictional-structured-host-')); dirs.push(directory);
   const db = new OntarioTeacherDB('fictional-structured-host-' + crypto.randomUUID()); dbs.push(db); await seedDatabase(db);
-  const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+  const primary = focusedHostSnapshot(JSON.parse(await new PortabilityService(db).createFullBackupJSON()));
   const bundle = { format: 'student-organizer-working', version: 1, primary, recovery: { backups: [{ id: 'dated-1', createdAt: '2026-10-29T00:00:00Z', reason: 'manual', json: JSON.stringify(primary) }], options: [], state: [] }, applicationStorage: {} };
   const scope = { appId: 'student-organizer', vaultId: 'fictional-host-vault', keyVersion: 1 };
   let key: Uint8Array | null = null, saved: any = null, commits = 0, stages = 0, fresh = false, failReply = false;
@@ -60,9 +77,11 @@ describe('structured native host', () => {
     const f = await fixture(); await f.prepare(); expect(await f.host.completeMigration(f.bundle)).toEqual({ revision: 1 });
     expect(f.artifactOrder[0]).toBe('protected-intent-marker'); expect(f.artifactOrder).toContain('protected-key');
     expect((await f.host.read()).snapshot).toEqual({ ...f.bundle, recovery: { ...f.bundle.recovery, backups: [] } }); expect(await f.host.listBackups()).toEqual(f.bundle.recovery.backups.map(({ json: _json, ...meta }) => meta)); expect(f.saved().ciphertext).not.toContain(f.bundle.primary.tables.students[0].firstName);
+    expect(f.stages()).toBeLessThanOrEqual(24); // Bound synthetic setup work, not production fsync durability.
     const before = f.stages(), row = { ...f.bundle.primary.tables.students[0], firstName: 'Fictional corrected name' };
     expect(await f.host.commitDelta(1, [{ namespace: 'primary', table: 'students', key: row.id, value: row }])).toEqual({ revision: 2 });
     expect(f.stages() - before).toBeLessThanOrEqual(2); expect((await f.host.read()).snapshot.primary.tables.students.find((s: any) => s.id === row.id).firstName).toBe(row.firstName);
+    expect((await f.host.read()).snapshot.primary.tables.students[1]).toEqual(f.bundle.primary.tables.students[1]);
     f.host.lock(); await f.host.unlock(); expect((await f.host.read()).revision).toBe(2); expect(f.commits()).toBe(2);
   }, NATIVE_WORKFLOW_TIMEOUT);
   it('preserves the original input and refuses stale source, missing proof, wrong revision and invalid records', async () => {
