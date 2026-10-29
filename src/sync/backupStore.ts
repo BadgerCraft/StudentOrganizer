@@ -18,6 +18,15 @@ export async function saveRecoveryOptions(options:RecoveryOptions,store=recovery
   if(![1,6,24].includes(options.intervalHours)||![7,14,30].includes(options.retain)||typeof options.automatic!=='boolean') throw new Error('Choose a supported backup schedule.');
   await store.options.put({...options,id:'options'});
 }
+export type RecoveryOptionsPatch = Partial<Pick<RecoveryOptions,'automatic'|'intervalHours'|'retain'>>;
+/** Merge a single UI intent against the latest committed settings, never a lagging render. */
+export async function updateRecoveryOptions(patch:RecoveryOptionsPatch,store=recoveryStore):Promise<RecoveryOptions> {
+  if(!patch||typeof patch!=='object'||Object.keys(patch).some(key=>!['automatic','intervalHours','retain'].includes(key)))throw new Error('Choose a supported backup setting.');
+  return store.transaction('rw',store.options,async()=>{
+    const next:RecoveryOptions={...await getRecoveryOptions(store),...patch,id:'options'};
+    await saveRecoveryOptions(next,store);return next;
+  });
+}
 export async function saveBackup(database:OntarioTeacherDB,userId:string,reason:SavedBackup['reason'],store=recoveryStore,now=new Date()):Promise<SavedBackup|null> {
   if(rendererStorageMode()!=='legacy') throw new Error('Protected backups must use the native encrypted version catalog.');
   const epoch=getIdentityEpoch(); await assertWorkspaceAccess(database,userId,epoch);

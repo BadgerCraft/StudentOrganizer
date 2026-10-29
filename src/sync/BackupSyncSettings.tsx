@@ -2,17 +2,21 @@ import { saveDatedBackup } from '../security/datedBackups';
 import { lockEncryptedRuntime, protectedStorageBoundary } from '../security/encryptedRuntime';
 import { unwrapEncryption, type NativeDatedBackup } from '../security/encryptionBridge';
 import { rendererStorageMode } from '../security/rendererStorageMode';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { OntarioTeacherDB } from '../db/database';
 import { PortabilityService } from '../services/portabilityService';
 import { getIdentityEpoch } from '../services/identityService';
 import { applySnapshot, assertWorkspaceAccess, readSnapshot, type Snapshot } from './snapshot';
-import { DEFAULT_OPTIONS, getRecoveryOptions, recoveryStore, saveRecoveryOptions } from './backupStore';
+import { DEFAULT_OPTIONS, getRecoveryOptions, recoveryStore, updateRecoveryOptions, type RecoveryOptions, type RecoveryOptionsPatch } from './backupStore';
 import { finishSync, previewSync, publishFirstSnapshot, requireDriveProtection, unwrap, type DriveStatus, type RemoteSnapshot, type SyncPreview } from './driveSync';
 import { ConflictReview } from './ConflictReview';
 import { RecoveryActionError, recoveryCode, recoveryGuidance, type RecoveryAction } from './recoveryGuidance';
 import { automaticBackupStatus, runAutomaticBackup } from './automaticBackup';
+type OptionsContext={database:OntarioTeacherDB;userId:string|undefined;protectedMode:boolean;epoch:number};
+type OptionsObservation={context:OptionsContext;sequence:number;value?:RecoveryOptions;failed?:true};
+type PendingOptions={context:OptionsContext;value:RecoveryOptions;afterReadSequence:number|null};
+const sameOptions=(a:RecoveryOptions,b:RecoveryOptions)=>a.automatic===b.automatic&&a.intervalHours===b.intervalHours&&a.retain===b.retain;
 export function useAutomaticBackups(database:OntarioTeacherDB,userId?:string) {
  useEffect(()=>{
   if(!userId)return;let active=true,busy=false;
@@ -26,7 +30,27 @@ export function BackupSyncSettings({database,userId,onBusyChange}:{database:Onta
  const legacyBackups=useLiveQuery(()=>protectedMode?[]:recoveryStore.backups.orderBy('createdAt').reverse().toArray(),[protectedMode])??[];
  const [nativeBackups,setNativeBackups]=useState<NativeDatedBackup[]>([]);
  const backups=protectedMode?nativeBackups:legacyBackups;
- const options=useLiveQuery(()=>getRecoveryOptions(),[])??DEFAULT_OPTIONS;
+ const identityEpoch=getIdentityEpoch();
+ const optionsContext=useMemo<OptionsContext>(()=>({database,userId,protectedMode,epoch:identityEpoch}),[database,userId,protectedMode,identityEpoch]);
+ const optionsContextRef=useRef(optionsContext);optionsContextRef.current=optionsContext;
+ const optionsReadSequence=useRef(0),[optionsRefresh,setOptionsRefresh]=useState(0);
+ const observedRead=useLiveQuery(async():Promise<OptionsObservation>=>{
+   const sequence=++optionsReadSequence.current;
+   try{return{context:optionsContext,sequence,value:await getRecoveryOptions()};}
+   catch{return{context:optionsContext,sequence,failed:true};}
+ },[optionsContext,optionsRefresh]);
+ const [latestRead,setLatestRead]=useState<OptionsObservation|null>(null);
+ useEffect(()=>{if(observedRead?.context===optionsContext&&getIdentityEpoch()===optionsContext.epoch)setLatestRead(previous=>previous?.context===optionsContext&&previous.sequence>=observedRead.sequence?previous:observedRead);},[observedRead,optionsContext]);
+ const currentRead=latestRead?.context===optionsContext?latestRead:null;
+ const observedOptions=currentRead?.value,optionsReadFailed=currentRead?.failed===true;
+ const [pendingOptions,setPendingOptions]=useState<PendingOptions|null>(null);
+ const pending=pendingOptions?.context===optionsContext?pendingOptions:null;
+ const options=pending?.value??observedOptions??DEFAULT_OPTIONS;
+ useEffect(()=>{
+   // A later authoritative read can supersede our saved row without ever
+   // emitting that exact row. Equality alone would mask external changes forever.
+   if(pending&&observedOptions&&pending.afterReadSequence!==null&&(currentRead!.sequence>pending.afterReadSequence||sameOptions(pending.value,observedOptions)))setPendingOptions(previous=>previous===pending?null:previous);
+ },[pending,observedOptions,currentRead]);
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState<ReturnType<typeof recoveryGuidance>|null>(null);
  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
  const errorRef=useRef<HTMLDivElement>(null);
@@ -40,16 +64,36 @@ export function BackupSyncSettings({database,userId,onBusyChange}:{database:Onta
  useEffect(()=>{if(protectedMode)void refreshBackups().catch(cause=>{if(alive.current)setError(recoveryGuidance('backup',cause));});},[protectedMode,userId]);
  const checkStatus=async()=>{if(bridge){const next=await unwrap(bridge.status());if(protectedMode&&next.protection!=='encrypted-v1'){setStatus({...next,configured:false,connected:false});throw new RecoveryActionError('Protected sync requires the encrypted native transport.','setup','unchanged');}setStatus(next);if(!next.connected){setPreview(null);setVersionsLoaded(false);}}else setStatus({configured:false,connected:false});};
  useEffect(()=>{alive.current=true;setStatus({configured:false,connected:false});setVersions([]);setVersionsLoaded(false);setPreview(null);setConsent(false);void checkStatus().catch(e=>{if(alive.current)setError(recoveryGuidance('status',e));});return()=>{alive.current=false;void bridge?.disconnect().catch(()=>{});};},[bridge,userId]);
- const run=async(kind:RecoveryAction,action:()=>Promise<void>)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);setError(null);setMessage('');try{if(['connect','refresh','preview','publish','apply'].includes(kind)){if(!bridge)throw new RecoveryActionError('Native encrypted sync is unavailable.','setup');await requireDriveProtection(bridge);}await action();}catch(e){if(alive.current){setError(recoveryGuidance(kind,e));if(kind==='publish'||kind==='apply'){setRefreshRequired(true);setPreview(null);setChoices({});}try{await checkStatus();}catch{/* Keep the actionable original error visible. */}}}finally{busyRef.current=false;if(alive.current)setBusy(false);}};
+ const run=async(kind:RecoveryAction,action:()=>Promise<void>,isCurrent=()=>true)=>{if(busyRef.current)return;busyRef.current=true;setBusy(true);setError(null);setMessage('');try{if(['connect','refresh','preview','publish','apply'].includes(kind)){if(!bridge)throw new RecoveryActionError('Native encrypted sync is unavailable.','setup');await requireDriveProtection(bridge);}await action();}catch(e){if(alive.current&&isCurrent()){setError(recoveryGuidance(kind,e));if(kind==='publish'||kind==='apply'){setRefreshRequired(true);setPreview(null);setChoices({});}try{await checkStatus();}catch{/* Keep the actionable original error visible. */}}}finally{busyRef.current=false;if(alive.current)setBusy(false);}};
+ const changeOptions=(patch:RecoveryOptionsPatch)=>{
+   if(busyRef.current||!userId||!observedOptions||optionsReadFailed)return;
+   const context=optionsContext,isCurrent=()=>alive.current&&optionsContextRef.current===context&&getIdentityEpoch()===context.epoch;
+   setPendingOptions({context,value:{...options,...patch},afterReadSequence:null});
+   void run('options',async()=>{
+     if(!isCurrent())return;
+     try{
+       const saved=await updateRecoveryOptions(patch);
+       if(isCurrent()){
+         setPendingOptions({context,value:saved,afterReadSequence:optionsReadSequence.current});
+         // Explicitly start a post-commit observation. An already-running live
+         // query may have captured older values before this acknowledgment.
+         setOptionsRefresh(value=>value+1);
+       }
+     }catch(cause){if(isCurrent()){setPendingOptions(null);setOptionsRefresh(value=>value+1);throw cause;}}
+   },isCurrent);
+ };
  const refresh=async()=>{if(bridge){setVersionsLoaded(false);setPreview(null);setChoices({});setVersions(await unwrap(bridge.list()));setVersionsLoaded(true);setRefreshRequired(false);setPreview(null);setChoices({});}};
  return <section aria-label="Backup and personal sync" className="space-y-5 rounded-xl border border-slate-300 p-5">
   <h2 className="text-lg font-semibold">Backups & personal sync</h2>
   <p>Both computers keep working offline. Dated local backups stay on this computer; they cannot protect against loss of this device. Export a separate copy for that.</p>
-  <label className="flex items-center gap-2"><input type="checkbox" checked={options.automatic} disabled={busy||!userId} onChange={e=>void run('options',()=>saveRecoveryOptions({...options,automatic:e.target.checked}))}/>Automatic local backups</label>
+  {!observedOptions&&!pending&&!optionsReadFailed?<p role="status">Loading backup settings…</p>:null}
+  {optionsReadFailed&&<div role="alert" className="rounded border border-amber-500 p-3 space-y-2"><p>Latest saved backup settings could not be read.</p><p>{pending?.afterReadSequence!==null&&pending?'The update was committed, but its latest readback is unconfirmed. Shown values may have been changed elsewhere.':'Saved values are unavailable; no default settings are shown as saved.'} Read the saved settings again before making another change.</p><button disabled={busy} className="rounded border px-3 py-2" onClick={()=>setOptionsRefresh(value=>value+1)}>Read saved settings again</button></div>}
+  {(observedOptions||pending)&&<><label className="flex items-center gap-2"><input type="checkbox" checked={options.automatic} disabled={busy||!userId||optionsReadFailed} onChange={e=>changeOptions({automatic:e.target.checked})}/>Automatic local backups</label>
   <div className="flex flex-wrap gap-4">
-   <label>Save changed work at most once every <select aria-label="Backup interval" value={options.intervalHours} disabled={busy} onChange={e=>void run('options',()=>saveRecoveryOptions({...options,intervalHours:Number(e.target.value)}))}>{[1,6,24].map(n=><option key={n} value={n}>{n} hour{n===1?'':'s'}</option>)}</select></label>
-   <label>Keep <select aria-label="Automatic backup versions" value={options.retain} disabled={busy} onChange={e=>void run('options',()=>saveRecoveryOptions({...options,retain:Number(e.target.value)}))}>{[7,14,30].map(n=><option key={n}>{n}</option>)}</select> automatic versions</label>
+   <label>Save changed work at most once every <select aria-label="Backup interval" value={options.intervalHours} disabled={busy||!userId||optionsReadFailed} onChange={e=>changeOptions({intervalHours:Number(e.target.value)})}>{[1,6,24].map(n=><option key={n} value={n}>{n} hour{n===1?'':'s'}</option>)}</select></label>
+   <label>Keep <select aria-label="Automatic backup versions" value={options.retain} disabled={busy||!userId||optionsReadFailed} onChange={e=>changeOptions({retain:Number(e.target.value)})}>{[7,14,30].map(n=><option key={n}>{n}</option>)}</select> automatic versions</label>
   </div>
+  </>}
   <p className="text-sm">Runs while the app is open, starting when a teacher is selected. Unchanged snapshots are skipped. Manual and pre-restore/pre-sync safety versions are retained separately. {protectedMode?'Dated backups are held inside this encrypted workspace; encrypted file export provides a separate copy. The retained original workspace and earlier exported files are not retroactively encrypted.':'Backups are not encrypted by this app.'}</p>
   <button className="rounded-lg border bg-blue-600 text-white px-4 py-2" disabled={busy||!userId} onClick={()=>void run('backup',async()=>{await saveDatedBackup(database,userId!,'manual');await refreshBackups();setMessage('Dated backup saved on this computer.');})}>Save a backup now</button>
   {protectedMode&&<button className="rounded border px-3 py-2" disabled={busy} onClick={()=>void run('backup',refreshBackups)}>Refresh dated backups</button>}

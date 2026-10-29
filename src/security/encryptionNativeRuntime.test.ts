@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
 import { PortabilityService } from '../services/portabilityService';
+import { BACKUP_TABLE_NAMES } from '../services/backupValidation';
+import { validateMainBundleIntegrity } from './mainBundleValidation';
 import { answerEnrollmentChallenge } from './encryptedWorkspace';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -29,6 +31,60 @@ async function fixture(initialGate = false, overrides: any = {}) {
     ...overrides, createHost: (o: any) => { options = o; return overrides.hostFactory ? overrides.hostFactory(o) : { lock() {}, status: () => ({ state: 'locked' }) }; } };
   const runtime = await createNativeEncryptionRuntime(config);
   return { directory, runtime, config, receipts, failMarkerRead: () => { markerUnreadable = true; }, failMarkerWrite: () => { markerWriteUncertain = true; }, holdNextRead: () => { let entered!: () => void, release!: () => void; const enteredPromise = new Promise<void>(r => { entered = r; }), gate = new Promise<void>(r => { release = r; }); holding = { entered, gate }; return { entered: enteredPromise, release }; }, options: () => options, calls: () => calls, setGate: (v: boolean) => { gate = v; } };
+}
+// These protocol integrations need a complete relational graph, not a whole
+// classroom's duplicate student/result rows. Keep every protected table present,
+// actual K/T/C/A scale entries, teacher/class authority and dated root history.
+// Full-classroom coverage remains in structuredEncryptionHost.test.ts and
+// scripts/encryptedAppSmoke.ts / scripts/encryptedNativeAppSmoke.ts.
+async function seedRecoveryProtocolFixture(db: OntarioTeacherDB) {
+  await seedDatabase(db);
+  const original = JSON.parse(await new PortabilityService(db).createFullBackupJSON()), t = original.tables;
+  const section = t.classSections[0], student = t.students[0];
+  const enrollment = t.classEnrollments.find((row: any) => row.classSectionId === section.id && row.studentId === student.id);
+  const assessment = t.assessments.find((row: any) => row.classSectionId === section.id);
+  expect(enrollment).toBeDefined(); expect(assessment).toBeDefined();
+  const assignments = t.studentAssessments.filter((row: any) => row.assessmentId === assessment.id && row.classEnrollmentId === enrollment.id);
+  const assignmentIds = new Set(assignments.map((row: any) => row.id));
+  const events = t.participationEvents.filter((row: any) => row.classEnrollmentId === enrollment.id && row.classSectionId === section.id).slice(0, 1);
+  const eventTypes = new Set(events.map((row: any) => row.eventTypeId));
+  const term = t.terms.find((row: any) => row.id === section.termId);
+  const retained: Record<string, any[]> = {
+    organizations: t.organizations, users: t.users, organizationMemberships: t.organizationMemberships, devices: t.devices,
+    userPreferences: t.userPreferences.filter((row: any) => !row.lastOpenedClassSectionId || row.lastOpenedClassSectionId === section.id),
+    academicYears: t.academicYears.filter((row: any) => row.id === term.academicYearId), terms: [term],
+    reportingPeriods: t.reportingPeriods.filter((row: any) => row.termId === term.id), courses: t.courses.filter((row: any) => row.id === section.courseId),
+    classSections: [section], classSectionStaff: t.classSectionStaff.filter((row: any) => row.classSectionId === section.id),
+    units: t.units.filter((row: any) => row.id === assessment.unitId), classSessions: t.classSessions.filter((row: any) => row.classSectionId === section.id),
+    students: [student], classEnrollments: [enrollment], attendanceRecords: t.attendanceRecords.filter((row: any) => row.classEnrollmentId === enrollment.id),
+    seatingLayouts: t.seatingLayouts.filter((row: any) => row.classSectionId === section.id), seatPositions: t.seatPositions.filter((row: any) => row.classEnrollmentId === enrollment.id),
+    markScaleFamilies: t.markScaleFamilies, markScaleVersions: t.markScaleVersions, markScaleEntries: t.markScaleEntries,
+    gradingPolicies: t.gradingPolicies.filter((row: any) => row.classSectionId === section.id),
+    gradeOverrides: t.gradeOverrides.filter((row: any) => row.classEnrollmentId === enrollment.id), gradeSnapshots: t.gradeSnapshots.filter((row: any) => row.classEnrollmentId === enrollment.id),
+    assessments: [assessment], assessmentCategories: t.assessmentCategories.filter((row: any) => row.assessmentId === assessment.id), studentAssessments: assignments,
+    categoryResults: t.categoryResults.filter((row: any) => assignmentIds.has(row.studentAssessmentId)),
+    participationEventTypes: t.participationEventTypes.filter((row: any) => eventTypes.has(row.id)), participationEvents: events,
+    participationDailySummaries: t.participationDailySummaries.filter((row: any) => row.classEnrollmentId === enrollment.id), studentNotes: t.studentNotes.filter((row: any) => row.classEnrollmentId === enrollment.id),
+  };
+  for (const name of BACKUP_TABLE_NAMES) if (!retained[name]) expect(t[name], `optional fixture table ${name} must stay explicitly empty`).toEqual([]);
+  // Empty optional tables stay explicit in the export; no production validator,
+  // encryption format, SQLite durability setting or recovery assertion is bypassed.
+  await db.transaction('rw', db.tables, async () => {
+    for (const name of BACKUP_TABLE_NAMES) {
+      const ids = new Set((retained[name] || []).map((row: any) => row.id));
+      await db.table(name).bulkDelete(t[name].filter((row: any) => !ids.has(row.id)).map((row: any) => row.id));
+    }
+  });
+  const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+  expect(Object.keys(primary.tables).sort()).toEqual([...BACKUP_TABLE_NAMES].sort());
+  expect(primary.tables.students).toHaveLength(1); expect(primary.tables.classSections).toHaveLength(1);
+  expect(primary.tables.classEnrollments).toHaveLength(1); expect(primary.tables.studentAssessments).toHaveLength(1);
+  expect(primary.tables.assessmentCategories.map((row: any) => row.categoryCode).sort()).toEqual(['A', 'C', 'K', 'T']);
+  expect(primary.tables.categoryResults).toHaveLength(4); expect(primary.tables.markScaleEntries).toEqual(t.markScaleEntries);
+  const count = Object.values(primary.tables).reduce((sum: number, rows: any) => sum + rows.length, 0);
+  expect(count).toBeGreaterThan(35); expect(count).toBeLessThan(90);
+  await validateMainBundleIntegrity({ format: 'student-organizer-working', version: 1, primary, recovery: { backups: [], options: [], state: [] }, applicationStorage: {} });
+  return primary;
 }
 describe('native profile and protected-storage assembly', () => {
   it('keeps fresh legacy preparation free from persistent artifacts and native key queries', async () => {
@@ -236,6 +292,10 @@ describe('fresh offline recovery runtime capability', () => {
 });
 
 describe('offline recovery with complete real encrypted archives', () => {
+  // Original full-classroom Mac Intel fixture advanced through durable verification:
+  // root1 13.7s, export 24.8s, tamper 32.9s, canceled preview 54.6s,
+  // next verified preview 80.8s; the old 90s limit expired during authorization.
+  // Keep the bounded stage/apply diagnostics; allow the complete real-I/O flow.
   it('verifies code, full archive and operator before recovering source revision three as local revision one', async () => {
     const { createStructuredEncryptionHost } = require('../../electron/structuredEncryptionHost.cjs');
     const db = new OntarioTeacherDB('fictional-offline-runtime-' + crypto.randomUUID());
@@ -249,7 +309,7 @@ describe('offline recovery with complete real encrypted archives', () => {
     };
     phase('start', `node=${process.version} platform=${process.platform} arch=${process.arch}`);
     try {
-      phase('seed-start'); await seedDatabase(db); const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+      phase('seed-start'); const primary = await seedRecoveryProtocolFixture(db); phase('fixture-ready', `tables=${Object.keys(primary.tables).length} records=${Object.values(primary.tables).reduce((sum: number, rows: any) => sum + rows.length, 0)}`);
       const bundle = { format: 'student-organizer-working', version: 1, primary, recovery: { backups: [], options: [], state: [] }, applicationStorage: {} };
       phase('source-setup-start'); a = await fixture(true, { hostFactory: createStructuredEncryptionHost }); b = await fixture(true, { hostFactory: createStructuredEncryptionHost });
       let source = a.runtime.getHost(); const recovery = await source.prepareMigration(bundle); await source.verifyRecovery(recovery.recoveryCode);
@@ -302,7 +362,7 @@ describe('offline recovery with complete real encrypted archives', () => {
       phase('reopened-unlocked'); expect(saved.snapshot.primary.tables.students.find((student: any) => student.id === row.id).firstName).toBe(row.firstName);
       for (const sub of ['device-keys', 'working', 'chunks']) for (const file of await fs.readdir(path.join(b.directory, sub))) expect((await fs.readFile(path.join(b.directory, sub, file))).includes(Buffer.from(row.firstName))).toBe(false);
     } finally { c?.runtime.lockNow(); releaseHeld(); a?.runtime.close(); b?.runtime.close(); c?.runtime.close(); await db.delete(); phase('cleanup-complete'); }
-  }, 90000);
+  }, 240000);
 });
 
 describe('interrupted initial migration retry', () => {
@@ -310,7 +370,7 @@ describe('interrupted initial migration retry', () => {
     const { createStructuredEncryptionHost } = require('../../electron/structuredEncryptionHost.cjs'), { createCipherChunkStore } = require('../../electron/cipherChunkStore.cjs');
     const db = new OntarioTeacherDB('fictional-resumable-runtime-' + crypto.randomUUID()); let f: any, receiver: any;
     try {
-      await seedDatabase(db); const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+      const primary = await seedRecoveryProtocolFixture(db);
       const bundle = { format: 'student-organizer-working', version: 1, primary, recovery: { backups: [], options: [], state: [] }, applicationStorage: {} }; let interrupt = true;
       f = await fixture(true, { hostFactory: createStructuredEncryptionHost, createChunks: (input: any) => {
         const store = createCipherChunkStore(input); return { ...store, stage: async (...args: any[]) => { if (interrupt) { interrupt = false; throw Error('SYNTHETIC_INITIAL_CHUNK_FAILURE'); } return store.stage(...args); } };
