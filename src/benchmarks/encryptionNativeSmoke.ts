@@ -18,11 +18,11 @@ try{
   const {createSqliteEncryptedVaultStore}=require(path.join(root,'electron/sqliteEncryptedVaultStore.cjs'));
   const scope={appId:'student-organizer',vaultId:'fictional-native-probe',keyVersion:1};const directory=path.join(profile,'encrypted-probe');
   const key=cryptoApi.generateMasterKey();const bytes=new TextEncoder().encode('FICTIONAL_ENCRYPTED_NATIVE_MARKER_20261029');
-  const context=(revision:number)=>({...scope,purpose:'working-data',recordId:'workspace',revision});
+  const context={...scope,purpose:'working-data',recordId:'workspace',revision:1};
   const store=createSqliteEncryptedVaultStore({directory,scope});
-  const first={revision:1,ciphertext:await cryptoApi.encryptBytes(key,context(1),bytes)};await store.commit(null,first);
+  const first={revision:1,ciphertext:await cryptoApi.encryptBytes(key,context,bytes)};await store.commit(null,first);
   const reopened=createSqliteEncryptedVaultStore({directory,scope});const saved=await reopened.read();if(saved.revision!==1||saved.ciphertext!==first.ciphertext)throw Error('Committed bytes differ');
-  const plain=await cryptoApi.decryptBytes(key,context(1),saved.ciphertext);if(new TextDecoder().decode(plain)!==new TextDecoder().decode(bytes))throw Error('Decrypt mismatch');
+  const plain=await cryptoApi.decryptBytes(key,context,saved.ciphertext);if(new TextDecoder().decode(plain)!==new TextDecoder().decode(bytes))throw Error('Decrypt mismatch');
   let stale=false;try{await reopened.commit(null,first);}catch{stale=true;}if(!stale)throw Error('Stale CAS accepted');
   const db=new DatabaseSync(path.join(directory,'workspace.sqlite'),{readOnly:true});const integrity=db.prepare('PRAGMA integrity_check').get();db.close();if(Object.values(integrity)[0]!=='ok')throw Error('SQLite integrity failed');
   for(const name of fs.readdirSync(directory)){const data=fs.readFileSync(path.join(directory,name));if(data.includes(Buffer.from(bytes)))throw Error('Plaintext leaked into storage');}

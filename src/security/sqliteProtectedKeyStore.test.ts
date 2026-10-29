@@ -72,13 +72,16 @@ describe('transactional OS-protected key registry', () => {
   });
   it('bounds a competing process lock and does not return locked storage as absent', async () => {
     const { directory, store } = await fixture(); await store.initialize();
-    const script = "const{createSqliteProtectedKeyStore}=require(process.argv[1]);const s=createSqliteProtectedKeyStore(JSON.parse(process.argv[2]));s.withExclusiveProfileLock(async()=>{console.log('LOCKED');await new Promise(r=>setTimeout(r,2000));}).then(()=>process.exit(0));";
-    const child = spawn(process.execPath, ['-e', script, path.resolve('electron/sqliteProtectedKeyStore.cjs'), JSON.stringify({ directory, scope })], { stdio: ['ignore', 'pipe', 'pipe'] });
+    // Hold until the actual contender finishes; a fixed sleep can expire before a busy CI parent is scheduled.
+    const script = "const{createSqliteProtectedKeyStore}=require(process.argv[1]);const s=createSqliteProtectedKeyStore(JSON.parse(process.argv[2]));const watchdog=setTimeout(()=>process.exit(78),15000);s.withExclusiveProfileLock(async()=>{console.log('LOCKED');await new Promise(r=>process.stdin.once('data',r));}).then(()=>{clearTimeout(watchdog);process.exit(0);});";
+    const child = spawn(process.execPath, ['-e', script, path.resolve('electron/sqliteProtectedKeyStore.cjs'), JSON.stringify({ directory, scope })], { stdio: ['pipe', 'pipe', 'pipe'] });
     const done = new Promise<void>((resolve, reject) => { child.once('exit', code => code === 0 ? resolve() : reject(Error('child failed'))); child.once('error', reject); });
-    await new Promise<void>((resolve, reject) => { child.stdout!.once('data', () => resolve()); child.once('error', reject); });
-    const before = Date.now(); await expect(store.withExclusiveProfileLock(async () => store.read('master'))).rejects.toThrow(); expect(Date.now() - before).toBeLessThan(2500); await done;
+    try {
+      await new Promise<void>((resolve, reject) => { child.stdout!.once('data', () => resolve()); child.once('error', reject); });
+      const before = Date.now(); await expect(store.withExclusiveProfileLock(async () => store.read('master'))).rejects.toThrow(); expect(Date.now() - before).toBeLessThan(2500);
+    } finally { child.stdin!.end('release'); await done; }
     await store.withExclusiveProfileLock(async () => expect(await store.read('master')).toBeNull());
-  });
+  }, 20000);
   it('rolls back a process exit after row creation before commit', async () => {
     const { directory, store } = await fixture(); await store.initialize();
     const script = "const{createSqliteProtectedKeyStore}=require(process.argv[1]);const s=createSqliteProtectedKeyStore(JSON.parse(process.argv[2]));s.withExclusiveProfileLock(async()=>{await s.create('master',new Uint8Array([33,44]));process.exit(73);});";
