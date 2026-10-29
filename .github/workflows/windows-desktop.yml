@@ -34,6 +34,8 @@ jobs:
         run: npm run package:win -- --publish never "--config.extraMetadata.version=$env:QA_VERSION"
       - name: Check packaged local speech runtime without audio
         run: node scripts/dictationRuntimeSmoke.cjs release/win-unpacked/resources/dictation-runtime
+      - name: Verify packaged encrypted SQLite storage with synthetic bytes
+        run: npx tsx src/benchmarks/encryptionNativeSmoke.ts
       - name: Check actual packaged PDF renderer and controlled save cancellation
         run: npx tsx src/benchmarks/reportPdfDesktopSmoke.ts
       - name: Check actual installed update IPC boundary before replacement builds
