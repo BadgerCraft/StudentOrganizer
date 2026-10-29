@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 29 — merge and approved encryption
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-ENCRYPTION | Tyler approved encryption for both apps: separate app keys, trusted own computers, automatic OS unlock and an offline recovery code; working data, backups and transfers included. | Implement staged draft PRs from merged main a789e33. Reusable authenticated crypto contract, OS-protected key adapter and non-destructive SO migration substrate first; actual activation stays unavailable until recovery/second-device verification and full storage-surface coverage. Synthetic keys/data only; no provisioning, new service/repository, paid dependency, release/deployment or new PR merge. |
+| TUV-PR49-MERGE | Tyler explicitly said “Merge both” for SO49 and VBS5. | SO49 verified unchanged at f369624 with all4 checks green, merged as a789e33c62220d2deaac0b6124b1d7e4debf2e97. Main Windows run40811764419 completed successfully on that exact merge commit (package, install-recovery, legacy-bootstrap). Historical draft/unmerged notes below are superseded by this row. |
+
 ## October 28 — feedback keyboard clarification
 
 | Stable ID | Disposition | Next action / gate |
