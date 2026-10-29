@@ -239,29 +239,37 @@ describe('offline recovery with complete real encrypted archives', () => {
   it('verifies code, full archive and operator before recovering source revision three as local revision one', async () => {
     const { createStructuredEncryptionHost } = require('../../electron/structuredEncryptionHost.cjs');
     const db = new OntarioTeacherDB('fictional-offline-runtime-' + crypto.randomUUID());
-    let a: any, b: any, c: any;
+    let a: any, b: any, c: any, releaseHeld = () => {};
+    const started = performance.now();
+    const phase = (name: string, details = '') => console.info(`[offline-archive] ${name} elapsedMs=${Math.round(performance.now() - started)}${details ? ' ' + details : ''}`);
+    const bounded = async <T,>(action: Promise<T>, name: string, milliseconds: number): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { return await Promise.race([action, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error(`[offline-archive] ${name} did not settle within ${milliseconds}ms`)), milliseconds); })]); }
+      finally { if (timer) clearTimeout(timer); }
+    };
+    phase('start', `node=${process.version} platform=${process.platform} arch=${process.arch}`);
     try {
-      await seedDatabase(db); const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+      phase('seed-start'); await seedDatabase(db); const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
       const bundle = { format: 'student-organizer-working', version: 1, primary, recovery: { backups: [], options: [], state: [] }, applicationStorage: {} };
-      a = await fixture(true, { hostFactory: createStructuredEncryptionHost }); b = await fixture(true, { hostFactory: createStructuredEncryptionHost });
+      phase('source-setup-start'); a = await fixture(true, { hostFactory: createStructuredEncryptionHost }); b = await fixture(true, { hostFactory: createStructuredEncryptionHost });
       let source = a.runtime.getHost(); const recovery = await source.prepareMigration(bundle); await source.verifyRecovery(recovery.recoveryCode);
       const challenge = await source.createDeviceChallenge('fictional-offline-enrollment-check');
       const key = await recoverMasterKey(recovery.recoveryCode, recovery.wrappedKey, recovery.appId, recovery.vaultId, recovery.keyVersion);
       try { await source.verifyDeviceResponse(challenge.deviceId, await answerEnrollmentChallenge(key, challenge)); } finally { key.fill(0); }
       expect(await source.completeMigration(bundle)).toEqual({ revision: 1 });
-      const row = { ...primary.tables.students[0], firstName: 'Synthetic offline recovery canary' };
+      phase('source-root-one'); const row = { ...primary.tables.students[0], firstName: 'Synthetic offline recovery canary' };
       await source.commitDelta(1, [{ namespace: 'primary', table: 'students', key: row.id, value: row }]); await source.createBackup('manual', 2);
-      const parts: Uint8Array[] = []; await source.exportArchive(async (part: Uint8Array) => { parts.push(new Uint8Array(part)); }, 'user-tyler'); const archive = Buffer.concat(parts);
-      expect(archive.toString()).not.toContain(row.firstName);
+      phase('source-revision-three'); const parts: Uint8Array[] = []; await source.exportArchive(async (part: Uint8Array) => { parts.push(new Uint8Array(part)); }, 'user-tyler'); const archive = Buffer.concat(parts);
+      phase('archive-exported', `bytes=${archive.length} frames=${parts.length}`); expect(archive.toString()).not.toContain(row.firstName);
       async function* read(bytes = archive) { for (let at = 0; at < bytes.length; at += 65536) yield bytes.subarray(at, at + 65536); }
       await expect(b.runtime.prepareRecoveryFile('WRONG-CODE', read())).rejects.toThrow(); expect(b.calls()).toBe(0);
-      const lines = archive.toString('utf8').trimEnd().split('\n'), footer = JSON.parse(lines[lines.length - 1]), envelope = JSON.parse(footer.seal);
+      phase('wrong-code-rejected'); const lines = archive.toString('utf8').trimEnd().split('\n'), footer = JSON.parse(lines[lines.length - 1]), envelope = JSON.parse(footer.seal);
       envelope.ciphertext = (envelope.ciphertext[0] === 'A' ? 'B' : 'A') + envelope.ciphertext.slice(1); footer.seal = JSON.stringify(envelope); lines[lines.length - 1] = JSON.stringify(footer);
       await expect(b.runtime.prepareRecoveryFile(recovery.recoveryCode, read(Buffer.from(lines.join('\n') + '\n')))).rejects.toThrow(); expect(b.calls()).toBe(0);
-      const canceled = await b.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); b.runtime.cancelOfflineRecovery();
+      phase('tampered-footer-rejected'); const canceled = await b.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); b.runtime.cancelOfflineRecovery();
       await expect(b.runtime.authorizeOfflineRecovery(canceled.handle, 'user-tyler')).rejects.toThrow(); expect(b.calls()).toBe(0);
-      let arrived!: () => void, release!: () => void, heldOnce = false;
-      const arrivedPromise = new Promise<void>(r => { arrived = r; }), held = new Promise<void>(r => { release = r; });
+      phase('canceled-preview-rejected'); let arrived!: () => void, release!: () => void, heldOnce = false;
+      const arrivedPromise = new Promise<void>(r => { arrived = r; }), held = new Promise<void>(r => { release = r; releaseHeld = r; });
       const { createCipherChunkStore } = require('../../electron/cipherChunkStore.cjs');
       c = await fixture(true, { hostFactory: createStructuredEncryptionHost, createChunks: (input: any) => {
         const store = createCipherChunkStore(input); return { ...store, stage: async (...args: any[]) => {
@@ -269,22 +277,31 @@ describe('offline recovery with complete real encrypted archives', () => {
           return store.stage(...args);
         } };
       } });
-      const interrupted = await c.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); await c.runtime.authorizeOfflineRecovery(interrupted.handle, 'user-tyler');
+      const interrupted = await c.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); phase('cancel-preview-verified'); await c.runtime.authorizeOfflineRecovery(interrupted.handle, 'user-tyler'); phase('cancel-owner-authorized');
       const interruptedApply = c.runtime.applyOfflineRecovery(interrupted.handle, 'user-tyler');
-      await arrivedPromise; c.runtime.lockNow(); release(); await expect(interruptedApply).rejects.toThrow();
+      // Observe rejection immediately: an apply that fails before the held live
+      // stage must fail this test, rather than leaving an unrelated waiter hung.
+      const earlyOutcome = interruptedApply.then(() => ({ kind: 'fulfilled' as const }), (error: any) => ({ kind: 'rejected' as const, code: typeof error?.code === 'string' && /^[A-Z_]+$/.test(error.code) ? error.code : 'UNCLASSIFIED' }));
+      phase('cancel-copy-applying');
+      try {
+        const arrival = await bounded(Promise.race([arrivedPromise.then(() => ({ kind: 'arrived' as const })), earlyOutcome]), 'live-stage arrival or early apply outcome', 30000);
+        if (arrival.kind !== 'arrived') throw Error(`[offline-archive] apply settled before live staging: ${arrival.kind}${'code' in arrival ? ' code=' + arrival.code : ''}`);
+        phase('cancel-held-stage-arrived'); c.runtime.lockNow(); release(); phase('cancel-lock-issued');
+        await bounded(expect(interruptedApply).rejects.toThrow(), 'locked live-copy apply rejection', 20000); phase('cancel-apply-rejected');
+      } finally { release(); }
       expect(c.runtime.status().mode).toBe('encrypted'); expect(await c.options().rawStore.read()).toBeNull(); expect((await c.runtime.refreshMode()).mode).toBe('enrollment-pending');
-      const preview = await b.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); expect(preview.operators.some((user: any) => user.id === 'user-tyler')).toBe(true);
-      expect(b.runtime.status().vaultId).not.toBe(recovery.vaultId); expect(b.calls()).toBe(0); expect(await fs.stat(path.join(b.directory, 'working')).catch(() => null)).toBeNull();
+      phase('cancel-state-verified'); const preview = await b.runtime.prepareRecoveryFile(recovery.recoveryCode, read()); expect(preview.operators.some((user: any) => user.id === 'user-tyler')).toBe(true);
+      phase('recovery-preview-verified'); expect(b.runtime.status().vaultId).not.toBe(recovery.vaultId); expect(b.calls()).toBe(0); expect(await fs.stat(path.join(b.directory, 'working')).catch(() => null)).toBeNull();
       await expect(b.runtime.authorizeOfflineRecovery(preview.handle, 'fictional-missing-owner')).rejects.toThrow();
-      await b.runtime.authorizeOfflineRecovery(preview.handle, 'user-tyler'); expect(await b.runtime.applyOfflineRecovery(preview.handle, 'user-tyler')).toEqual({ revision: 1 });
+      await b.runtime.authorizeOfflineRecovery(preview.handle, 'user-tyler'); phase('recovery-owner-authorized'); expect(await bounded(b.runtime.applyOfflineRecovery(preview.handle, 'user-tyler'), 'confirmed recovery apply', 60000)).toEqual({ revision: 1 }); phase('recovery-apply-completed');
       expect((await b.runtime.getHost().read()).snapshot.primary.tables.students.find((student: any) => student.id === row.id).firstName).toBe(row.firstName);
       expect((await b.runtime.getHost().listBackups()).length).toBe(1);
       await expect(b.runtime.applyOfflineRecovery(preview.handle, 'user-tyler')).rejects.toThrow();
       b.runtime.close(); const reopened = await createNativeEncryptionRuntime(b.config); b.runtime = reopened;
       expect(reopened.status().mode).toBe('encrypted'); await reopened.getHost().unlock(); const saved = await reopened.getHost().read(); expect(saved.revision).toBe(1);
-      expect(saved.snapshot.primary.tables.students.find((student: any) => student.id === row.id).firstName).toBe(row.firstName);
+      phase('reopened-unlocked'); expect(saved.snapshot.primary.tables.students.find((student: any) => student.id === row.id).firstName).toBe(row.firstName);
       for (const sub of ['device-keys', 'working', 'chunks']) for (const file of await fs.readdir(path.join(b.directory, sub))) expect((await fs.readFile(path.join(b.directory, sub, file))).includes(Buffer.from(row.firstName))).toBe(false);
-    } finally { a?.runtime.close(); b?.runtime.close(); c?.runtime.close(); await db.delete(); }
+    } finally { c?.runtime.lockNow(); releaseHeld(); a?.runtime.close(); b?.runtime.close(); c?.runtime.close(); await db.delete(); phase('cleanup-complete'); }
   }, 90000);
 });
 
