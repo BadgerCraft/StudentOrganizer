@@ -46,12 +46,15 @@ function createCipherChunkStore({ directory, scope, DatabaseSync, parseEnvelope,
         db.exec('BEGIN IMMEDIATE');
         try { db.exec(SCHEMAS.join(';') + `;PRAGMA application_id=${APP_ID};PRAGMA user_version=1`); db.prepare('INSERT INTO vault_metadata VALUES(1,?)').run(JSON.stringify(scope)); db.exec('COMMIT'); } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
       }
-      const schema = db.prepare("SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all().map(r => r.sql).sort();
-      if (db.prepare('PRAGMA application_id').get().application_id !== APP_ID || db.prepare('PRAGMA user_version').get().user_version !== 1 || JSON.stringify(schema) !== JSON.stringify([...SCHEMAS].sort())) throw failure();
-      const metadata = db.prepare('SELECT slot,length(scope) AS bytes FROM vault_metadata LIMIT 2').all();
-      if (metadata.length !== 1 || metadata[0].slot !== 1 || metadata[0].bytes > 2048 || db.prepare('SELECT scope FROM vault_metadata WHERE slot=1').get().scope !== JSON.stringify(scope)) throw failure();
+      attest(db);
       return db;
     } catch (e) { db.close(); throw e; }
+  }
+  function attest(db) {
+    const schema = db.prepare("SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all().map(r => r.sql).sort();
+    if (db.prepare('PRAGMA application_id').get().application_id !== APP_ID || db.prepare('PRAGMA user_version').get().user_version !== 1 || JSON.stringify(schema) !== JSON.stringify([...SCHEMAS].sort())) throw failure();
+    const metadata = db.prepare('SELECT slot,length(scope) AS bytes FROM vault_metadata LIMIT 2').all();
+    if (metadata.length !== 1 || metadata[0].slot !== 1 || metadata[0].bytes > 2048 || db.prepare('SELECT scope FROM vault_metadata WHERE slot=1').get().scope !== JSON.stringify(scope)) throw failure();
   }
   function context(value) {
     if (!exact(value, ['appId', 'vaultId', 'purpose', 'recordId', 'revision', 'keyVersion']) || value.appId !== scope.appId || value.vaultId !== scope.vaultId || value.keyVersion !== scope.keyVersion || !['working-data', 'attachment', 'backup', 'transfer'].includes(value.purpose) || typeof value.recordId !== 'string' || !ID.test(value.recordId) || !Number.isSafeInteger(value.revision) || value.revision < 1) throw failure();
@@ -141,6 +144,25 @@ function createCipherChunkStore({ directory, scope, DatabaseSync, parseEnvelope,
     try { db = open(false); if (!db || JSON.stringify(loadFile(db, f.plan.fileId)) !== JSON.stringify(f)) throw failure(); for (let i = 0; i < f.plan.chunkCount; i++) yield chunk(db, f, i); }
     catch (e) { if (e?.code?.startsWith('ENCRYPTED_CHUNKS_')) throw e; throw failure(); } finally { db?.close(); }
   }
-  return Object.freeze({ stage, publish, read, chunks });
+  async function readChunkAt(input, index) {
+    // Input must be the authenticated descriptor from the shared final-seal
+    // index. This adapter validates bounded ciphertext transport, not AEAD.
+    const f = file(input);
+    if (!Number.isSafeInteger(index) || index < 0 || index >= f.plan.chunkCount) throw failure();
+    let db, begun = false;
+    try {
+      db = open(false); if (!db) throw failure();
+      // Keep schema, length preflight and BLOB fetch in one SQLite snapshot, so
+      // another connection cannot enlarge the selected row between the checks.
+      db.exec('BEGIN'); begun = true; attest(db);
+      if (JSON.stringify(loadFile(db, f.plan.fileId)) !== JSON.stringify(f)) throw failure();
+      const ciphertext = chunk(db, f, index);
+      db.exec('COMMIT'); begun = false; return ciphertext;
+    } catch (e) {
+      if (begun) { try { db.exec('ROLLBACK'); } catch {} }
+      if (e?.code?.startsWith('ENCRYPTED_CHUNKS_')) throw e; throw failure();
+    } finally { if (db) { try { db.close(); } catch { throw failure(); } } }
+  }
+  return Object.freeze({ stage, publish, read, chunks, readChunkAt });
 }
 module.exports = { createCipherChunkStore };
