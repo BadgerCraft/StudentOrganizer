@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encryptBytes, generateMasterKey, EncryptionError, type EncryptionContext } from './index';
 import { CHUNK_BYTES, MAX_STREAM_BYTES, createChunkManifest, sealChunk, finalizeChunkManifest, openSealedChunkIndex, describeSealedChunkIndex, closeSealedChunkIndex, openIndexedChunk, type SealedChunkIndex } from './chunks';
 const scope: EncryptionContext = {appId:'servetrack',vaultId:'synthetic-indexed-vault',purpose:'attachment',recordId:'recording/fictional',revision:3,keyVersion:1};
+// These cases intentionally use real WebCrypto. Intel CI exceeded Vitest's
+// default 5 s while processing 32,768 commitments or queued key/scope operations.
+// Keep all payloads/assertions and a bounded allowance; this is not a latency SLA.
+const INDEXED_NATIVE_CRYPTO_TIMEOUT = 30000;
 async function* sequence(values:string[]) {for(const value of values)yield value;}
 async function fixture() {
   const master=generateMasterKey(),draft=await createChunkManifest(master,scope,5),ciphertext=await sealChunk(master,scope,draft.plan,0,new Uint8Array([1,2,3,4,5])),seal=await finalizeChunkManifest(master,scope,draft.plan,sequence([ciphertext]));
@@ -49,12 +53,12 @@ describe('final-seal-bound indexed chunks',()=>{
     for(const changed of [{plan:{...draft.plan,totalBytes:MAX_STREAM_BYTES+1}},{hashes:[]},{hashes:['not-a-digest']},{version:2}]) {
       const bad=await encryptBytes(master,scope,new TextEncoder().encode(JSON.stringify({format:'teacher-vault-sealed-chunks',version:1,plan:draft.plan,hashes,...changed})));await expect(openSealedChunkIndex(master,scope,bad)).rejects.toThrow(EncryptionError);
     }
-  });
+  },INDEXED_NATIVE_CRYPTO_TIMEOUT);
   it('owns key/scope inputs across awaits and retains no master key in the index',async()=>{
     const f=await fixture(),saved=new Uint8Array(f.master),expected={...scope},opening=openSealedChunkIndex(f.master,expected,f.seal);f.master.fill(0);expected.recordId='changed';const index=await opening;
     await expect(openIndexedChunk(f.master,scope,index,0,f.ciphertext)).rejects.toThrow(EncryptionError);const reading=openIndexedChunk(saved,scope,index,0,f.ciphertext);saved.fill(0);expect(await reading).toEqual(new Uint8Array([1,2,3,4,5]));
     closeSealedChunkIndex(index);closeSealedChunkIndex(index);expect(()=>describeSealedChunkIndex(index)).toThrow(EncryptionError);await expect(openIndexedChunk(new Uint8Array(32),scope,index,0,f.ciphertext)).rejects.toThrow(EncryptionError);
-  });
+  },INDEXED_NATIVE_CRYPTO_TIMEOUT);
   it('revokes an in-flight hash seek and wipes plaintext if closed during AEAD decryption',async()=>{
     const f=await fixture(),digest=crypto.subtle.digest.bind(crypto.subtle);let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(resolve=>release=resolve),started=new Promise<void>(resolve=>entered=resolve);
     vi.spyOn(crypto.subtle,'digest').mockImplementationOnce(async(...args)=>{entered();await gate;return digest(...args);});
