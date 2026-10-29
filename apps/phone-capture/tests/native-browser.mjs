@@ -17,7 +17,7 @@ await page.addInitScript(()=>{
  finishZip:(_,id,revision,mode)=>{if(localStorage.getItem('fail-transfer')==='true'){localStorage.setItem('delivery-state','RETRY');return JSON.stringify({accepted:false,error:'Fictional interrupted transport'});}const rows=JSON.parse(localStorage.getItem('transfers')??'[]');if(!rows.some(r=>r.id===id&&r.revision===revision&&r.mode===mode))rows.push({id,revision,mode,chunks:chunks.length});localStorage.setItem('transfers',JSON.stringify(rows));localStorage.setItem('delivery-state','QUEUED');return receipt({summary:'Mock transfer retained'});}
  };
 });
-const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);const click=async s=>{await page.click(s);await settle();};
+const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);const click=async s=>{if (['#delete','#name'].includes(s)) await page.locator(s).evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});await page.click(s);await settle();};
 try{
  await page.goto(base);await settle();await click('#new');assert.equal(await page.locator('#browser-camera').isVisible(),false);await page.fill('#assignment','Fictional native study');await click('#name');await click('#native-camera');
  await page.evaluate(()=>{const c=document.createElement('canvas');c.width=400;c.height=600;const session=JSON.parse(localStorage.getItem('session'));localStorage.setItem('pending',JSON.stringify([{...session,id:'fictional-native-1',dataUrl:c.toDataURL('image/png')},{...session,id:'fictional-native-2',dataUrl:c.toDataURL('image/png')},{...session,id:'fictional-bad',dataUrl:'data:image/jpeg;base64,YmFk'}]));});

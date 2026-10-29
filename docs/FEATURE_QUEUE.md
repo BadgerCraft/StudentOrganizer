@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 29 — phone capture UI fundamentals
+
+| ID | Authority and scope | Current action / gate |
+| --- | --- | --- |
+| TUV-PHONE-CAPTURE-UI | Tyler approved applying UI fundamentals to the remote app and clarified it means the phone capture app. Isolated implementation, synthetic verification and draft PR authorized. | Based on confirmed PR49 merge `a789e33`; focused setup/capture/preview/transfer, compact summaries and dark/light UI in progress. Preserve original photos, pending drafts, explicit desktop matching and private transfer. Separate encryption stream owns storage/crypto. [Checklist and evidence](work-orders/PHONE-CAPTURE-UI-2026-10-29.md). No merge/release/deploy, credentials, live Drive grants or student-data use. |
+
+
 ## October 28 — feedback keyboard clarification
 
 | Stable ID | Disposition | Next action / gate |
