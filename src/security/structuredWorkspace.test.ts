@@ -124,27 +124,41 @@ describe('structured immutable object workspace', () => {
       expect(reopened.getRevision()).toBe(scenario === 'lost-reply' ? 3 : 2); expect((await reopened.readRecord({ namespace: 'primary', table: 'students', key: 'a' })).text).toBe(scenario === 'lost-reply' ? 'old' : 'new');
     }
   });
+  // Mac Intel CI exceeded the old 30s while processing real encrypted chunks.
+  // Keep a bounded allowance for the minimum two-chunk FULL-SQLite fixture.
   it('preflights materialization budgets while retaining a bounded authenticated streaming path', async () => {
     const f = await fixture({ maxReadRecordBytes: 1024, maxReadAllBytes: 1400 });
-    await StructuredWorkspace.create(f.options, [row('large', { text: 'fictional'.repeat(600000) }), row('small', { text: 'ok' })]);
+    // Minimum real-format multi-chunk body: keep the fixed shared 4-MiB
+    // boundary without an unrelated extra megabyte of synthetic plaintext.
+    const payload='Fictional cross-chunk record '+'x'.repeat(chunkRuntime.CHUNK_BYTES);
+    expect(Buffer.byteLength(payload)).toBeGreaterThan(chunkRuntime.CHUNK_BYTES);
+    expect(Buffer.byteLength(payload)).toBeLessThan(chunkRuntime.CHUNK_BYTES+256);
+    await StructuredWorkspace.create(f.options, [row('large', { text: payload }), row('small', { text: 'ok' })]);
     const capped = await StructuredWorkspace.open(f.options);
     await expect(capped.readRecord({ namespace: 'primary', table: 'students', key: 'large' })).rejects.toMatchObject({ code: 'STRUCTURED_WORKSPACE_READ_LIMIT' });
     const streaming = await StructuredWorkspace.open(f.options); const pieces: Uint8Array[] = [], borrowed: Uint8Array[] = [];
     const size = await streaming.readRecordStream({ namespace: 'primary', table: 'students', key: 'large' }, async (piece: Uint8Array) => { borrowed.push(piece); pieces.push(new Uint8Array(piece)); });
-    expect(size).toBeGreaterThan(1024); expect(JSON.parse(Buffer.concat(pieces).toString()).text).toBe('fictional'.repeat(600000)); expect(pieces.length).toBeGreaterThan(1); expect(pieces.every(piece => piece.length <= chunkRuntime.CHUNK_BYTES)).toBe(true); expect(borrowed.every(piece => piece.every(byte => byte === 0))).toBe(true);
+    expect(size).toBeGreaterThan(1024); expect(JSON.parse(Buffer.concat(pieces).toString()).text).toBe(payload); expect(pieces.length).toBeGreaterThan(1); expect(pieces.every(piece => piece.length <= chunkRuntime.CHUNK_BYTES)).toBe(true); expect(borrowed.every(piece => piece.every(byte => byte === 0))).toBe(true);
     const budgeted = await StructuredWorkspace.open({ ...f.options, maxReadRecordBytes: 10000, maxReadAllBytes: 1000 });
     const reads = f.reads(); await expect(budgeted.readAll()).rejects.toMatchObject({ code: 'STRUCTURED_WORKSPACE_READ_LIMIT' });
     expect(f.reads() - reads).toBeLessThanOrEqual(2); // Metadata shards only, no large body read.
     expect(f.checkpoint().revision).toBe(1);
-  }, 30000);
+  }, 90000);
+  // Mac Intel's real encrypted fixture exceeded Vitest's default 5s; all
+  // preflight/read-count assertions remain inside this explicit bound.
   it('preflights the entire selected hydration before any body and excludes unselected large history',async()=>{
     const f=await fixture({maxReadRecordBytes:4096,maxReadAllBytes:1000});
-    await StructuredWorkspace.create(f.options,[row('a',{text:'a'.repeat(600)}),row('b',{text:'b'.repeat(600)}),{namespace:'recovery',table:'backup-content',key:'large-history',value:'fictional history'.repeat(20000)}]);
+    // This unselected body must exceed BOTH successful selection budgets;
+    // its former hundreds of KiB added I/O without another boundary.
+    const history='fictional history '.repeat(512);
+    expect(Buffer.byteLength(JSON.stringify(history))).toBeGreaterThan(4096);
+    expect(Buffer.byteLength(JSON.stringify(history))).toBeGreaterThan(3000);
+    await StructuredWorkspace.create(f.options,[row('a',{text:'a'.repeat(600)}),row('b',{text:'b'.repeat(600)}),{namespace:'recovery',table:'backup-content',key:'large-history',value:history}]);
     const selection=[{namespace:'primary',table:'students',key:'b'},{namespace:'primary',table:'students',key:'a'}];
     const limited=await StructuredWorkspace.open(f.options),before=f.bodyReads();await expect(limited.readSelected(selection)).rejects.toMatchObject({code:'STRUCTURED_WORKSPACE_READ_LIMIT'});expect(f.bodyReads()).toBe(before);
     const bounded=await StructuredWorkspace.open({...f.options,maxReadAllBytes:3000}),values=await bounded.readSelected(selection);expect(values.map((value:any)=>value.key)).toEqual(['b','a']);expect(values[0].value.text).toBe('b'.repeat(600));expect(f.bodyReads()-before).toBe(2);
     const recordLimited=await StructuredWorkspace.open({...f.options,maxReadRecordBytes:512,maxReadAllBytes:3000}),beforeRecord=f.bodyReads();await expect(recordLimited.readSelected([selection[0]])).rejects.toMatchObject({code:'STRUCTURED_WORKSPACE_READ_LIMIT'});expect(f.bodyReads()).toBe(beforeRecord);expect(f.checkpoint().revision).toBe(1);
-  });
+  },30000);
   it('rejects duplicate, malformed and missing selections before any selected body is read',async()=>{
     const f=await fixture();await StructuredWorkspace.create(f.options,[row('a',{text:'fictional'})]);const selected={namespace:'primary',table:'students',key:'a'};
     for(const selection of [[selected,selected],[{...selected,value:'untrusted'}],[{...selected,key:'missing'}],[{namespace:'storage',table:'students',key:'a'}]]) {
