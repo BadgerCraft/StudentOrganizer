@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
@@ -13,6 +13,8 @@ import { encryptBytes, generateMasterKey, recoverMasterKey, generateRecoveryCode
 const require = createRequire(import.meta.url), { createNativeEncryptionRuntime } = require('../../electron/encryptionNativeRuntime.cjs');
 const { createSqliteEncryptedVaultStore } = require('../../electron/sqliteEncryptedVaultStore.cjs');
 const dirs: string[] = [];
+// This suite must work alone on a clean checkout; never depend on another suite's build side effect.
+beforeAll(() => { execFileSync(process.execPath, ['scripts/buildEncryptionNative.cjs'], { timeout: 30_000 }); }, 35_000);
 afterEach(async () => { for (const d of dirs.splice(0)) await fs.rm(d, { recursive: true, force: true }); });
 async function fixture(initialGate = false, overrides: any = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'synthetic-native-assembly-')); dirs.push(directory);
@@ -235,7 +237,6 @@ describe('fresh offline recovery runtime capability', () => {
 
 describe('offline recovery with complete real encrypted archives', () => {
   it('verifies code, full archive and operator before recovering source revision three as local revision one', async () => {
-    execFileSync(process.execPath, ['scripts/buildEncryptionNative.cjs']);
     const { createStructuredEncryptionHost } = require('../../electron/structuredEncryptionHost.cjs');
     const db = new OntarioTeacherDB('fictional-offline-runtime-' + crypto.randomUUID());
     let a: any, b: any, c: any;
@@ -289,7 +290,6 @@ describe('offline recovery with complete real encrypted archives', () => {
 
 describe('interrupted initial migration retry', () => {
   it('retains the independently enrolled master and requires fresh recovery/device proofs after an explicit return', async () => {
-    execFileSync(process.execPath, ['scripts/buildEncryptionNative.cjs']);
     const { createStructuredEncryptionHost } = require('../../electron/structuredEncryptionHost.cjs'), { createCipherChunkStore } = require('../../electron/cipherChunkStore.cjs');
     const db = new OntarioTeacherDB('fictional-resumable-runtime-' + crypto.randomUUID()); let f: any, receiver: any;
     try {
