@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "engine": "Chromium via Vite ESM",
+  "checks": [
+    "encrypted CAS before acknowledgment/live query",
+    "pending readers blocked",
+    "unrelated focus/typing does not save",
+    "forced nested transaction rollback",
+    "collection mutation and encrypted reopen",
+    "queued identity changes reject stale intents",
+    "close rejects pending acknowledgment and reads",
+    "lost reply commits once with no replay",
+    "synthetic keys and rows only; no App activation or external requests"
+  ]
+}

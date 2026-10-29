@@ -256,7 +256,7 @@ export class ParticipationDomainService {
               needsFollowupCount: snapshottedClassification === 'needs_followup' ? summary.needsFollowupCount + 1 : summary.needsFollowupCount,
               neutralCount: snapshottedClassification === 'neutral' ? (summary.neutralCount || 0) + 1 : (summary.neutralCount || 0),
               totalPoints: summary.totalPoints + snapshottedPoints,
-              lastEventAt: occurredAt
+              lastEventAt: summary.lastEventAt && summary.lastEventAt > occurredAt ? summary.lastEventAt : occurredAt
             };
             await this.db.participationDailySummaries.put(updated);
           } else {
