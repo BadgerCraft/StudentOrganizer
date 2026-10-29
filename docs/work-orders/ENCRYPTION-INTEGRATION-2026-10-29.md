@@ -87,3 +87,9 @@ The storage coordinator is a substrate, not automatic coverage of current App. A
 Based on reviewed draft PR51 head `8a2d0df`, which passed all four CI workflows and remains unmerged. This separate branch adds the guarded Dexie, source and native-host prerequisites without activation. Full suite: 1,045 passed / one native-only skip (98 files); production build including native CommonJS compilation passed. Independent review passed 29 tests and the actual Chromium/Vite storage proof passed.
 
 The repeatable `scripts/encryptedStorageSmoke.ts` tests delayed acknowledgment, live-query/read visibility, forced nested rollback, encrypted reopening, repeated/context/close interruptions and uncertain commits without replay. CI for the final commit will be recorded in the stacked PR. All-writer, bootstrap and transfer integration remains owned for the next stage; no new merge or deployment is authorized.
+
+## CI repair: timestamp projection and bounded migration test
+
+Initial head73fe6f4 passed Windows and Control Panel. Intel Mac exceeded the default five-second timeout in the complete migration test; the test now has a bounded30-second limit with unchanged assertions. WebKit exposed an existing out-of-order participation projection defect: an observation recorded at04:07 replaced a retained10:32 last-event timestamp, then canonical restore correctly rebuilt10:32. Recording now retains the same maximum timestamp used by rebuild, leaving events, counts and grades unchanged. A new regression failed before the repair and passes after it, including exact event/grade preservation through restore.
+
+Root14focused tests, independent26related tests, production build and complete Chromium production roundtrip/restart passed. The browser verifies every collection through backup/restore. Repaired-head CI will rerun including actual WebKit; passing Chromium does not imply WebKit acceptance.

@@ -1,0 +1,1 @@
+PASS chromium: bundled production browser proxy, touch portrait/landscape/split view, seat swap, attendance, notes, photo, assessment/K mark, roster/CSV/backup/replacement and clean-profile restore of all collections, browser process restart and persisted records, zero observed external requests; native Files, WKWebView, simulator and physical iPad NOT tested.

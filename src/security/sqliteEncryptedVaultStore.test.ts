@@ -89,7 +89,8 @@ describe('ciphertext-only SQLite CAS provider prototype', () => {
     const { createSqliteProtectedKeyStore } = require('../../electron/sqliteProtectedKeyStore.cjs'), { createProtectedRevisionLedger } = require('../../electron/protectedRevisionLedger.cjs'), { createPendingEncryptedCommit } = require('../../electron/pendingEncryptedCommit.cjs');
     const { directory, store } = await fixture(); const profile = createSqliteProtectedKeyStore({ directory, scope }); let protectedState: Buffer | null = null;
     const ledger = createProtectedRevisionLedger({ scope, platform: 'win32', assertProfileLease: profile.assertProfileLease, loadWindowsBinding: () => ({ read: () => protectedState && Buffer.from(protectedState), write: (_name: string, bytes: Buffer) => { protectedState = Buffer.from(bytes); } }) });
-    const coordinator = createPendingEncryptedCommit({ scope, ledger, candidates: store, withExclusiveProfileLock: profile.withExclusiveProfileLock });
+    // Explicit synthetic enrollment authority; production remains denied without verified recovery/device proof.
+    const coordinator = createPendingEncryptedCommit({ scope, ledger, candidates: store, withExclusiveProfileLock: profile.withExclusiveProfileLock, assertFreshEnrollment: () => {} });
     const first = await coordinator.commit(null, await cipher(1)); expect(first.status).toBe('durable');
     const originalFile = await fs.readFile(path.join(directory, 'workspace.sqlite'));
     expect((await coordinator.commit(first.head, await cipher(2))).status).toBe('durable');

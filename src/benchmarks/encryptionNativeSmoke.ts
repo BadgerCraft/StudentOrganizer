@@ -4,7 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-// Synthetic encrypted bytes only; no OS-key provisioning or teacher profile is opened.
+// Synthetic keys/bytes in a disposable profile only; no teacher profile or real-device provisioning.
 if (process.platform !== 'win32') throw new Error('Packaged encryption probe targets Windows CI.');
 const profile=await mkdtemp(path.join(os.tmpdir(),'organizer-encryption-probe-'));
 const env=Object.fromEntries(Object.entries(process.env).filter((v):v is [string,string]=>typeof v[1]==='string'));delete env.ELECTRON_RUN_AS_NODE;
@@ -25,7 +25,18 @@ try{
   let stale=false;try{await reopened.commit(null,first);}catch{stale=true;}if(!stale)throw Error('Stale CAS accepted');
   const db=new DatabaseSync(path.join(directory,'workspace.sqlite'),{readOnly:true});const integrity=db.prepare('PRAGMA integrity_check').get();db.close();if(Object.values(integrity)[0]!=='ok')throw Error('SQLite integrity failed');
   for(const name of fs.readdirSync(directory)){const data=fs.readFileSync(path.join(directory,name));if(data.includes(Buffer.from(bytes)))throw Error('Plaintext leaked into storage');}
-  key.fill(0);plain.fill(0);bytes.fill(0);return{status:'PASS',electron:process.versions.electron,node:process.versions.node,sqlite:process.versions.sqlite,checks:['actual packaged SQLite','encrypted commit and reopen','stale CAS rejection','integrity check','no plaintext marker in database sidecars'],limits:['synthetic data','no OS-key provisioning','not a power-loss test']};
+  const {createSqliteProtectedKeyStore}=require(path.join(root,'electron/sqliteProtectedKeyStore.cjs'));
+  const {createPlatformKeyringStore}=require(path.join(root,'electron/platformKeyringStore.cjs'));
+  const registry=createSqliteProtectedKeyStore({directory:path.join(profile,'protected-profile'),scope});
+  const protectedKeys=createPlatformKeyringStore({configured:true,platform:'win32',withExclusiveProfileLock:registry.withExclusiveProfileLock,localProtectedStorage:registry});
+  if(!await protectedKeys.available())throw Error('Packaged DPAPI provider unavailable');
+  await protectedKeys.save(scope,key);const recovered=await protectedKeys.load(scope);
+  if(!recovered||!Buffer.from(recovered).equals(Buffer.from(key)))throw Error('Packaged protected key did not reopen');recovered.fill(0);
+  const nativeLedger=require(path.join(root,'electron/generated/windowsCredentialLedger.node'));
+  const target='TeacherVaultLedgerQAV1-'+require('node:crypto').randomBytes(32).toString('hex');
+  try{if(nativeLedger.read(target)!==null)throw Error('Unexpected synthetic receipt');const receipt=Buffer.from(JSON.stringify({synthetic:true,revision:1,hash:'a'.repeat(64)}));nativeLedger.write(target,receipt);if(!nativeLedger.read(target).equals(receipt))throw Error('Packaged native receipt mismatch');}finally{nativeLedger.removeSynthetic(target);}
+  for(const name of fs.readdirSync(path.join(profile,'protected-profile'))){const data=fs.readFileSync(path.join(profile,'protected-profile',name));if(data.includes(Buffer.from(key))||data.includes(Buffer.from(key).toString('base64')))throw Error('Clear master leaked into protected profile');}
+  key.fill(0);plain.fill(0);bytes.fill(0);return{status:'PASS',electron:process.versions.electron,node:process.versions.node,sqlite:process.versions.sqlite,checks:['actual packaged SQLite','encrypted commit and reopen','stale CAS rejection','integrity check','no plaintext marker in database sidecars','actual packaged nested DPAPI key roundtrip','actual packaged local credential receipt roundtrip'],limits:['synthetic data','isolated synthetic OS metadata only; temporary profile and QA receipt removed','not a power-loss test']};
  },profile);
  assert.equal(result.status,'PASS');await mkdir('release/qa-evidence/encryption',{recursive:true});await writeFile('release/qa-evidence/encryption/native-sqlite.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }finally{await app.close();await rm(profile,{recursive:true,force:true});}
