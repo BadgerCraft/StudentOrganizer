@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -102,7 +103,7 @@ async function openHub(page: Page) {
   await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.locator('button[title="Manage Assessments & Rubrics"]').click();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor({ state: 'visible' });
 }
 
 // Select only the evidence destination; renderer export still creates the bytes.
@@ -141,8 +142,7 @@ async function verify(executable: string, variant: string) {
     app = await launch(executable);
     app.page.on('pageerror', error => errors.push(error.message));
     await openHub(app.page);
-    await app.page.getByRole('button', { name: 'New Assessment' }).click();
-    const form = app.page.getByRole('heading', { name: 'Create New Assessment' }).locator('..').locator('form');
+    const form = await openAssignmentCreation(app.page);
     if (await form.getByText('Code', { exact: true }).count()) throw new Error('Assessment form still has a Code field.');
     await form.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
     await form.getByRole('button', { name: 'Create Assessment' }).click();

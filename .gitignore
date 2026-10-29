@@ -43,3 +43,4 @@ dictation-runtime/*
 !dictation-runtime/README.md
 # Operator-approved desktop OAuth client configuration (never commit).
 desktop-drive-oauth.json
+organizer-sync-oauth.json

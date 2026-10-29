@@ -1,3 +1,4 @@
+import { useAutomaticBackups } from './sync/BackupSyncSettings';
 import { listAccessibleClassSections } from './services/authHelper';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -19,12 +20,11 @@ import { TeacherSelectorModal } from './components/TeacherSelectorModal';
 import { ParticipationDomainService } from './services/participationService';
 import { ParticipationEventTypeService } from './services/eventTypeService';
 import { ClassroomStructureService } from './services/classroomStructureService';
-import { ClassSessionService } from './services/sessionService';
 import { getAppIdentity, selectActingTeacher, clearActiveTeacherId, getIdentityEpoch } from './services/identityService';
 import { AuthorizationError } from './services/authHelper';
 import { getSchoolLocalDate, getCurrentTorontoTime, buildTorontoTimestamp } from './utils/dateUtils';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
-import type { UUID, Student, User } from './types/schema';
+import type { UUID, Student, User, ParticipationEvent } from './types/schema';
 
 declare const __QA_BUILD_ID__: string;
 
@@ -36,7 +36,7 @@ export function App() {
         return saved as any;
       }
     } catch (_) {}
-    return 'dashboard';
+    return 'seating';
   });
 
   const handleViewChange = (view: 'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability') => {
@@ -52,10 +52,16 @@ export function App() {
   const studentSelectionGeneration = useRef(0);
   const [participationMode, setParticipationMode] = useState<'single' | 'group'>('single');
   const participationDraftDirty = useRef(false);
+  const participationActionBusy = useRef(false);
+  const settingsDraftDirty = useRef(false);
+  const handleSettingsDirty = useCallback((dirty: boolean) => { settingsDraftDirty.current = dirty; }, []);
   const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
-  const confirmParticipationDiscard = () => !participationDraftDirty.current || window.confirm(
-    'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
-  );
+  const confirmParticipationDiscard = () => {
+    if (participationActionBusy.current) { setParticipationError('Wait for the participation action to finish before changing context.'); return false; }
+    return (!participationDraftDirty.current && !settingsDraftDirty.current) || window.confirm(
+      settingsDraftDirty.current ? 'Leave Settings with unsaved changes? Cancel keeps your edits.' : 'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
+    );
+  };
   const [selectedSchoolDate, setSelectedSchoolDate] = useState<string>(() => getSchoolLocalDate());
   const [historicalTime, setHistoricalTime] = useState<string>(() => getCurrentTorontoTime());
   const [profileEnrollmentId, setProfileEnrollmentId] = useState<UUID | null>(null);
@@ -63,6 +69,10 @@ export function App() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [lastUndo, setLastUndo] = useState<{ batchId: UUID; eventName: string; studentCount: number } | null>(null);
   const [appIdentity, setAppIdentity] = useState<{ userId: UUID; deviceId: UUID } | null>(null);
+  useAutomaticBackups(db, appIdentity?.userId);
+  const [lastRetraction, setLastRetraction] = useState<{ eventId: UUID; version: number; epoch: number } | null>(null);
+  const [participationError, setParticipationError] = useState('');
+  const undoBusy = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [switchingFromTeacherId, setSwitchingFromTeacherId] = useState<UUID | null>(null);
   const switchingFromTeacherIdRef = useRef<UUID | null>(null);
@@ -83,6 +93,9 @@ export function App() {
     setSelectedEnrollmentIds([]);
     setParticipationMode('single');
   }, [activeSectionId, selectedSchoolDate, currentView, appIdentity?.userId, isTeacherSelectorOpen]);
+  useEffect(() => {
+    setLastUndo(null); setLastRetraction(null); setParticipationError('');
+  }, [activeSectionId, selectedSchoolDate, appIdentity?.userId, isTeacherSelectorOpen]);
 
   const clearParticipationSelection = () => {
     studentSelectionGeneration.current++;
@@ -303,6 +316,14 @@ export function App() {
     [activeEnrollments]
   ) || [];
 
+  const todayParticipation = useLiveQuery(async () => {
+    const sectionId = activeClassObj?.section.id;
+    if (!sectionId || !appIdentity || !selectedEnrollmentIds.length) return [];
+    const date = getSchoolLocalDate();
+    return db.participationEvents.where('classEnrollmentId').anyOf(selectedEnrollmentIds)
+      .filter(event => event.classSectionId === sectionId && event.localSchoolDate === date && event.deletedAt === null).toArray();
+  }, [activeClassObj?.section.id, appIdentity?.userId, selectedEnrollmentIds.join(','), selectedSchoolDate]) || [];
+
   const profileEvents = useLiveQuery(
     () => profileEnrollmentId
       ? db.participationEvents
@@ -348,7 +369,6 @@ export function App() {
 
   const allAuditEntries = useLiveQuery(() => db.auditEntries.toArray()) || [];
   const participationService = new ParticipationDomainService(db);
-  const sessionService = new ClassSessionService(db);
 
   const handleSelectClass = async (sectionId: string) => {
     if (sectionId === activeSectionId) return true;
@@ -382,65 +402,120 @@ export function App() {
   };
 
   const handleRecordParticipation = async (params: any) => {
-    let liveIdentity: { userId: UUID; deviceId: UUID };
+    if (participationActionBusy.current) return false;
+    participationActionBusy.current = true;
     try {
-      liveIdentity = await getAppIdentity(db);
-    } catch {
-      setIsTeacherSelectorOpen(true);
-      return;
-    }
-    if (!activeSectionId || selectedEnrollmentIds.length === 0) return;
+      const openingIdentity = appIdentity;
+      const sectionId = activeSectionId, enrollmentIds = [...selectedEnrollmentIds];
+      const selectionGeneration = studentSelectionGeneration.current, epoch = getIdentityEpoch();
+      const assertContext = () => {
+        if (!openingIdentity || !sectionId || enrollmentIds.length === 0 || currentView !== 'seating' ||
+            selectionGeneration !== studentSelectionGeneration.current || epoch !== getIdentityEpoch())
+          throw new Error('The teacher, student or school day changed. Reopen the feedback chooser.');
+      };
+      assertContext();
+      let liveIdentity: { userId: UUID; deviceId: UUID };
+      try {
+        liveIdentity = await getAppIdentity(db);
+      } catch {
+        setIsTeacherSelectorOpen(true);
+        return false;
+      }
+      assertContext();
+      if (liveIdentity.userId !== openingIdentity!.userId || liveIdentity.deviceId !== openingIdentity!.deviceId)
+        throw new Error('The acting teacher changed. Reopen the feedback chooser.');
 
-    const schoolDate = selectedSchoolDate;
-    const today = getSchoolLocalDate();
+      const schoolDate = selectedSchoolDate;
+      const today = getSchoolLocalDate();
 
-    let occurredAt: string;
-    if (schoolDate === today) {
-      occurredAt = new Date().toISOString();
-    } else {
-      occurredAt = buildTorontoTimestamp(schoolDate, historicalTime);
-    }
+      let occurredAt: string;
+      if (schoolDate === today) {
+        occurredAt = new Date().toISOString();
+      } else {
+        occurredAt = buildTorontoTimestamp(schoolDate, historicalTime);
+      }
 
-    const session = await sessionService.getOrCreateSession(activeSectionId, schoolDate, {
-      startsAt: occurredAt
-    });
-
-    const events = await participationService.recordParticipation({
-      classEnrollmentIds: selectedEnrollmentIds,
-      classSectionId: activeSectionId,
-      classSessionId: session.id,
-      eventTypeId: params.eventTypeId,
-      achievementLevel: params.achievementLevel,
-      categoryOverride: params.categoryOverride,
-      note: params.note,
-      localSchoolDate: schoolDate,
-      occurredAt,
-      userId: liveIdentity.userId,
-      deviceId: liveIdentity.deviceId
-    });
-
-    if (events.length > 0) {
-      setLastUndo({
-        batchId: events[0].batchId,
-        eventName: events[0].snapshottedName,
-        studentCount: selectedEnrollmentIds.length
+      assertContext();
+      const events = await participationService.recordParticipation({
+        classEnrollmentIds: enrollmentIds,
+        classSectionId: sectionId!,
+        ensureClassSession: true,
+        identityEpoch: epoch,
+        eventTypeId: params.eventTypeId,
+        achievementLevel: params.achievementLevel,
+        categoryOverride: params.categoryOverride,
+        note: params.note,
+        localSchoolDate: schoolDate,
+        occurredAt,
+        userId: liveIdentity.userId,
+        deviceId: liveIdentity.deviceId
       });
-      clearParticipationSelection();
-      setTimeout(() => setLastUndo(null), 8000);
-    }
+
+      if (events.length > 0 && selectionGeneration === studentSelectionGeneration.current && epoch === getIdentityEpoch()) {
+        setLastRetraction(null); setParticipationError('');
+        setLastUndo({
+          batchId: events[0].batchId,
+          eventName: events[0].snapshottedName,
+          studentCount: enrollmentIds.length
+        });
+        clearParticipationSelection();
+        return true;
+      }
+      return false;
+    } finally { participationActionBusy.current = false; }
   };
 
-  const handleUndo = async (batchId: UUID) => {
-    let liveIdentity: { userId: UUID; deviceId: UUID };
+  const handleRetractParticipation = async (event: ParticipationEvent) => {
+    if (participationActionBusy.current) throw new Error('Wait for the participation action to finish.');
+    participationActionBusy.current = true;
     try {
-      liveIdentity = await getAppIdentity(db);
-    } catch {
-      setIsTeacherSelectorOpen(true);
-      return;
-    }
-    await participationService.undoBatch(batchId, liveIdentity.userId, liveIdentity.deviceId);
-    setLastUndo(null);
+      const selectionGeneration = studentSelectionGeneration.current;
+      const epoch = getIdentityEpoch();
+      const identity = await getAppIdentity(db);
+      if (epoch !== getIdentityEpoch() || identity.userId !== appIdentity?.userId || event.classSectionId !== activeSectionId ||
+        event.localSchoolDate !== getSchoolLocalDate() || !selectedEnrollmentIds.includes(event.classEnrollmentId)) {
+        throw new Error('The teacher, student or school day changed. Reopen the feedback chooser.');
+      }
+      await participationService.retractEvent(event.id, event.version, identity.userId, identity.deviceId, 'Corrected in today’s feedback chooser', epoch);
+      if (selectionGeneration !== studentSelectionGeneration.current || epoch !== getIdentityEpoch()) return;
+      setLastUndo(null);
+      setLastRetraction({ eventId: event.id, version: event.version + 1, epoch });
+      setParticipationError('');
+    } finally { participationActionBusy.current = false; }
   };
+
+  const handleUndo = async (batchId?: UUID) => {
+    if (undoBusy.current || participationActionBusy.current) return;
+    undoBusy.current = true; participationActionBusy.current = true;
+    const epoch = getIdentityEpoch();
+    try {
+      const identity = await getAppIdentity(db);
+      if (epoch !== getIdentityEpoch() || identity.userId !== appIdentity?.userId) throw new Error('The acting teacher changed. Reopen the class.');
+      if (lastRetraction && !batchId) {
+        await participationService.restoreRetractedEvent(lastRetraction.eventId, lastRetraction.version, identity.userId, identity.deviceId, lastRetraction.epoch);
+        setLastRetraction(current => current === lastRetraction ? null : current);
+      } else if (batchId || lastUndo) {
+        await participationService.undoBatch(batchId || lastUndo!.batchId, identity.userId, identity.deviceId, epoch);
+        setLastUndo(current => current?.batchId === (batchId || lastUndo?.batchId) ? null : current);
+      }
+      setParticipationError('');
+    } catch (error) { setParticipationError(error instanceof Error ? error.message : 'The last action could not be undone.'); }
+    finally { undoBusy.current = false; participationActionBusy.current = false; }
+  };
+
+  useEffect(() => {
+    const undo = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (event.defaultPrevented || event.repeat || event.isComposing || event.altKey || event.shiftKey ||
+        !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' ||
+        currentView !== 'seating' || markingTarget || isTeacherSelectorOpen || profileEnrollmentId || editingStudent || isBugReportOpen ||
+        (!lastUndo && !lastRetraction) ||
+        (target instanceof HTMLElement && (target.isContentEditable || target.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]')))) return;
+      event.preventDefault(); void handleUndo();
+    };
+    window.addEventListener('keydown', undo);
+    return () => window.removeEventListener('keydown', undo);
+  }, [currentView, markingTarget, isTeacherSelectorOpen, profileEnrollmentId, editingStudent, isBugReportOpen, lastUndo, lastRetraction, appIdentity]);
 
   const selectedStudentsData = selectedEnrollmentIds.map(id => {
     const enr = activeEnrollments.find(e => e.id === id);
@@ -459,7 +534,7 @@ export function App() {
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-100 selection:text-blue-900">
       <div
         id="app-workspace"
-        className={`flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
+        className={`app-shell flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
         aria-hidden={isTeacherSelectorOpen || markingTarget ? 'true' : undefined}
       >
         {/* Persistent Navigation Header */}
@@ -514,9 +589,10 @@ export function App() {
         </div>
       )}
 
+      {participationError && <p role="alert" className="border border-rose-300 bg-rose-50 text-rose-800 p-3">{participationError}</p>}
       {/* Main Workspace Area */}
-      <main className="flex-1 pb-20">
-        {currentView === 'dashboard' && (
+      <main className="flex-1 pb-8 min-w-0">
+        {(currentView === 'dashboard' || (currentView === 'seating' && !activeSectionId)) && (
           <DashboardView
             classes={allClasses}
             userId={appIdentity?.userId}
@@ -558,7 +634,7 @@ export function App() {
           </>
         )}
 
-        {currentView === 'seating' && !activeLayout && (
+        {currentView === 'seating' && activeSectionId && !activeLayout && (
           <div className="max-w-md mx-auto mt-20 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
             <h2 className="text-lg font-bold text-slate-800 mb-2">No Seating Layout Found</h2>
             <p className="text-xs text-slate-500 mb-6">
@@ -610,6 +686,7 @@ export function App() {
           <AssessmentHubView
             key={`${activeClassObj.section.id}:${appIdentity?.userId}:${getIdentityEpoch()}`}
             onOpenMarking={assessmentId => setMarkingTarget({assessmentId})}
+            onOpenGradeGrid={() => handleViewChange('markbook')}
             userId={appIdentity?.userId}
             classSection={activeClassObj.section}
             assessments={activeAssessments}
@@ -634,14 +711,14 @@ export function App() {
         )}
 
         {currentView === 'portability' && (
-          <ImportExportModal
+          <div><div className="px-6 pt-4"><button type="button" onClick={() => handleViewChange('settings')}>← Settings</button></div><ImportExportModal
             classSection={activeClassObj ? activeClassObj.section : null}
             course={activeClassObj ? activeClassObj.course : null}
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
             onRefresh={() => {}}
             onOpenSeating={() => handleViewChange('seating')}
-          />
+          /></div>
         )}
 
         {currentView === 'settings' && (
@@ -653,6 +730,8 @@ export function App() {
             userId={appIdentity?.userId}
             deviceId={appIdentity?.deviceId}
             onRefresh={() => {}}
+            onOpenPortability={() => handleViewChange('portability')}
+            onDirtyChange={handleSettingsDirty}
           />
         )}
       </main>
@@ -668,6 +747,8 @@ export function App() {
           historicalLocalTime={historicalTime}
           onHistoricalTimeChange={setHistoricalTime}
           onRecordEvent={handleRecordParticipation}
+          todayEvents={todayParticipation}
+          onRetractEvent={handleRetractParticipation}
           onDraftChange={handleParticipationDraftChange}
           onClearSelection={() => { if (confirmParticipationDiscard()) clearParticipationSelection(); }}
           onConfigureButtons={() => handleViewChange('settings')}

@@ -1,5 +1,18 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## October 28 — feedback keyboard clarification
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-FEEDBACK-KEYBOARD | Tyler explicitly approved Shift+1–4 category then level, Tab one exact-scale step up and standalone Shift one step down, with complete key release between actions. Subsequent clarification requires strict editor/focus scoping. | Implemented in draft PR49, based on verified `f5a04b4` on main; Shift+4 starts at user-confirmed 4(low). Preserve typing, ordinary navigation outside the focused control, grade conversions and explicit save. 971 unit tests, build and strict harness types pass. Independent review repaired the cross-focus held-key edge case; real-browser negative/repeat/context checks cover text/photo. Final-head CI evidence is maintained in PR49. Product walkthrough continues separately; no merge/release/deploy authorization. [Work order](work-orders/FOCUSED-ORGANIZER-2026-10-27.md). |
+| TUV-RECOVERY-GUIDANCE | Tyler accepted keeping sync off pending separate setup/device testing and explicitly requested clear setup/errors with next steps. | Implemented safe, action-specific optional Drive/recovery guidance in draft PR49. Mocked failure tests and independent review verify uncertain upload outcomes, failed restore rollback, private error sanitization and fail-closed access. No live connection/setup, permission changes or merge. |
+
+## October 27 — full focused UI and personal-device recovery implementation
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-FOCUSED-ORGANIZER | Tyler explicitly approved implementing the canonical UI guide and all agreed Student Organizer decisions, including optional two-computer offline Drive reconciliation and automatic dated backups. Separate live credential/access setup, student-data transmission, merge/release/deployment remain excluded. | Implemented and published as [draft PR49](https://github.com/BadgerCraft/StudentOrganizer/pull/49) on `codex/focused-organizer-20261027`, being refreshed for review against confirmed merged PR48 main `43bb645` (corrected PR48 head `9496094`) under Tyler’s “Merge 48 let’s review 49” instruction. PR49 remains unmerged. [Acceptance checklist and source evidence](work-orders/FOCUSED-ORGANIZER-2026-10-27.md). Independent review reproduced and repaired pending-participation actor/Undo races and archived-teacher backup ownership. 943 tests, all builds and focused/integrity browser workflows pass. PR49 remains draft for review; refreshed exact-head CI evidence belongs in its description. No PR49 merge/release/deploy authorized. No claim of user/device/live-provider acceptance. |
+
 ## October 24 — independent full QA and architecture review
 
 | Stable ID | Disposition | Next action / gate |

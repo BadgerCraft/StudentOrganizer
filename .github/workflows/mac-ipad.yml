@@ -112,6 +112,12 @@ jobs:
       - name: Require matching preinstalled browser engines
         run: |
           node -e "const { version } = require('playwright/package.json'); if (version !== '1.63.0') throw new Error('Update browser image and lockfile together'); const fs = require('node:fs'); const { chromium, webkit } = require('playwright'); [chromium, webkit].forEach(engine => fs.accessSync(engine.executablePath()));"
+      - name: Verify domain and focused-workflow regressions
+        run: |
+          npm test
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          npm run test:focused-organizer
+          BROWSER_ENGINE=webkit npm run test:marking:keyboard
       - name: Check bundled classroom and recovery flows in Chromium
         run: node --import tsx scripts/nativePilotSmoke.ts
       - name: Check Markinator production and expanded acceptance

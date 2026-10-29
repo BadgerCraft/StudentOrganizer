@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools } from './helpers/organizerNavigation';
 import { preview } from 'vite';
 import { chromium, type Page } from 'playwright';
 import assert from 'node:assert/strict';
@@ -30,7 +31,7 @@ try {
   await page.goto('http://127.0.0.1:4187');
   await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('nav-portability-btn').click();
+  await openRecovery(page);
   const beforeStudents = await records(page, 'students');
   const beforeEnrollments = await records(page, 'classEnrollments');
   const paste = async (html: string, plain = '') => page.getByTestId('roster-csv-textarea').evaluate((element, data) => {

@@ -1,0 +1,16 @@
+
+> ontario-teacher-assessment@1.0.0 test:focused-organizer
+> node --import tsx scripts/focusedOrganizerSmoke.ts && node --import tsx scripts/focusedMarkingSmoke.ts && node --import tsx scripts/participationCorrectionSmoke.ts && node --import tsx scripts/participationPendingSmoke.ts && node --import tsx scripts/personalSyncSmoke.ts
+
+PASS: integrated sparse class, today correction and Ctrl+Z, text safeguards, persistent dark/light, recovery setup boundary, full assignment dirty guard and grade-grid access.
+Re-optimizing dependencies because vite config has changed
+PASS: focused setup, annotation, evidence ordering, shortcut guards, category decisions and exact-level finalization
+Re-optimizing dependencies because vite config has changed
+PASS: production App sparse participation, record-dismiss, today exact-event correction, Ctrl+Z restores same event and undoes a later record, editable undo guard, unchanged history, retained classroom tools.
+PASS: delayed committed record/retraction blocks student/class/day/view/teacher changes and CtrlZ until settled; next CtrlZ targets actual latest action; identity change during prewrite resolution creates zero records.
+PASS personal recovery: automatic/manual dated snapshots, confirmed restore/cancel, preserved safety version, settings persistence, unavailable Drive gate and mocked explicit Drive conflict resolution; no external requests.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

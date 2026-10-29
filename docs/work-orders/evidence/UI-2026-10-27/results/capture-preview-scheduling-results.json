@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "peak": 1,
+  "started": 4,
+  "closed": 3,
+  "checks": [
+    "one active decoder",
+    "StrictMode queued cancellation",
+    "lazy far pages",
+    "offscreen canvas released",
+    "active cancellation closes bitmap",
+    "no stale unmounted draw",
+    "local codec failure and Retry",
+    "readable original pixels"
+  ]
+}

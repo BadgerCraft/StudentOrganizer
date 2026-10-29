@@ -1,5 +1,5 @@
 import { installFictionalClassroom } from './helpers/classroomFixture';
-import { importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory, importDocumentsForStudents, chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium, type Page, type BrowserContext } from 'playwright';
@@ -52,9 +52,9 @@ async function setup(context: BrowserContext, scenario: string) {
   const page = await context.newPage();
   await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   const title = `Fictional category recovery ${scenario}`;
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
@@ -75,7 +75,7 @@ async function setup(context: BrowserContext, scenario: string) {
   await page.getByRole('button', { name: 'Save confirmed rubric version' }).click();
   const [selectedStudent] = await importDocumentsForStudents(page, [{ name: 'Fictional-recovery.txt', mimeType: 'text/plain', buffer: Buffer.from('First fictional passage. Second fictional passage.') }]);
   const enrollmentId = selectedStudent.value;
-  await page.locator('[data-testid^="marking-session-open-"]').first().waitFor();
+  await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
   const attempt = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id);
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id'));
   assert.ok(actorId);
@@ -92,7 +92,7 @@ async function setup(context: BrowserContext, scenario: string) {
   }, { actorId, assessmentId: assessment.id, enrollmentId });
   const baseline = await official(page, assessment.id);
   assert.equal(baseline.results.length, 1, 'official-mark comparison must not be vacuous');
-  await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+  await openQueuedAttempt(page, attempt.id);
   await page.getByTestId('marking-document').waitFor();
   await selectPassage(page, 0, 23);
   await page.getByTestId('marking-feedback').fill(`Saved annotation ${scenario}`);
@@ -107,13 +107,15 @@ async function pendingFeedback(fixture: Fixture, scenario: string) {
   // Freeze only this page's JS timers so all these edits remain pending until the
   // teacher clicks Save now; the authorized other page retains normal timers.
   await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await chooseOfficialLevel(page, 'T', '3+');
+  await page.getByLabel('Category T feedback').fill(`T feedback ${scenario}`);
+  await showFinalOverview(page);await page.getByLabel('Overall student-facing feedback').fill(`Overall feedback ${scenario}`);
+  await selectFinalCategory(page, 'K');
+  await page.getByLabel('Category K feedback').fill(`K feedback ${scenario}`);
+  await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
   await selectPassage(page, 25, 49);
   await page.getByTestId('marking-feedback').fill(`Pending comment ${scenario}`);
   await page.getByLabel('Evidence level (optional)').selectOption('Level 3');
-  await chooseOfficialLevel(page, 'T', '3+');
-  await page.getByLabel('Category T feedback').fill(`T feedback ${scenario}`);
-  await page.getByLabel('Category K feedback').fill(`K feedback ${scenario}`);
-  await page.getByLabel('Overall student-facing feedback').fill(`Overall feedback ${scenario}`);
   assert.notEqual((await storedSession(page, fixture.attempt.id)).draft.overallFeedback, `Overall feedback ${scenario}`, 'the scenario must begin with unsaved feedback');
 }
 async function changeCategory(fixture: Fixture, code: 'K' | 'T', replace: boolean, incompatible = false) {
@@ -141,7 +143,7 @@ async function restart(fixture: Fixture) {
   await fixture.page.clock.resume();
   await fixture.page.reload();
   await fixture.page.getByTestId(`open-marking-${fixture.assessment.id}`).click();
-  await fixture.page.getByTestId(`marking-session-open-${fixture.attempt.id}`).click();
+  await openQueuedAttempt(fixture.page, fixture.attempt.id);
   await fixture.page.getByTestId('marking-document').waitFor();
 }
 function assertFeedback(draft: any, scenario: string) {
@@ -214,7 +216,7 @@ try {
       await restart(fixture);
       assertFeedback((await storedSession(page, attempt.id)).draft, scenario);
       assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
-      assert.equal(await page.getByLabel('Category T feedback').inputValue(), `T feedback ${scenario}`);
+      assert.equal((await storedSession(page, attempt.id)).draft.judgments.find((j: any) => j.feedback === `T feedback ${scenario}`)?.feedback, `T feedback ${scenario}`);
       assert.deepEqual(await official(page, fixture.assessment.id), fixture.baseline);
       // Follow the UI's recovery instruction in the second authorized context.
       await fixture.otherPage.evaluate(async ({ actorId, category }) => {
@@ -272,7 +274,7 @@ try {
     const restarted = await storedSession(page, attempt.id);
     assert.deepEqual(restarted, reconciled, 'reload/reopen preserves saved recovered draft and history exactly');
     assert.equal(await page.getByTestId('marking-feedback').inputValue(), `Pending comment ${scenario}`);
-    assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), `Overall feedback ${scenario}`);
+    assert.equal(restarted.draft.overallFeedback, `Overall feedback ${scenario}`, 'final-stage summary is retained while pending annotation remains open');
     const history = page.getByRole('region', { name: 'Retained category feedback', exact: true });
     assert.match(await history.innerText(), new RegExp(`${scenario === 'removed' ? 'K' : 'T'} feedback ${scenario}`));
     assert.deepEqual(await official(page, fixture.assessment.id), fixture.baseline, 'official marks and commits unchanged after recovery and restart');

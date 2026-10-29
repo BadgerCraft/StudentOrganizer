@@ -1,0 +1,31 @@
+{
+  "dockOverlapGeometry": {
+    "viewportHeight": 672,
+    "pressPoint": {
+      "x": 228,
+      "y": 647.5
+    },
+    "measuredDock": {
+      "x": 184,
+      "y": 534,
+      "width": 1256,
+      "height": 466
+    },
+    "openedDock": {
+      "x": 184,
+      "y": 353.609375,
+      "width": 1256,
+      "height": 318.390625
+    }
+  },
+  "checks": [
+    "press selection without double toggle",
+    "child gear/profile keyboard",
+    "deliberate student and profile-control transfer on press",
+    "dirty rejection preserves note and settings",
+    "accepted guarded transfer",
+    "drag reverses temporary selection and preserves native seat swap",
+    "non-primary ignored",
+    "blank backdrop press dismissal"
+  ]
+}

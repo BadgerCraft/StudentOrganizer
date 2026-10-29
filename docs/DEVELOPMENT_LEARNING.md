@@ -394,3 +394,32 @@ Individual assessment creation, its optional percentage mark and audit records n
 Tradeoff: conflicting saves and inconsistent backups are rejected instead of guessing how to combine them. Existing records/history are retained; no schema migration or silent cleanup is performed. The two deferred phone-capacity/seating-geometry findings are unchanged. Local verification and independent reviews are recorded in FULL-QA-2026-10-24.md; draft PR48 (https://github.com/BadgerCraft/StudentOrganizer/pull/48), implementation `88dc6b5`, is open for review; final-head CI is recorded in the PR evidence. Physical-platform limits remain separate.
 
 Prepared discussion question: If another authorized window changes a mark while your editor is open, what should happen to their saved mark and your unsaved draft? Status DEFERRED until Tyler reviews the PR; no answer or demonstrated understanding inferred. This walkthrough does not authorize merge/release and does not block already-approved publication.
+
+
+## October 27 — focused workflow and personal recovery (walkthrough prepared)
+
+Review pending for the stacked focused-organizer draft; PR/head recorded in its work order. No comprehension answer or merge approval inferred.
+
+The class screen now opens on names and participation. Markbook opens assignments while List View keeps the existing grade grid. Annotating collects evidence beside the work; final grading is a separate teacher decision, and saving an annotation never changes an official mark. A compact category chip keeps a completed decision visible and lets you revise it. The original grading calculation and explicit transfer remain the authority.
+
+A dated backup is a recoverable local version, not a second-device copy. Optional Drive sync shares explicitly approved full-workspace snapshots; a common ancestor means a verified version both computers started from. Separate record edits can combine; competing versions require an explicit choice. Linked-record collisions may require choosing a complete version instead of producing inconsistent grades. Safety copies remain available. Default backups are daily while open, seven automatic versions, configurable; no app-level encryption or live-provider acceptance is claimed.
+
+Prepared questions for Tyler's review: (1) What changes an official grade after you save passage feedback? (2) If two computers change the same grade differently offline, what should happen before either version replaces the other? Status DEFERRED until actual review; independent implementation and verification continue.
+
+
+## October 27 evening — PR49 integrity review
+
+A participation record includes a school-day session, event, summary, audit and queued mutation. The repaired transaction now rolls them all back together if the teacher changes mid-write; the UI also holds its context until the action settles so Undo retains the newest target. Archiving a teacher hides/deactivates an identity but does not transfer ownership of retained confidential notes. Full-workspace backup and sync keep that ownership boundary.
+
+Prepared review question: how does an atomic transaction differ from disabling navigation while a save is pending? Both are used here: one protects committed data, the other preserves the teacher’s current task and Undo target. Review/recall remains deferred; no understanding or PR49 merge approval inferred.
+
+
+## October 28 — focused keyboard gestures and truthful recovery messages (review pending)
+
+The feedback control has an explicit phase: Shift+1–4 first chooses a category, then the same chord chooses a level. Tab and standalone Shift step through the unchanged exact scale only while that control has focus. A gesture is one complete press/release sequence: the Shift from a category chord cannot also lower a level. Escape leaves the control; ordinary navigation and typing continue elsewhere. Tyler confirmed Shift+4 starts at 4(low); the next Tab selects 4(high), using the existing scale.
+
+Independent browser review found that a key held outside the control could be missed when focus entered it. Passive observation of currently held key codes during marking now quarantines that entry until release. It performs no shortcuts outside the control, saves no key history/text, and clears on window/context departure. Physical keys held before the browser could observe them are not OS-global knowledge. New regression coverage tests the actual focus transfer, not only a helper function.
+
+Recovery messages distinguish a failed read from a locally completed merge with an unconfirmed upload. Retrying a read is different from repeating a write that might already have reached Drive. The guidance work preserves that distinction and the separate approval for live setup. No live provider/device acceptance is inferred.
+
+Walkthrough prepared for this material PR49 increment; no understanding or acceptance inferred. Deferred learning check for the continuing product review: after a category chord, what must happen before a standalone Shift can lower the evidence level? Existing PR walkthrough remains the same review, not a new merge gate.

@@ -30,8 +30,9 @@ export function MarkingModePicker({ onSelect, disabled = false }: {
   </section>;
 }
 
-export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange, renderCategory }: {
+export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange, renderCategory, categoryCode }: {
   rubric: MarkingRubric;
+  categoryCode?: string;
   renderCategory?: (criterion: MarkingRubric['criteria'][number]) => ReactNode;
   value: MarkingRubricFeedback[] | undefined;
   onChange: (next: MarkingRubricFeedback[]) => void;
@@ -57,8 +58,8 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
   };
   return <section aria-labelledby={titleId} data-testid="marking-rubric-evidence" className="rounded-xl border bg-white p-4 space-y-3">
     <h3 id={titleId} className="font-semibold">{editingCriterion ? 'Write a comment' : 'Criteria and feedback'}</h3>
-    <p className="text-sm text-slate-600">{rubric.title}. KTCA mappings are confirmed in this rubric. A category with one criterion is marked here once. With several criteria, record evidence here and choose the overall category judgment below; levels are never averaged.</p>
-    <div className="space-y-3">{rubric.criteria.filter(criterion => !editingCriterion || criterion.id === editingCriterion).map(criterion => {
+    <p className="text-sm text-slate-600">{rubric.title}. KTCA mappings are confirmed in this rubric. Record criterion evidence here; the teacher chooses official category judgments in Final grading. Evidence levels are never averaged.</p>
+    <div className="space-y-3">{rubric.criteria.filter(criterion => (!categoryCode || criterion.categoryCode === categoryCode) && (!editingCriterion || criterion.id === editingCriterion)).map(criterion => {
       const categoryEditor = renderCategory?.(criterion);
       const current = entries.find(entry => entry.criterionId === criterion.id);
       const otherCharacters = entries.reduce((sum, entry) => sum + (entry.criterionId === criterion.id ? 0 : entry.feedback.length), 0);
@@ -83,6 +84,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
           <details className="text-sm text-slate-600"><summary>Descriptors for {criterion.name}</summary>
             <dl className="space-y-2 mt-2">{rubric.levels.map(level => <div key={level}><dt className="font-medium">{level}</dt><dd className="whitespace-pre-wrap">{criterion.descriptors[level] || 'No descriptor provided.'}</dd></div>)}</dl>
           </details>
+          {categoryEditor && categoryCode && <section aria-label={`${criterion.name} evidence summary`} className="space-y-2 rounded-lg border p-3"><h5 className="font-semibold">Collected evidence</h5>{current?.level && <p>Criterion evidence level: {current.level}</p>}{current?.feedback && <p className="whitespace-pre-wrap">{current.feedback}</p>}{textComments.map(comment => <blockquote key={comment.id} className="border-l-2 pl-3 text-sm"><p className="whitespace-pre-wrap italic">“{comment.quote}”</p><p className="whitespace-pre-wrap">{comment.text}</p>{comment.level && <p>Evidence level: {comment.level}</p>}</blockquote>)}{imageComments.map(comment => <div key={`${comment.pageIndex}-${comment.id}`} className="border-l-2 pl-3 text-sm"><p>Image page {comment.pageIndex + 1} · {comment.kind}</p><p className="whitespace-pre-wrap">{comment.text}</p>{comment.level && <p>Evidence level: {comment.level}</p>}</div>)}{!current?.level && !current?.feedback && !textComments.length && !imageComments.length && <p className="text-sm">No evidence recorded for this criterion.</p>}</section>}
           {categoryEditor}
           {(!categoryEditor || current?.level || current?.feedback || textComments.length > 0 || imageComments.length > 0) && <details open={!categoryEditor}><summary>{categoryEditor ? 'Previous criterion evidence (retained separately)' : 'Criterion evidence (optional)'}</summary>
           <p className="text-sm font-medium">Selected level: {current?.level || 'Not selected'}</p>
@@ -104,7 +106,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
             </div>)}
             {!current?.feedback && !textComments.length && !imageComments.length && <p className="text-sm text-slate-500">No feedback recorded yet.</p>}
           </div>
-          <button type="button" className={`${button} bg-blue-700 text-white`} disabled={disabled} onClick={() => setEditingCriterion(criterion.id)}>{current?.feedback ? 'Edit comment' : 'Write a comment'}</button>
+          <button type="button" className={`${button} ${categoryCode ? '' : 'bg-blue-700 text-white'}`} disabled={disabled} onClick={() => setEditingCriterion(criterion.id)}>{current?.feedback ? 'Edit comment' : 'Write a comment'}</button>
           </details>}
         </>}
       </div>;

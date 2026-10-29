@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation } from './helpers/organizerNavigation';
 import { installFictionalClassroom } from './helpers/classroomFixture';
 import { preview } from 'vite';
 import { chromium, webkit, type Page, type BrowserContext } from 'playwright';
@@ -47,12 +48,11 @@ async function waitForRecords(page: Page, table: string, matches: (rows: any[]) 
 }
 async function openAssessmentHub(page: Page) {
   await page.locator('button[title="Manage Assessments & Rubrics"]').tap();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor();
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor();
 }
 async function createAssessment(page: Page, title: string) {
   await openAssessmentHub(page);
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).tap();
-  const form = page.getByRole('heading', { name: 'Create New Assessment' }).locator('..').locator('form');
+  const form = await openAssignmentCreation(page);
   assert.equal(await form.getByText('Code', { exact: true }).count(), 0);
   await form.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
   await form.getByRole('button', { name: 'Create Assessment', exact: true }).tap();
@@ -84,7 +84,7 @@ async function main() {
     if (!server.httpServer.listening) return;
     await new Promise<void>((resolve, reject) => {
       server.httpServer.close(error => error ? reject(error) : resolve());
-      server.httpServer.closeAllConnections();
+      if ('closeAllConnections' in server.httpServer) server.httpServer.closeAllConnections();
     });
     assert.equal(server.httpServer.listening, false, 'Origin server must be unavailable for the cache-reopen check');
   }
@@ -119,8 +119,10 @@ async function main() {
     await selectTeacher(page);
     assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), 0, 'Retired PWA worker must not register');
     await noPageOverflow(page, 'portrait dashboard');
+    await page.getByTestId('nav-dashboard-btn').tap();
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().tap();
     await page.locator('[data-testid="student-seat-card"]').first().waitFor();
+    await showClassTools(page);
     for (const viewport of [{ width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 512, height: 768 }]) {
       await page.setViewportSize(viewport);
       await noPageOverflow(page, `seating ${viewport.width}`);
@@ -159,7 +161,7 @@ async function main() {
     await page.locator('[data-testid="toggle-note-btn"]').tap();
     await page.locator('[data-testid="observation-note-input"]').fill('Fictional iPad observation');
     await noPageOverflow(page, 'participation dock');
-    await page.getByRole('button', { name: /Contributed an idea/ }).tap();
+    await page.getByTestId('participation-event-btn').filter({ hasText: 'Contributed an idea' }).tap();
     await waitForRecords(page, 'participationEvents', rows => rows.some(row => row.note === 'Fictional iPad observation'));
     // Student profile form and local photo selection.
     await page.locator('[data-testid="student-settings-gear-btn"]').first().tap();
@@ -205,7 +207,7 @@ async function main() {
     await waitForRecords(page, 'categoryResults', rows => rows.some(row => row.rawScore === '4(low)' && row.inputFormat === 'classroom_level' && row.normalizedPercentage === 88 && row.feedback === 'Fictional iPad K feedback'));
     await noPageOverflow(page, 'markbook horizontal scrolling');
     await page.screenshot({ path: join(evidenceDir, 'markbook-result.png'), fullPage: true });
-    await page.locator('[data-testid="nav-portability-btn"]').tap();
+    await openRecovery(page);
     await page.locator('[data-testid="roster-file-input"]').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('LastName,FirstName,StudentNumber\nTablet,Fictional,IPAD-9901\n') });
     await page.locator('[data-testid="preview-roster-btn"]').tap();
     await page.locator('[data-testid="import-roster-btn"]').tap();
@@ -231,7 +233,7 @@ async function main() {
     assert.ok((await records(page, 'assessments')).some(row => row.title === title));
     const afterBackupTitle = `${title} after backup`;
     await createAssessment(page, afterBackupTitle);
-    await page.locator('[data-testid="nav-portability-btn"]').tap();
+    await openRecovery(page);
     await page.locator('[data-testid="restore-file-input"]').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.body });
     await page.locator('[data-testid="restore-confirm-dialog"]').waitFor();
     await page.screenshot({ path: join(evidenceDir, 'restore-preview.png'), fullPage: true });
@@ -282,7 +284,7 @@ async function main() {
     await cleanPage.goto(url);
     await selectTeacher(cleanPage);
     assert.ok(!(await records(cleanPage, 'assessments')).some(row => row.title === title));
-    await cleanPage.getByTestId('nav-portability-btn').tap();
+    await openRecovery(cleanPage);
     await cleanPage.getByTestId('restore-file-input').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.body });
     await cleanPage.getByTestId('restore-confirm-dialog').waitFor();
     await cleanPage.getByTestId('confirm-restore-btn').tap();

@@ -1,0 +1,10 @@
+
+> ontario-teacher-assessment@1.0.0 test:recovery:guidance
+> node --import tsx scripts/recoveryGuidanceSmoke.ts
+
+PASS recovery guidance: setup, offline/auth/permission, invalid restore, uncertain upload, local-merge stage, pre-restore checkpoint failure and verified-upload/list-failure states; no external requests.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

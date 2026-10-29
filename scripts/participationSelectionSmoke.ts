@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools } from './helpers/organizerNavigation';
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { preview } from 'vite';
@@ -44,7 +45,9 @@ try {
   }));
   await page.reload();
   await page.locator('[data-testid^="select-teacher-"]').first().click();
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await showClassTools(page);
   const cards = page.getByTestId('student-seat-card');
   const selected = page.locator('[data-testid="student-seat-card"][aria-pressed="true"]');
   const single = page.getByRole('button', { name: 'Single student', exact: true });
@@ -141,7 +144,7 @@ try {
       await page.getByTestId('header-class-select').selectOption(draftClass);
     } else if (departure === 'view') {
       await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click();
-      await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+      await page.getByRole('button', { name: 'Class View', exact: true }).click();
     } else {
       await page.getByTestId('header-teacher-btn').click();
       await page.getByTestId('teacher-selector-modal').waitFor(); await page.keyboard.press('Escape');
@@ -198,14 +201,14 @@ try {
   const singleSaved = (await rows(page, 'participationEvents')).filter(row => !baseline.some(old => old.id === row.id) && !saved.some(old => old.id === row.id));
   assert.equal(singleSaved.length, 1);
   await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click();
-  await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+  await page.getByRole('button', { name: 'Class View', exact: true }).click();
   await page.getByTestId('undo-toast-btn').click();
   await page.getByTestId('undo-toast-btn').waitFor({ state: 'hidden' });
   assert.ok((await rows(page, 'participationEvents')).find(row => row.id === singleSaved[0].id).deletedAt);
   completed.push('Default single quick tally writes exactly one event; Undo remains available after leaving and returning to Class View.');
   await choose(0); await group.click(); await choose(1);
   await page.getByRole('button', { name: 'List View (Markbook)', exact: true }).click();
-  await page.getByRole('button', { name: 'Class View (Seating)', exact: true }).click();
+  await page.getByRole('button', { name: 'Class View', exact: true }).click();
   await expectCount(0); assert.equal(await single.getAttribute('aria-pressed'), 'true');
   await choose(0); await group.click();
   const classSelect = page.getByTestId('header-class-select');
@@ -222,6 +225,7 @@ try {
   await page.getByTestId('teacher-selector-modal').waitFor({ state: 'hidden' });
   await expectCount(0); assert.equal(await single.getAttribute('aria-pressed'), 'true');
   await choose(0); await group.click();
+  await showClassTools(page);
   await cards.first().getByTestId('open-student-profile-btn').click();
   await page.getByTestId('profile-close-btn').waitFor();
   assert.equal(await page.locator('.participation-dock').count(), 0);
@@ -230,9 +234,9 @@ try {
   if (await page.getByTestId('profile-close-btn').count()) await page.getByTestId('profile-close-btn').click();
   await choose(0);
   const dock = await page.locator('.participation-dock').boundingBox(); assert.ok(dock);
-  const hit = await page.evaluate(({ y }) => document.elementFromPoint(5, y)?.closest('.participation-dock') !== null, { y: dock.y + 5 });
+  const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.participation-dock') !== null, { x: dock.x + 5, y: dock.y + 5 });
   assert.equal(hit, true, 'Dock outer padding intercepts background clicks');
-  await page.mouse.click(5, dock.y + 5); await expectCount(1);
+  await page.mouse.click(dock.x + 5, dock.y + 5); await expectCount(1);
   await page.getByRole('button', { name: 'Close dock', exact: true }).click();
   await choose(0);
   await page.getByRole('button', { name: 'Report a problem', exact: true }).click();

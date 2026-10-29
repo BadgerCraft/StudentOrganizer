@@ -1,0 +1,60 @@
+# Personal backup and two-computer sync
+
+Implemented October 27, 2026. Live account setup and real-student use are separate approval/acceptance gates. No credentials or configuration are shipped.
+
+## Local recovery
+
+Both computers retain their existing local database and work offline. Settings → Backups & import / export offers dated local snapshots, a manual snapshot and a confirmed restore. The default is changed snapshots at most once per 24 hours while the app is open, retaining seven automatic versions. The teacher can select 1/6/24 hours and 7/14/30 versions. A timer checks once a minute after explicit teacher selection; unchanged snapshots are skipped. Manual, pre-restore and pre-sync versions are never pruned automatically. Failed snapshot creation leaves earlier versions intact. Failure status is subscribed/reactive in Settings.
+
+Recovery snapshots live in a separate local IndexedDB database, not inside the classroom backup itself. This avoids recursive backups. They are not app-encrypted and do not protect against losing the device/storage profile. Existing full-file export remains available for an independent copy. Restore requires confirmation, saves a safety snapshot first, validates all data and attachment bytes, and rejects local changes since preview. It reuses the existing atomic restore implementation and rebuilds participation summaries from events.
+
+## Optional Drive operation
+
+The native module uses the existing desktop PKCE OAuth implementation with `drive.file`, but a **separate purpose-specific operator configuration** named `organizer-sync-oauth.json` in Electron's user-data directory. The schema is the existing `readConfig` schema (`approved`, desktop OAuth client ID and client secret). This file is not created by the app or this PR. Capture's `desktop-drive-oauth.json` does not enable sync. Approval/configuration, account grants and privacy acceptance must occur separately before real connection. The current UI accurately reports unavailable setup instead of presenting a fake working sync control.
+
+After approved configuration, a teacher explicitly chooses full-workspace transmission for that session, connects, and reviews dated versions. Tokens remain in the main process's memory; no refresh token or token is persisted/exposed to the renderer. Closing/navigation/disconnect clears access. There is no background transmission, analytics sender, other provider, automatic OAuth, shared-folder target or automatic remote deletion.
+
+Each upload creates a new uniquely identified immutable JSON file in personal Drive root. Before accepting bytes, the adapter verifies the sole owner, sole owner permission, unshared status, root location, MIME, size, version and SHA-256. Network origins are fixed; redirects are refused. Upload success requires reading and verifying the resulting bytes. An interrupted upload reports an uncertain outcome and requires refreshing versions; it never silently retries an overwrite. The current size limit is 100 MB per snapshot; larger workspaces retain local export/recovery.
+
+## Merge and conflict choices
+
+The review compares records by stable ID. A local checkpoint is used as a common base only when its immutable remote identity and content digest match the selected version or a recorded ancestor. Without a proven base, differing existing records require a choice. Separate records combine, matching records deduplicate, and conflicting edits/deletions require explicit This computer/Drive selection. Teacher-facing labels identify the student, assignment, category/date and changed values. Raw JSON is optional technical detail. No score averaging or grade algorithm is introduced.
+
+Unique logical-key collisions (for example two independently created first grades for one assignment/student) and invalid linked combinations conservatively require a clearly labelled **complete workspace version choice**. This may sacrifice automatic combination of unrelated edits in that case; both the pre-sync local safety snapshot and immutable Drive versions remain available. This is deliberate prevention of invalid mixed relationships, not a claim of per-field/domain-transaction merging.
+
+Device identity, device preferences and outbound transport bookkeeping stay local. Remote changes to existing identity/organization/permission records are rejected. A new class may carry its new primary-teacher link only for the current teacher in an already authorized organization. Full-workspace sync/recovery requires sole-teacher ownership or administrative authority for every organization, plus access to retained archived classes and student scopes. Other teacher identities count even when archived: deactivation never transfers ownership of their retained notes or records. Foreign-authored notes also preserve this shared-workspace boundary if a legacy author row is missing. The same check runs before automatic/manual safety snapshots, before Drive calls and before/after transactional restore; a resulting unauthorized workspace rolls back atomically. A shared workspace teacher's limited class access is not permission to transmit the entire installation. Existing authorized class export paths remain available.
+
+Applying a reviewed merge rechecks teacher epoch, local revision, remote bytes and full backup relationships before an atomic local restore. A failed upload after local application leaves merged work and the safety backup on this computer; it reports failure and leaves the last successful sync checkpoint unchanged. The next operation starts with a fresh review. All Drive versions remain available, including concurrent offline branches; none is overwritten.
+
+## Setup and recovery guidance (October 28)
+
+Keep personal sync off until separate desktop setup, privacy approval and actual-device testing are completed. In Settings → Backups & import / export, **Check setup again** only checks configuration; it does not authorize or connect an account. Capture access is separate. Local backups and authorized file export remain available without Drive.
+
+| What Settings reports | Supported next step |
+| --- | --- |
+| Setup unavailable | Keep sync off and use local backups/export. After separately approved desktop configuration, Check setup again. |
+| Disconnected or expired access | Select the intended teacher; reconnect only with the approved account and explicit session consent, then refresh versions. |
+| Offline/network read failure | Check the connection and retry the read/refresh. No upload is automatically repeated. |
+| Teacher/account/private-file permission denied | Use an already authorized teacher/account and permitted private version, or authorized class export. Do not broaden permissions to bypass the check. |
+| Conflicts or stale review | Resolve every displayed choice, or cancel; refresh changed versions and review again before applying. |
+| Invalid backup/version | Choose an intact backup or supported export. Validation failure does not replace classroom records. Do not edit bytes to evade validation. |
+| Restore could not finish | Read the stated stage. Validation, safety-backup and old-checkpoint cleanup must succeed before replacing records; confirmed restore remains atomic. If replacement fails after checkpoint cleanup, a later sync uses a fresh conservative review. |
+| Upload outcome unconfirmed | A Drive file may already exist. Refresh and inspect the newest version; review an existing upload instead of sending it again. |
+| Merge completed locally, upload unconfirmed | Local merged records and the pre-sync safety snapshot remain. Refresh and start a new review; do not replay the old apply action. |
+| Upload verified, list/checkpoint update failed | The new version already exists. Refresh/review it; the failed bookkeeping or list refresh is not an instruction to upload again. |
+
+Actionable errors stay in Settings with the failed action, known local/remote state and next steps. Provider bodies, credentials and record-bearing exception text are not displayed. Failed upload/apply attempts disable another write until a fresh version list is obtained; retries are user-driven, and immutable versions are not overwritten. These checks do not establish that an offline or interrupted request never reached Drive. A successful local backup also cannot guarantee protection from device loss.
+
+## Verified and remaining acceptance
+
+Fictional-data unit tests cover independent edits, explicit conflicts, verified ancestry/concurrent forks, unique linked-record fallback, actor/archive/organization boundaries, local staleness, relational rollback, backup retention/failure notification and upload uncertainty/privacy checks. `scripts/personalSyncSmoke.ts` exercises the production Settings flow, backup/restore confirmation/cancel, safety snapshot, preferences after reload, disabled setup and no external network requests. Native wiring uses the existing trusted-renderer IPC guard.
+
+Live OAuth, real account privacy behavior, actual two-machine installed sync, filesystem loss/power loss, board privacy acceptance and encrypted recovery have not been tested or approved. Encryption and more granular domain-aware conflict resolution remain explicit design choices, not hidden implementation claims. No merge, release, deployment, grant or persistent credential setup follows from passing fictional tests.
+
+## Official API check (October 27, 2026)
+
+Google's [upload guide](https://developers.google.com/workspace/drive/api/guides/manage-uploads) specifies resumable upload for files above 5 MB, a returned `Location` session URI, and pre-generated file IDs. The adapter uses resumable initiation for every snapshot, validates that URI against the exact Google upload origin/path, then sends one bounded content PUT. It does not claim resumable chunk retries; interruptions require a version refresh. The [files resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) documents the owner/shared flags, parent, version and binary-file SHA-256 fields used for verification. [Permission records](https://developers.google.com/workspace/drive/api/reference/rest/v3/permissions) supply the owner identity/type/role checks. These metadata checks establish the observed personal-file boundary at operation time, not protection from future account compromise or later sharing.
+
+The [Drive authorization guide](https://developers.google.com/workspace/drive/api/guides/api-specific-auth) scopes `drive.file` to app-created/opened files; both computers need the same approved app ecosystem and account. The existing [desktop OAuth loopback/PKCE flow](https://developers.google.com/identity/protocols/oauth2/native-app) remains the authentication implementation. Documentation validation is not a live grant or account test.
+
+Conflict granularity is a complete database record, not individual fields: separate records merge, but competing field edits on the same record require choosing that record's version. Linked/unique-key ambiguity escalates visibly to a whole-workspace choice. A test restores computer A's full backup into a second database and fresh identity module, then proves computer B creates its own installation ID while retaining A's historical device record. This verifies the startup identity pathway with fictional data; actual two-device installation acceptance remains outstanding.

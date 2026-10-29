@@ -74,6 +74,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   onRefresh
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showClassTools, setShowClassTools] = useState(false);
   const [showRandomConfirm, setShowRandomConfirm] = useState(false);
   const [draggedSeat, setDraggedSeat] = useState<SeatPosition | null>(null);
   const [tapMoveMode, setTapMoveMode] = useState(false);
@@ -241,6 +242,14 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
         </div>
       )}
       {seatingError && !showRandomConfirm && <p role="alert" className="mb-4 text-sm text-rose-700">{seatingError}</p>}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="text-xl font-semibold">Class participation</h2><p className="text-sm text-slate-600">Choose a student to record feedback.</p></div>
+        <button type="button" aria-expanded={showClassTools} aria-controls="classroom-tools" data-testid="classroom-tools-toggle"
+          className="min-h-[44px] rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold"
+          onClick={() => { setShowClassTools(!showClassTools); setTapMoveMode(false); setTapMoveSource(null); }}>
+          {showClassTools ? 'Return to participation' : 'Attendance & seating tools'}
+        </button>
+      </div>
       {/* Controls Bar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         {/* Left: Search Student Highlighter */}
@@ -320,6 +329,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
           )}
         </div>
 
+        <div id="classroom-tools" hidden={!showClassTools} className={showClassTools ? 'flex flex-wrap items-center gap-3 w-full' : ''}>
         {/* Center: Grid Dimension Controls */}
         <div className="flex items-center space-x-2 text-xs font-semibold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
           <span>Grid ({layout.rows} &times; {layout.cols})</span>
@@ -417,6 +427,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
             )}
           </button>
         </div>
+        </div>
       </div>
 
       {/* Classroom Front Stage Indicator */}
@@ -428,7 +439,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
       </div>
 
       {/* Seating Grid */}
-      {!layout.isLocked && (
+      {showClassTools && !layout.isLocked && (
         <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
           <button type="button" data-testid="tap-move-seats-btn" aria-pressed={tapMoveMode}
             disabled={moveBusy}
@@ -498,7 +509,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   role="button"
                   tabIndex={0}
                   aria-pressed={tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected}
-                  draggable={!layout.isLocked && !tapMoveMode}
+                  draggable={showClassTools && !layout.isLocked && !tapMoveMode}
                   onDragStart={() => handleDragStart(seatPos)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={() => handleDrop(r, c)}
@@ -506,7 +517,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   onPointerDown={event => {
                     if (tapMoveMode || !event.isPrimary || event.button !== 0 || (event.target as Element).closest('button,input,select,textarea,a')) return;
                     event.stopPropagation(); event.currentTarget.focus({ preventScroll: true });
-                    consumeStudentPress(event, event.currentTarget, onToggleSelectStudent(enr!.id), !layout.isLocked);
+                    consumeStudentPress(event, event.currentTarget, onToggleSelectStudent(enr!.id), showClassTools && !layout.isLocked);
                   }}
                   onClick={event => { if (tapMoveMode || event.detail === 0) void handleTapSeat(r, c, seatPos); }}
                   onKeyDown={e => {
@@ -520,7 +531,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   } ${
                     (tapMoveMode ? tapMoveSource?.id === seatPos.id : isSelected)
                       ? 'ring-2 ring-blue-600 border-blue-600 bg-blue-50/60 shadow-md'
-                      : isAbsent
+                      : showClassTools && isAbsent
                       ? 'bg-slate-100 border-slate-300 opacity-60'
                       : isHighlighted
                       ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50 shadow-md'
@@ -531,7 +542,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   <div className="seat-card-top flex flex-wrap items-start gap-y-2">
                     <div className="flex w-full min-w-0 items-start gap-2.5">
                       {/* Student Photo or Stylized Initials Avatar */}
-                      {safePhotoSource(student.photoUrl) ? (
+                      {showClassTools && (safePhotoSource(student.photoUrl) ? (
                         <img
                           src={safePhotoSource(student.photoUrl)}
                           alt={`${student.firstName} ${student.lastName}`}
@@ -554,7 +565,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                           {student.preferredName?.[0] || student.firstName[0]}
                           {student.lastName[0]}
                         </div>
-                      )}
+                      ))}
 
                       <div className="min-w-0 flex-1">
                         <div
@@ -569,7 +580,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                             {student.firstName} {student.lastName}
                           </span>
                         )}
-                        {student.pronouns && layout.cardSize === 'standard' && (
+                        {showClassTools && student.pronouns && layout.cardSize === 'standard' && (
                           <span className="text-[10px] text-slate-500 block leading-none mt-0.5 font-medium">
                             {student.pronouns}
                           </span>
@@ -578,7 +589,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                     </div>
 
                     {/* Attendance, Profile & Settings Quick Actions */}
-                    <div className={tapMoveMode ? 'hidden' : 'seat-card-actions flex w-full flex-wrap items-center justify-end gap-1'}>
+                    <div className={`seat-card-actions ${!showClassTools || tapMoveMode ? 'hidden' : 'flex w-full flex-wrap items-center justify-end gap-1'}`}>
                       <button
                         onClick={e => handleToggleAttendance(enr!.id, e)}
                         className={`p-1 rounded transition ${
@@ -640,7 +651,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
                   </div>
 
                   {/* Bottom Row: Participation Badges & Note Indicator */}
-                  <div className="flex items-center justify-between text-[10px] font-semibold mt-auto pt-1">
+                  <div hidden={!showClassTools} className={showClassTools ? "flex items-center justify-between text-[10px] font-semibold mt-auto pt-1" : undefined}>
                     <div className="flex items-center space-x-1">
                       {isAbsent ? (
                         <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold uppercase tracking-wider">

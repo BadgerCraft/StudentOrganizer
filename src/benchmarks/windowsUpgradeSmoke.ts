@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
 import { canonicalLegacyReport } from './legacyReportComparison';
@@ -10,7 +11,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
-import { runMarkingDesktopAcceptance, verifyAfterRestart, leaveMarkingWithDraft, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
+import { runMarkingDesktopAcceptance, verifyAfterRestart, leaveMarkingWithDraft, openMarkingQueue, type MarkingDesktopEvidence } from './markingDesktopAcceptance';
 
 // This deliberately uses the real installed application's normal profile. The
 // guard below limits it to a disposable Windows runner containing fictional QA
@@ -66,7 +67,7 @@ async function openHub(page: Page) {
   await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
   await page.locator('button[title="Manage Assessments & Rubrics"]').click();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor();
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor();
 }
 async function snapshotAll(page: Page): Promise<Record<string, any[]>> {
   return page.evaluate(() => new Promise((resolve, reject) => {
@@ -369,6 +370,7 @@ async function runLegacyBootstrap() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.equal(canonicalLegacyReport(fs.readFileSync(reportB, 'utf8')), canonicalLegacyReport(fs.readFileSync(marking.reportPath, 'utf8').replace('Criterion / KTAC', 'Criterion / KTCA')), 'Legacy report must preserve all content, allowing only category display reordering');
     // A no-op restore could pass an equality check against identical data.
@@ -394,7 +396,7 @@ async function runLegacyBootstrap() {
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
     await leaveMarkingWithDraft(running.page);
-    await running.page.getByTestId('nav-portability-btn').click();
+    await openRecovery(running.page);
     await running.page.getByTestId('restore-file-input').setInputFiles(backupPath);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();
     assert.deepEqual(await snapshotAll(running.page), changed, 'Legacy backup preview must leave the later bootstrapped edit intact');
@@ -408,6 +410,7 @@ async function runLegacyBootstrap() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const restoredReport = path.join(evidenceDir, 'markinator-report-restored-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), restoredReport);
     assert.deepEqual(fs.readFileSync(restoredReport), fs.readFileSync(reportB), 'Current report bytes must survive legacy restore and restart');
     assert.deepEqual(running.errors, []);
@@ -507,7 +510,7 @@ async function runInstallRecovery() {
     const before = await snapshotAll(running.page);
     assert.equal(Object.keys(before).length, 41, 'Install recovery must cover every current-schema table');
     const profileA = running.userData;
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     const updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: failureFilename, bytes: failureBytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
@@ -556,6 +559,7 @@ async function runInstallRecovery() {
     // Make the restore observable: the saved pre-failure backup must replace a
     // later B edit rather than merely previewing data that already matches.
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await running.page.getByTestId(`marking-session-open-${marking.firstAttemptId}`).click();
     await waitUntil(async () => {
       const document = running!.page.getByTestId('marking-document');
@@ -576,7 +580,7 @@ async function runInstallRecovery() {
     assert.deepEqual(changed.studentAssessments, before.studentAssessments, 'Later pending edits must leave official marks intact');
     assert.deepEqual(changed.categoryResults, before.categoryResults, 'Later pending edits must leave finalized category evidence intact');
     await leaveMarkingWithDraft(running.page);
-    await running.page.getByTestId('nav-portability-btn').click();
+    await openRecovery(running.page);
     await running.page.getByTestId('restore-file-input').setInputFiles(safetyBackup);
     await running.page.getByTestId('restore-confirm-dialog').waitFor();
     assert.deepEqual(await snapshotAll(running.page), changed, 'Safety-backup preview must not change the repaired database');
@@ -591,6 +595,7 @@ async function runInstallRecovery() {
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-recovered.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Recovered finalized report bytes must match the original');
     await running.app.close(); running = undefined;
@@ -743,7 +748,7 @@ async function main() {
     running = await launchInstalled(executable, versions.A);
     await openHub(running.page);
     marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     let updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     await observeStatusBoundary(running.app);
@@ -788,7 +793,7 @@ async function main() {
     assert.deepEqual(await snapshotAll(running.page), beforeOrdinaryQuit, 'Ordinary A restart must preserve data and leave A installed');
     assert.equal(requests.length, requestsBeforeQuit, 'Restart must not check or resume update traffic');
     await openHub(running.page);
-    await running.page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(running.page, 'updates');
     updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: filename, bytes: bytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
@@ -798,11 +803,17 @@ async function main() {
     assert.equal((await waitState(running.page, ['downloaded'])).signature, 'unsigned');
     const installButton = updates.getByRole('button', { name: 'Backup and install', exact: true });
     await installButton.waitFor();
+    const gradingSection = running.page.getByRole('button', { name: 'grading', exact: true });
+    if (await gradingSection.isVisible()) await gradingSection.click();
     const weight = running.page.getByText('Knowledge (K) %', { exact: true }).locator('..').getByRole('spinbutton');
     const previousWeight = await weight.inputValue();
     await weight.fill(String(Number(previousWeight) + 1));
+    const updatesSection = running.page.getByRole('button', { name: 'updates', exact: true });
+    if (await updatesSection.isVisible()) await updatesSection.click();
     assert.equal(await installButton.isEnabled(), false, 'Unsaved Settings changes must block installation');
+    if (await gradingSection.isVisible()) await gradingSection.click();
     await weight.fill(previousWeight);
+    if (await updatesSection.isVisible()) await updatesSection.click();
     await waitUntil(async () => await installButton.isEnabled() ? true : undefined, 'restored Settings installation eligibility');
     const metadataRequests = [...metadataBeforeQuit, ...await running.app.evaluate(() => (globalThis as any).__upgradeMetadataRequests)];
     assert.equal(metadataRequests.filter((request: any) => request.destination.endsWith('/latest')).length, 4, 'Only four explicit release-check clicks may query latest; explicit download verification also reads pinned approval/tag metadata');
@@ -861,6 +872,7 @@ async function main() {
     await verifyAfterRestart(running.page, marking);
     const reportB = path.join(evidenceDir, 'markinator-report-B.html');
     await running.page.getByTestId(`open-marking-${marking.assessmentId}`).click();
+    await openMarkingQueue(running.page);
     await download(running.app, () => running!.page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportB);
     assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Finalized report bytes must be identical after installing B');
     await running.app.close(); running = undefined;

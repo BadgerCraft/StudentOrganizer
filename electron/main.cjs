@@ -24,7 +24,20 @@ for (const method of ['status', 'connect', 'list', 'download', 'cancel', 'discon
     catch (error) { return { ok: false, message: error instanceof DriveError ? error.message : 'Drive action failed. Retry or use a local ZIP.' }; }
   });
 }
-app.on('before-quit', () => captureDrive.disconnect());
+app.on('before-quit', () => { captureDrive.disconnect(); organizerDrive.disconnect(); });
+const { createOrganizerDrive } = require('./organizerDrive.cjs');
+// Separate purpose-specific operator approval. Capture access cannot enable full-workspace uploads.
+const organizerConfig = () => readConfig(path.join(app.getPath('userData'), 'organizer-sync-oauth.json'));
+const organizerDrive = createOrganizerDrive({ configured: () => !!organizerConfig(),
+  authorize: signal => authorizeDesktop({ config: organizerConfig(), openExternal: url => shell.openExternal(url), signal }) });
+for (const method of ['status', 'connect', 'list', 'download', 'upload', 'disconnect']) {
+  ipcMain.handle(`organizer-drive:${method}`, async (event, ...args) => {
+    requireUpdateCaller(event, args, ['download', 'upload'].includes(method) ? 1 : 0);
+    try { return { ok: true, value: await organizerDrive[method](...args) }; }
+    catch (error) { return { ok: false, code: error instanceof DriveError && ['setup','auth','permission','network','uncertain','invalid','stale','conflict','storage'].includes(error.code) ? error.code : 'unknown', message: 'Personal sync did not complete. Check Settings for recovery steps.' }; }
+  });
+}
+
 const exportReportPdf = require('./reportPdf.cjs').createReportPdfExporter({ BrowserWindow, dialog, session, parent: () => updateWindow });
 ipcMain.handle('assessment-report:pdf', (event, ...args) => {
   requireUpdateCaller(event, args, 2);
@@ -74,9 +87,9 @@ function createWindow() {
 
   updateWindow = mainWindow;
   require('./dictationIpc.cjs').attachDictation({ app, window: mainWindow, ipcMain, dialog, systemPreferences });
-  mainWindow.on('closed', () => captureDrive.disconnect());
-  mainWindow.webContents.on('render-process-gone', () => captureDrive.disconnect());
-  mainWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) captureDrive.disconnect(); });
+  mainWindow.on('closed', () => { captureDrive.disconnect(); organizerDrive.disconnect(); });
+  mainWindow.webContents.on('render-process-gone', () => { captureDrive.disconnect(); organizerDrive.disconnect(); });
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) { captureDrive.disconnect(); organizerDrive.disconnect(); } });
 
   // Remove default menu bar for clean teacher desktop experience
   if (process.env.NODE_ENV !== 'development') {

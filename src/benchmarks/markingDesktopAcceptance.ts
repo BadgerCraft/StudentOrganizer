@@ -42,11 +42,53 @@ async function eventually<T>(page: Page, read: () => Promise<T | undefined>, mes
   }
   throw new Error(message);
 }
+// Capability detection keeps the pinned legacy package acceptance meaningful.
+async function focusedMarking(page: Page) {
+  return await page.getByRole('button', { name: 'Assignment setup', exact: true }).count() > 0;
+}
+/** The focused assignment entry is setup; retained legacy packages opened the queue. */
+export async function openMarkingQueue(page: Page) {
+  // Wait for the workspace before capability detection, including after restore/relaunch.
+  await page.getByRole('button', { name: 'Rubric editor', exact: true }).waitFor();
+  if (await focusedMarking(page)) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+}
+async function finalStage(page: Page, category?: string) {
+  if (!await focusedMarking(page)) return;
+  const area = page.getByTestId('final-grading-workspace');
+  if (!await area.isVisible()) await page.getByRole('button', { name: 'Final grading', exact: true }).click();
+  await area.waitFor();
+  if (category) await page.getByRole('complementary', { name: 'Final category decisions', exact: true }).getByRole('button', { name: new RegExp(`^${category} ·`) }).click();
+  else {
+    const finish = page.getByRole('button', { name: 'Finish category', exact: true });
+    if (await finish.isVisible()) await finish.click();
+    await page.getByLabel('Overall student-facing feedback').waitFor();
+  }
+}
+async function portability(page: Page) {
+  if (!await page.getByTestId('nav-portability-btn').isVisible()) {
+    await page.getByTestId('nav-settings-btn').click();
+    await page.getByRole('button', { name: 'Backups & import / export', exact: true }).click();
+  }
+  await page.getByTestId('nav-portability-btn').click();
+}
 /** The document node is reused across students; mounted alone does not mean navigation finished. */
 async function openDraft(page: Page, attemptId: string, expectedText: string) {
+  await page.getByRole('button', { name: 'Rubric editor', exact: true }).waitFor();
   const open = page.getByTestId(`marking-session-open-${attemptId}`);
-  await open.click();
-  if (await page.getByTestId('evidence-import-wizard').count() > 0) {
+  if (await focusedMarking(page)) {
+    const selector = page.getByLabel('Current submission', { exact: true });
+    if (await selector.isVisible()) {
+      if (await selector.inputValue() !== attemptId) await selector.selectOption(attemptId);
+      else if (await page.getByText('Finalized revision — current official results shown below', { exact: false }).isVisible()) {
+        await finalStage(page);
+        await page.getByRole('button', { name: 'Reopen as draft revision', exact: true }).click();
+      }
+    } else {
+      await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
+      await open.click();
+    }
+  } else await open.click();
+  if (!await focusedMarking(page) && await page.getByTestId('evidence-import-wizard').count() > 0) {
     // Earlier guided packages open finalized work read-only; explicitly reopen
     // only when the queue action has not already created the draft revision.
     await eventually(page, async () => {
@@ -71,6 +113,7 @@ async function openDraft(page: Page, attemptId: string, expectedText: string) {
   }, `Draft workspace did not settle for ${attemptId}`);
 }
 async function selectPassage(page: Page, start: number, end: number) {
+  if (await focusedMarking(page)) await page.getByRole('button', { name: 'Annotation and evidence', exact: true }).click();
   await page.getByTestId('marking-document').evaluate((root, offsets) => {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node: Node | null, offset = 0, begin: [Node, number] | null = null, finish: [Node, number] | null = null;
@@ -107,7 +150,7 @@ const defaultDownload = (page: Page): MarkingDownload => async (trigger, destina
 async function runAcceptance(page: Page, artifactsDir: string, download: MarkingDownload, expectedBackupSchema: 4 | 5): Promise<MarkingDesktopEvidence> {
   await fs.mkdir(artifactsDir, { recursive: true });
   const assessmentTitle = `QA Fictional Desktop Markinator ${Date.now()}`;
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByRole('button', { name: /^(New Assessment|Create Assignment)$/, exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(assessmentTitle);
   await page.getByRole('button', { name: 'Create Assessment', exact: true }).click();
   const assessment = await eventually(page, async () => (await records(page, 'assessments')).find(row => row.title === assessmentTitle), 'Markinator assessment not saved');
@@ -213,6 +256,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByTestId('marking-feedback').fill('Packaged feedback on repeated passage');
   await page.getByLabel('Evidence level (optional)').selectOption('Level 3');
   await page.getByTestId('marking-comment-save').click();
+  await finalStage(page, 'T');
   if (guided) {
     const judgment = page.getByRole('group', { name: 'T category judgment', exact: true });
     await judgment.getByRole('button', { name: 'Level', exact: true }).click();
@@ -223,6 +267,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   }
   await page.getByLabel('Category T feedback').fill('Use relevant evidence.');
   const officialFeedback = 'Fictional packaged summary <script>literal text</script>.';
+  await finalStage(page);
   await page.getByLabel('Overall student-facing feedback').fill(officialFeedback);
   await page.getByRole('button', { name: 'Save now', exact: true }).click();
   assert.deepEqual((await snapshot(page, assessment.id)).studentAssessments, beforeOfficial.studentAssessments, 'Draft must not change official marks');
@@ -236,6 +281,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.equal(category.length, 1); assert.equal(category[0].rawScore, '3+');
   if (guided) { assert.equal(category[0].inputFormat, 'classroom_level'); assert.equal(category[0].normalizedPercentage, 78); }
   const reportPath = path.join(artifactsDir, 'markinator-report.html');
+  if (await focusedMarking(page)) await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   await download(() => page.getByRole('dialog', { name: 'Assessment marking' }).getByRole('button', { name: /^Report / }).first().click(), reportPath);
   const report = await fs.readFile(reportPath, 'utf8');
   assert.match(report, /Fictional packaged summary &lt;script&gt;literal text&lt;\/script&gt;/);
@@ -243,6 +289,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
 
   // A revision with an unfinished annotation must survive a real process restart.
   await openDraft(page, first.id, 'Echo phrase. Middle words.');
+  await finalStage(page);
   await page.getByLabel('Overall student-facing feedback').fill('Fictional pending desktop revision');
   await selectPassage(page, 0, 4);
   const pendingFeedback = 'Fictional unfinished feedback survives desktop restart';
@@ -257,7 +304,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.deepEqual(snapshots.categoryResults, finalized.categoryResults);
   await page.screenshot({ path: path.join(artifactsDir, 'markinator-pending.png'), fullPage: true });
   await leaveMarkingWithDraft(page);
-  await page.getByTestId('nav-portability-btn').click();
+  await portability(page);
   const backupPath = path.join(artifactsDir, 'markinator-backup.json');
   await download(() => page.getByTestId('create-backup-btn').click(), backupPath);
   const backup = JSON.parse(await fs.readFile(backupPath, 'utf8'));
@@ -274,7 +321,8 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   // Prove a real restore replaces a subsequent visible edit, rather than merely reading JSON.
   await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.locator('button[title="Manage Assessments & Rubrics"]').click();
+  if (await page.getByTestId('nav-markbook-btn').count()) await page.getByTestId('nav-markbook-btn').click();
+  else await page.locator('button[title="Manage Assessments & Rubrics"]').click();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
   await openDraft(page, first.id, 'Echo phrase. Middle words.');
   await page.getByTestId('marking-feedback').fill('Fictional post-backup change to discard');
@@ -285,7 +333,7 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   }, 'Post-backup fictional edit not persisted');
   const changed = await snapshot(page, assessment.id);
   await leaveMarkingWithDraft(page);
-  await page.getByTestId('nav-portability-btn').click();
+  await portability(page);
   await page.getByTestId('restore-file-input').setInputFiles(backupPath);
   await page.getByTestId('restore-confirm-dialog').waitFor();
   assert.deepEqual(await snapshot(page, assessment.id), changed, 'Restore preview must leave edits intact');
@@ -322,7 +370,10 @@ async function verifyRestart(page: Page, evidence: MarkingDesktopEvidence): Prom
   await openDraft(page, evidence.firstAttemptId, 'Echo phrase. Middle words.');
   await page.getByTestId('marking-feedback').waitFor();
   assert.equal(await page.getByTestId('marking-feedback').inputValue(), evidence.pendingFeedback);
-  assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), 'Fictional pending desktop revision');
+  if (await focusedMarking(page)) {
+    const restored = (await records(page, 'markingSessions')).find(row => row.attemptId === evidence.firstAttemptId && row.status === 'draft');
+    assert.equal(restored.draft.overallFeedback, 'Fictional pending desktop revision', 'Focused annotation retains the saved final-stage feedback');
+  } else assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), 'Fictional pending desktop revision');
   assert.ok(await page.getByTestId('marking-document').locator('mark').count() > 0, 'Saved annotation must render after restart');
   await page.screenshot({ path: path.join(path.dirname(evidence.backupPath), 'markinator-restarted.png'), fullPage: true });
   await leaveMarkingWithDraft(page);
@@ -332,9 +383,11 @@ async function verifyRestart(page: Page, evidence: MarkingDesktopEvidence): Prom
 // Observe attempts (including blocked requests), not only successful responses.
 function observeLocalRequests(page: Page) {
   const external: string[] = [];
+  const current = new URL(page.url());
+  const loopbackOrigin = current.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(current.hostname) ? current.origin : null;
   const observe = (request: Request) => {
     const url = request.url();
-    if (!/^(file|data|blob):/i.test(url)) external.push(url);
+    if (!/^(file|data|blob):/i.test(url) && !(loopbackOrigin && new URL(url).origin === loopbackOrigin)) external.push(url);
   };
   page.on('request', observe);
   return () => {

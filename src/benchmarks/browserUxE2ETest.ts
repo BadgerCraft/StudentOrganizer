@@ -1,3 +1,5 @@
+import { openRecovery, showClassTools } from '../../scripts/helpers/organizerNavigation';
+import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { createServer, type ViteDevServer } from 'vite';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import path from 'path';
@@ -204,7 +206,7 @@ async function main() {
 
     console.log('Navigating to app...');
     await page.goto(`http://localhost:${port}`);
-    await page.waitForTimeout(2000); // Wait for seeds to finish initializing
+    await installFictionalClassroom(page);
 
     // In V6.3+, an acting teacher must be explicitly selected on launch
     const teacherModal = page.locator('[data-testid="teacher-selector-modal"]');
@@ -226,6 +228,7 @@ async function main() {
     // TEST 1: Modal Initial Focus & Typing Stability (Create Class)
     // =========================================================================
     console.log('\n--- Test 1A: Create Class Modal Focus Stability ---');
+    await page.getByTestId('nav-dashboard-btn').click();
     const openCreateBtn = page.locator('[data-testid="create-class-open-btn"]');
     await openCreateBtn.waitFor({ state: 'visible', timeout: 5000 });
     await openCreateBtn.click();
@@ -283,6 +286,7 @@ async function main() {
     const openWorkspaceBtn = page.locator('[data-testid="chiclet-open-overlay-btn"]').first();
     await openWorkspaceBtn.waitFor({ state: 'visible', timeout: 5000 });
     await openWorkspaceBtn.click();
+    await showClassTools(page);
     await page.waitForTimeout(1000);
 
     // In Seating View, click the settings gear on the first student card
@@ -562,8 +566,7 @@ async function main() {
     // TEST 5: Redesigned 2-Column Roster Import, Preview, Confirmation & Safety
     // =========================================================================
     console.log('\n--- Test 5: Redesigned 2-Column Roster Import & Preview Workflow ---');
-    const navPortabilityBtn = page.locator('[data-testid="nav-portability-btn"]');
-    await navPortabilityBtn.click();
+    await openRecovery(page);
     await page.waitForTimeout(800);
 
     const csvTextarea = page.locator('[data-testid="roster-csv-textarea"]');
@@ -708,7 +711,7 @@ async function main() {
 
     console.log('Navigating test6Page to app and waiting for original seed state initialization...');
     await test6Page.goto(`http://localhost:${port}`);
-    await test6Page.waitForTimeout(2000); // Wait for initial app seed to finish
+    await installFictionalClassroom(test6Page);
 
     // Select initial teacher (Taylor Demo) from original demo seed state
     const initialTeacherModal = test6Page.locator('[data-testid="teacher-selector-modal"]');
@@ -1014,6 +1017,7 @@ async function main() {
     const navSeatingBtn = test6Page.locator('[data-testid="nav-seating-btn"]');
     await navSeatingBtn.waitFor({ state: 'visible', timeout: 5000 });
     await navSeatingBtn.click();
+    await showClassTools(test6Page);
     await test6Page.waitForTimeout(600);
 
     // Verify the override does not exist before clicking Apply

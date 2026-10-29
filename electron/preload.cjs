@@ -33,3 +33,12 @@ contextBridge.exposeInMainWorld('desktopCaptureDrive', Object.freeze({
   cancel: () => ipcRenderer.invoke('capture-drive:cancel'),
   disconnect: () => ipcRenderer.invoke('capture-drive:disconnect')
 }));
+
+contextBridge.exposeInMainWorld('desktopOrganizerDrive', Object.freeze({
+  status: () => ipcRenderer.invoke('organizer-drive:status'),
+  connect: () => ipcRenderer.invoke('organizer-drive:connect'),
+  list: () => ipcRenderer.invoke('organizer-drive:list'),
+  download: id => ipcRenderer.invoke('organizer-drive:download', id),
+  upload: json => ipcRenderer.invoke('organizer-drive:upload', json),
+  disconnect: () => ipcRenderer.invoke('organizer-drive:disconnect')
+}));

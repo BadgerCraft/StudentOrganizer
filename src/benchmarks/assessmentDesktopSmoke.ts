@@ -1,3 +1,4 @@
+import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 import path from 'path';
 
@@ -12,7 +13,7 @@ async function openAssessmentHub(page: Page) {
   await page.locator('[data-testid="nav-dashboard-btn"]').click();
   await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().click();
   await page.locator('button[title="Manage Assessments & Rubrics"]').click();
-  await page.getByRole('heading', { name: 'Central Assessment Hub & Rubrics' }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: /^(Markbook|Central Assessment Hub & Rubrics)$/ }).waitFor({ state: 'visible' });
 }
 
 async function main() {
@@ -25,8 +26,7 @@ async function main() {
     page.on('pageerror', error => pageErrors.push(error.message));
     await openAssessmentHub(page);
 
-    await page.getByRole('button', { name: 'New Assessment' }).click();
-    const form = page.getByRole('heading', { name: 'Create New Assessment' }).locator('..').locator('form');
+    const form = await openAssignmentCreation(page);
     if (await form.getByText('Code', { exact: true }).count()) {
       throw new Error('Create Assessment still asks the teacher for a code.');
     }

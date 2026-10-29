@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { preview } from 'vite';
 import { chromium, type Page } from 'playwright';
 import { installFictionalClassroom } from './helpers/classroomFixture';
-import { revealRubricPaste, chooseOfficialLevel } from './helpers/classroomMarkingUi';
+import { revealRubricPaste, chooseOfficialLevel, showFinalOverview } from './helpers/classroomMarkingUi';
 
 // Production build only. A disposable context contains fictional fixture rows;
 // only two additional attempts are injected. All saving/navigation uses the UI.
@@ -35,9 +35,10 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   const title = 'Fictional submission sequence';
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(title);
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
@@ -80,6 +81,7 @@ try {
   }), [second, third]);
   // Reload observes fixture additions without depending on Dexie's cross-tab events.
   await page.reload(); await page.getByTestId(`open-marking-${assessment.id}`).click();
+  await page.getByRole('button', { name: 'Marking queue', exact: true }).click();
   const queue = page.locator('[data-testid^="marking-session-open-"]');
   await queue.first().waitFor();
   assert.deepEqual(await queue.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-testid')!.replace('marking-session-open-', ''))), [first.id, second.id, third.id]);
@@ -91,10 +93,15 @@ try {
   for (const [index, attempt] of [first, second, third].entries()) {
     await session.getByRole('heading', { name: students[index < 2 ? 0 : 1].label!, exact: true }).waitFor();
     await chooseOfficialLevel(page, 'T', ['2', '3', '3+'][index]);
+    await showFinalOverview(page);
     await page.getByLabel('Overall student-facing feedback').fill(`Fictional submission ${index + 1} feedback`);
     await next.click();
     if (index === 2) await page.getByTestId('marking-save-status').filter({ hasText: 'No next submission in this queue.' }).waitFor();
-    else await page.waitForFunction(() => Array.from(document.querySelectorAll('label')).find(label => label.textContent?.startsWith('Overall student-facing feedback'))?.querySelector('textarea')?.value === '');
+    else {
+      await page.waitForFunction(id => (document.querySelector('[aria-label="Current submission"]') as HTMLSelectElement | null)?.value === id, [second, third][index].id);
+      await showFinalOverview(page);
+      assert.equal(await page.getByLabel('Overall student-facing feedback').inputValue(), '');
+    }
     const saved = (await records(page, 'markingCommits')).filter(row => row.assessmentId === assessment.id);
     assert.equal(saved.length, index + 1);
     assert.ok(saved.some(row => row.attemptId === attempt.id), 'save must finalize the current submission in queue order');

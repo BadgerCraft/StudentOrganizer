@@ -1,3 +1,4 @@
+import { openPortability, openQueuedAttempt, showFinalOverview, enterFinalGrading, selectFinalCategory } from './helpers/classroomMarkingUi';
 import assert from 'node:assert/strict';
 import { installFictionalClassroom } from './helpers/classroomFixture';
 import { chooseOfficialLevel, revealRubricPaste } from './helpers/classroomMarkingUi';
@@ -51,8 +52,9 @@ async function saved(page: Page) {
 async function reopen(page: Page, assessmentId: string, attemptId: string) {
   await page.reload();
   await page.getByTestId(`open-marking-${assessmentId}`).click();
-  await page.getByTestId(`marking-session-open-${attemptId}`).click();
-  await page.getByTestId('marking-rubric-evidence').waitFor();
+  await openQueuedAttempt(page, attemptId);
+  await page.getByRole('region', { name: 'Marking session', exact: true }).waitFor();
+  await page.getByRole('button', {name:'Annotation and evidence',exact:true}).click();
 }
 async function imageFile(page: Page, number: number, orientation: 2 | 3 | 6 | 8) {
   const base64 = await page.evaluate(number => {
@@ -136,9 +138,9 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true }); await guard(context);
   const page = activePage = await context.newPage(); await page.goto(origin); await installFictionalClassroom(page);
   await page.locator('[data-testid^="select-teacher-"]').first().click();
-  await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
-  await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+  await page.getByTestId('nav-dashboard-btn').click();await page.getByTestId('chiclet-open-overlay-btn').first().click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
   await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill('Fictional modes and photo acceptance');
   await page.getByRole('button', { name: /Create Assessment|Save Assessment/ }).click();
   let assessment: any;
@@ -150,9 +152,9 @@ try {
   assert.ok(assessment);
   const actorId = await page.evaluate(() => sessionStorage.getItem('ontario_active_user_id')); assert.ok(actorId);
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByTestId('marking-mode-written').waitFor();
-  for (const mode of ['written', 'oral', 'rubric']) assert.equal(await page.getByTestId(`marking-mode-${mode}`).count(), 1);
-  await page.getByTestId('marking-mode-written').click();
+  await page.getByRole('button',{name:'Add student work',exact:true}).click();
+  for (const mode of ['written', 'oral', 'rubric']) assert.equal(await page.getByTestId('marking-import-mode').locator(`option[value="${mode}"]`).count(), 1);
+  await page.getByRole('button',{name:'Rubric editor',exact:true}).click();
   await revealRubricPaste(page);
   await page.getByTestId('marking-rubric-paste').fill('Criterion\tLevel 1\tLevel 2\tLevel 3\tLevel 4\nEvidence\tLimited\tSome\tClear\tThorough\nOrganization\tLimited structure\tSome structure\tClear structure\tStrong structure');
   await page.getByTestId('marking-rubric-preview').click();
@@ -248,7 +250,7 @@ try {
   await page.mouse.down();
   assert.equal(await page.getByLabel('Image comment text', {exact:true}).count(), 0, 'feedback opens after drawing ends so its pane cannot interrupt pointer capture');
   await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.25);
-  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).focus();
+  await page.getByRole('button', { name:'Save now',exact:true }).focus();
   await page.mouse.move(annotationBox.x + annotationBox.width*.3, annotationBox.y + annotationBox.height*.8);
   await page.mouse.up();
   assert.equal(await page.getByLabel('Image comment text',{exact:true}).count(),1,'interrupted retained stroke selects its exact feedback');
@@ -286,7 +288,7 @@ try {
   await page.getByTestId('marking-image-comments').getByText('Other rubric labels', {exact:true}).click();
   await page.getByLabel('Image level', { exact: true }).selectOption('Level 3');
   await page.getByRole('button',{name:'Back to Organizer',exact:true}).click();
-  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await openQueuedAttempt(page, photo.id);
   await page.getByRole('button',{name:'Next page',exact:true}).click();
   assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),'Fictional page comment before edit','page switch cannot interrupt active feedback');
   await saved(page);
@@ -299,7 +301,7 @@ try {
   await page.getByRole('dialog',{name:'Assessment marking',exact:true}).waitFor({state:'hidden'});
   assert.deepEqual((await session(page,photo.id)).draft,photoBeforeDeparture,'confirmed Back retains exact photo draft');
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await openQueuedAttempt(page, photo.id);
   await page.getByLabel('Select saved mark',{exact:true}).selectOption(pendingPhoto.id);
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('dialog',{name:'Assessment marking',exact:true}).getByRole('button',{name:'Switch teacher',exact:true}).click();
@@ -312,9 +314,9 @@ try {
   assert.deepEqual((await session(page,photo.id)).draft,photoBeforeDeparture,'switching teachers preserves original owner draft');
   await page.getByTestId('header-teacher-btn').click();
   await page.getByTestId(`select-teacher-${actorId}`).click();
-  await page.getByRole('button',{name:'Assessments',exact:true}).click();
+  await page.getByRole('button',{name:'Markbook',exact:true}).click();
   await page.getByTestId(`open-marking-${assessment.id}`).click();
-  await page.getByTestId(`marking-session-open-${photo.id}`).click();
+  await openQueuedAttempt(page, photo.id);
   await page.getByLabel('Select saved mark',{exact:true}).selectOption(pendingPhoto.id);
   assert.equal(await page.getByLabel('Image comment text',{exact:true}).inputValue(),pendingPhoto.text,'original teacher recovers unfinished photo feedback');
   passed('explicit Back/teacher confirmation saves exact photo draft; dismiss retains active editor; another teacher cannot rewrite the owner draft.');
@@ -340,10 +342,11 @@ try {
   await assertOriginalAxes(page, files[1].name);
   await stroke(page, 'Pen', { x: .15, y: .2 }, { x: .55, y: .5 });
   await page.getByRole('button',{name:'Save feedback',exact:true}).click();
+  await selectFinalCategory(page,'T');
   await page.getByTestId(`marking-criterion-${criterionId}`).getByText('Other rubric labels', {exact:true}).click();
   await page.getByTestId(`marking-criterion-level-${criterionId}`).selectOption('Level 4');
   await editRubricComment(page, criterionId, 'Fictional photo rubric feedback');
-  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional photo draft');
+  await showFinalOverview(page);await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional photo draft');
   // Wait for actual autosave without pressing Save now.
   for (let i = 0; i < 80 && (await session(page, photo.id)).draft.overallFeedback !== 'Fictional photo draft'; i++) await page.waitForTimeout(100);
   const photoSaved = await session(page, photo.id);
@@ -373,7 +376,7 @@ try {
   await chooseOfficialLevel(page, 'K', '2+');
   await page.getByLabel('Category K feedback', { exact: true }).fill('Fictional existing manual K judgment');
   await chooseOfficialLevel(page, 'T', '3+');
-  await page.getByTestId('marking-finalize-preview').click();
+  await showFinalOverview(page);await page.getByTestId('marking-finalize-preview').click();
   assert.deepEqual(await official(page, assessment.id), baseline, 'preview does not finalize');
   await page.getByTestId('marking-finalize-confirm').click();
   await page.getByText('Finalized revision — current official results shown below', { exact: false }).waitFor();
@@ -383,7 +386,7 @@ try {
   const finalizedSession = await session(page, photo.id);
   await page.getByRole('region', { name: 'Marking session', exact: true }).getByRole('button', { name: 'Reopen as draft revision', exact: true }).click();
   await page.getByText('Revision 2', { exact: false }).waitFor();
-  await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional photo revision recovered');
+  await showFinalOverview(page);await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill('Fictional photo revision recovered');
   await saved(page);
   assert.deepEqual(await official(page, assessment.id), committed);
   assert.deepEqual((await records(page, 'markingSessions')).find(row => row.id === finalizedSession.id), finalizedSession);
@@ -393,8 +396,8 @@ try {
   for (const mode of ['oral', 'rubric'] as const) {
     // Distinct students keep finalization independent of another mode's baseline.
     const enrollmentId = enrollmentIds[mode === 'oral' ? 1 : 2];
-    await page.getByTestId(`marking-mode-${mode}`).click();
-    await page.getByRole('button', {name:'Continue with confirmed rubric',exact:true}).click();
+    await page.getByRole('button', {name:'Add later submissions',exact:true}).click();
+    await page.getByTestId('marking-import-mode').selectOption(mode);
     await page.getByTestId('marking-mode-student').selectOption(enrollmentId);
     await page.getByTestId('marking-mode-create').click();
     await page.getByTestId('marking-rubric-evidence').waitFor();
@@ -416,7 +419,7 @@ try {
     await page.getByTestId(`marking-criterion-${criterionId}`).getByText('Other rubric labels', {exact:true}).click();
     await page.getByTestId(`marking-criterion-level-${criterionId}`).selectOption(mode === 'oral' ? 'Level 3' : 'Level 2');
     await editRubricComment(page, criterionId, `Fictional ${mode} rubric feedback`);
-    await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(`Fictional ${mode} overall draft`);
+    await showFinalOverview(page);await page.getByRole('textbox', { name: /^Overall student-facing feedback/ }).fill(`Fictional ${mode} overall draft`);
     await saved(page); const stored = await session(page, attempt.id);
     assert.equal(stored.draft.overallFeedback, `Fictional ${mode} overall draft`);
     assert.equal(stored.draft.rubricFeedback[0].feedback, `Fictional ${mode} rubric feedback`);
@@ -496,14 +499,14 @@ try {
     const categoryFeedback = `Fictional ${mode} official category feedback`;
     const feedbackOnly = `Fictional ${mode} communication feedback only`;
     const beforeSave = committed;
-    await page.getByTestId(`marking-session-open-${attempt.id}`).click();
+    await openQueuedAttempt(page, attempt.id);
     await chooseOfficialLevel(page, 'T', level);
     await page.getByLabel('Category T feedback', { exact: true }).fill(categoryFeedback);
-    await page.getByLabel('Category C feedback', { exact: true }).fill(feedbackOnly);
+    await selectFinalCategory(page,'C');await page.getByLabel('Category C feedback', { exact: true }).fill(feedbackOnly);
     await saved(page);
     const reviewed = await session(page, attempt.id);
     assert.deepEqual(await official(page, assessment.id), beforeSave, `${mode} chosen levels and feedback remain draft-only before official save`);
-    await page.getByTestId('marking-save-markbook').click();
+    await showFinalOverview(page);await page.getByTestId('marking-save-markbook').click();
     await page.getByRole('dialog', { name: 'Assessment marking', exact: true }).waitFor({ state: 'hidden' });
     await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${thinkingId}`).filter({ hasText: level }).waitFor();
     await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${communicationId}`).filter({ hasText: 'Feedback only' }).waitFor();
@@ -543,7 +546,7 @@ try {
     await page.getByTestId(`markbook-cell-${attempt.classEnrollmentId}-${communicationId}`).filter({ hasText: 'Feedback only' }).waitFor();
     assert.deepEqual(await official(page, assessment.id), committed, `${mode} exact official records survive restart`);
     assert.deepEqual(await session(page, attempt.id), item.saved, `${mode} finalized evidence survives restart`);
-    await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+    await page.getByRole('button', { name: 'Markbook', exact: true }).click();
     await page.getByTestId(`open-marking-${assessment.id}`).click();
     passed(`${mode} Save and return to Markbook saves only the confirmed student's ${level} (${percentage}%) and feedback-only category with exact receipt/result IDs and feedback; prior students/history unchanged and restart preserves records.`);
   }
@@ -551,7 +554,7 @@ try {
   const tables = ['markingAttempts', 'markingSessions', 'markingRubrics', 'markingCommits'];
   const before = Object.fromEntries(await Promise.all(tables.map(async table => [table, (await records(page, table)).filter(row => row.assessmentId === assessment.id)])));
   await page.getByRole('button', { name: 'Back to Organizer', exact: true }).click();
-  await page.getByTestId('nav-portability-btn').click();
+  await openPortability(page);
   const download = page.waitForEvent('download'); await page.getByTestId('create-backup-btn').click();
   await (await download).saveAs(`${artifacts}-backup.json`);
   const backup = JSON.parse(await readFile(`${artifacts}-backup.json`, 'utf8'));
@@ -559,7 +562,7 @@ try {
   const restoredContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true }); await guard(restoredContext);
   const restored = activePage = await restoredContext.newPage(); await restored.goto(origin); await installFictionalClassroom(restored);
   await restored.locator('[data-testid^="select-teacher-"]').first().click();
-  await restored.getByTestId('nav-portability-btn').click();
+  await openPortability(restored);
   await restored.getByTestId('restore-file-input').setInputFiles(`${artifacts}-backup.json`);
   await restored.getByTestId('restore-confirm-dialog').waitFor();
   assert.equal((await records(restored, 'markingAttempts')).length, 0, 'backup preview has no writes');
@@ -571,12 +574,13 @@ try {
   if (await restored.getByTestId(`select-teacher-${actorId}`).count()) await restored.getByTestId(`select-teacher-${actorId}`).click();
   await restored.getByTestId('nav-dashboard-btn').click();
   await restored.getByTestId('chiclet-open-overlay-btn').first().click();
-  await restored.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await restored.getByRole('button', { name: 'Markbook', exact: true }).click();
   await restored.getByTestId(`open-marking-${assessment.id}`).click();
-  await restored.getByTestId(`marking-session-open-${photo.id}`).click();
+  await openQueuedAttempt(restored, photo.id);
   await restored.getByTestId('image-markup').waitFor();
-  assert.equal(await restored.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), 'Fictional photo revision recovered');
+  await showFinalOverview(restored);assert.equal(await restored.getByRole('textbox', { name: /^Overall student-facing feedback/ }).inputValue(), 'Fictional photo revision recovered');
   assert.deepEqual((await records(restored, 'markingAttempts')).find(row => row.id === photo.id).imagePages, photo.imagePages);
+  await restored.getByRole('button',{name:'Annotation and evidence',exact:true}).click();
   await restored.getByRole('button', { name: 'Next page', exact: true }).click();
   await restored.getByLabel('Select saved mark', { exact: true }).selectOption(transformed.annotations[2].id);
   assert.equal(await restored.getByLabel('Image comment text', { exact: true }).inputValue(), 'Fictional edited photo comment');
@@ -584,7 +588,8 @@ try {
   await restored.getByRole('button', { name: 'Next page', exact: true }).click(); await assertOriginalAxes(restored, files[2].name);
   await restored.getByRole('button', { name: 'Next page', exact: true }).click(); await assertOriginalAxes(restored, files[3].name);
   for (const { attempt, saved: stored } of nonwritten) {
-    await restored.getByTestId(`marking-session-open-${attempt.id}`).click();
+    await openQueuedAttempt(restored, attempt.id);
+    await restored.getByRole('button',{name:'Annotation and evidence',exact:true}).click();
     await restored.getByTestId(`marking-criterion-${criterionId}`).getByText(stored.draft.rubricFeedback[0].feedback, { exact: true }).waitFor();
     if (attempt.mode === 'oral') assert.equal(await restored.getByTestId('marking-oral-private-notes').inputValue(), stored.draft.oral.notes);
   }

@@ -1,3 +1,4 @@
+import { openSettingsSection, showClassTools } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 import assert from 'node:assert/strict';
@@ -25,6 +26,7 @@ async function main() {
     await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'visible' });
     await installFictionalClassroom(page);
     await page.locator('[data-testid^="select-teacher-"]').first().click();
+    await page.getByTestId('nav-dashboard-btn').click();
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().waitFor();
     assert.ok(await page.locator('meta[http-equiv="Content-Security-Policy"]').count());
     const exposedNode = await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process }));
@@ -83,7 +85,7 @@ async function main() {
         return request;
       };
     });
-    await page.getByTitle('Grading Policies & Scale Presets', { exact: true }).click();
+    await openSettingsSection(page, 'updates');
     const updates = page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await app.evaluate(() => (globalThis as any).__manualUpdateRequests), [], 'Opening Settings must not check for updates');
@@ -108,6 +110,8 @@ async function main() {
     });
     await page.getByTestId('nav-dashboard-btn').click();
     await page.locator('[data-testid="chiclet-open-overlay-btn"]').first().click();
+    await page.getByTestId('student-seat-card').first().waitFor();
+    await showClassTools(page);
     await page.locator('[data-testid="student-settings-gear-btn"]').first().click();
     await page.locator('[data-testid="student-preferred-name-input"]').fill('Fictional Security');
     await page.locator('[data-testid="save-student-settings-btn"]').click();

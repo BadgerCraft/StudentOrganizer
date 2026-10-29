@@ -63,8 +63,9 @@ async function persistedCourseGrade(page: Page, enrollmentId: string, classSecti
 
 /** Begins at the dashboard after explicit first-teacher selection. Only real UI writes. */
 export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
+  await page.getByTestId('nav-dashboard-btn').click();
   await page.getByTestId('chiclet-open-overlay-btn').first().click();
-  await page.getByRole('button', { name: 'Assessments', exact: true }).click();
+  await page.getByRole('button', { name: 'Markbook', exact: true }).click();
   const initialAssessments = await records(page, 'assessments');
   const seededUnit = (await records(page, 'units')).find(row => row.id === 'unit-eng-1');
   assert.ok(seededUnit, 'fictional English seed unit available');
@@ -103,7 +104,7 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
   // Two real assessments prove collapse works independently of formative inclusion in course grades.
   const assessmentIds: Record<string, string> = {};
   for (const type of ['summative', 'formative']) {
-    await page.getByRole('button', { name: 'New Assessment', exact: true }).click();
+    await page.getByRole('button', { name: 'Create Assignment', exact: true }).click();
     await page.getByLabel('Assessment type', { exact: true }).selectOption(type);
     await page.getByLabel('Assessment unit', { exact: true }).selectOption(created.id);
     await page.getByPlaceholder('e.g. Comparative Synthesis Essay').fill(`Fictional UI ${type}`);
@@ -113,7 +114,8 @@ export async function runUiAssessmentAcceptance(page: Page): Promise<void> {
     assessmentIds[type] = assessment.id;
   }
   // Deliberately unequal weights distinguish the configured summary from a flat average.
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByTestId('nav-settings-btn').click();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'grading', exact: true }).click();
   const policyForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Save Policy Settings', exact: true }) });
   for (const [index, weight] of [40, 30, 20, 10].entries()) await policyForm.getByRole('spinbutton').nth(index).fill(String(weight));
   await page.getByRole('button', { name: 'Save Policy Settings', exact: true }).click();
