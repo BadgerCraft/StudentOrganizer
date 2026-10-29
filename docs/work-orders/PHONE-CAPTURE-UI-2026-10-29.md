@@ -36,3 +36,7 @@ Routing: inherited coordinator model/effort; bounded UI work with high-risk pres
 - Initial npm setup failed because default cache `/home/agent/.npm` was unavailable; one workspace-cache retry succeeded. No dependency versions changed.
 
 Native-device limits remain: no camera hardware, OS Back/permissions/lifecycle, signing, physical-phone memory/latency or actual Drive delivery tested. Mock receipts are not delivery proof. No provider grants, live upload, release, deployment or merge performed. Shared component lesson access remains unavailable, as recorded above.
+
+## Publication
+
+Implementation `4461f279cc0acc6d7fe2ab2dbe5e2f0b38ef13cb` pushed and read back in [draft PR50](https://github.com/BadgerCraft/StudentOrganizer/pull/50). Final independent disclosure/native-button recheck found no new blocking concern. Exact-head CI is maintained in the PR description to avoid changing source solely to record its checks. No merge/release/deploy performed.
