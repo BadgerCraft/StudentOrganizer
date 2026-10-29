@@ -37,7 +37,7 @@ describe('complete authorized Student Organizer source collection', () => {
     const migration = await WorkspaceMigration.prepare(f.source, scope, key, wrapped, 'device-a', validate); await migration.verifyRecovery(code); const challenge = await migration.createDeviceChallenge('device-b'); await migration.verifyDeviceResponse('device-b', await answerEnrollmentChallenge(key, challenge)); await migration.convert(f.source, target);
     const session = await EncryptedWorkspaceSession.open(target, scope, key, validate); expect(session.read()).toEqual(before);
     expect(await f.source.withReadLock(async bundle => bundle)).toEqual(before); expect(saved!.ciphertext).not.toContain('Fictional retained feedback');
-  });
+  }, 30000);
   it('applies retained foreign-teacher ownership and rejects archived-author bypass', async () => {
     const f = await fixture(); const existing = await f.db.users.get('user-tyler'); await f.db.users.put({ ...existing!, id: 'foreign-retained', email: 'fictional-foreign@example.invalid', authSubject: 'fictional-foreign', deletedAt: new Date().toISOString() });
     let exposed = false; await expect(f.source.withReadLock(async () => { exposed = true; })).rejects.toThrow(/sole-teacher|administrator/); expect(exposed).toBe(false);

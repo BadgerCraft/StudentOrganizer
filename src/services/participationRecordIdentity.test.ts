@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OntarioTeacherDB } from '../db/database';
 import { seedDatabase } from '../db/seeds';
+import { PortabilityService } from './portabilityService';
 import { ParticipationDomainService, type RecordParticipationParams } from './participationService';
 import { clearActiveTeacherId, getIdentityEpoch, setActiveTeacherId } from './identityService';
 
@@ -19,6 +20,19 @@ describe('participation record pins local actor and includes session creation at
     service = new ParticipationDomainService(db);
   });
   afterEach(async () => { vi.restoreAllMocks(); clearActiveTeacherId(); await db.delete(); });
+  it('retains the latest event timestamp when an earlier observation arrives later and through restore', async () => {
+    const grades = await db.categoryResults.toArray();
+    await service.recordParticipation({ ...params, occurredAt: '2020-02-03T16:00:00.000Z' });
+    await service.recordParticipation(params);
+    const summary = await db.participationDailySummaries.where({ classEnrollmentId: params.classEnrollmentIds[0], localSchoolDate: params.localSchoolDate }).first();
+    expect(summary?.lastEventAt).toBe('2020-02-03T16:00:00.000Z');
+    const events = await db.participationEvents.toArray();
+    const portability = new PortabilityService(db);
+    await portability.restoreFromJSON(await portability.createFullBackupJSON());
+    expect(await db.participationDailySummaries.get(summary!.id)).toEqual(summary);
+    expect(await db.participationEvents.toArray()).toEqual(events);
+    expect(await db.categoryResults.toArray()).toEqual(grades);
+  });
   it('creates one linked session with the event, and reuses it for a later observation', async () => {
     const before = await db.classSessions.count();
     const [first] = await service.recordParticipation(params), [second] = await service.recordParticipation(params);
