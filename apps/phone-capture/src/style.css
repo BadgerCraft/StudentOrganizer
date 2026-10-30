@@ -69,3 +69,12 @@ footer { margin-top: 2rem; font-size: .9rem; }
 .crop-frame { position: absolute; border: 3px solid var(--accent); background: #176a5518; box-sizing: border-box; pointer-events: none; }
 .crop-handle { position: absolute; transform: translate(-50%,-50%); width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 0; border: 3px solid var(--accent); background: var(--input); color: var(--accent); touch-action: none; z-index: 1; }
 @media (max-width: 360px) { header { align-items: flex-start; gap: .5rem; } h1 { font-size: 1.4rem; } #theme { padding: .6rem; } #groups article { flex-wrap: wrap; } }
+
+#upload-checklist { border-left: 3px solid var(--border); padding: .5rem .85rem; margin: 1rem 0; max-width: 28rem; }
+#checklist { list-style: none; padding: 0; margin: 0; font-size: .85rem; line-height: 1.6; }
+#checklist li { color: var(--muted); }
+#checklist li[data-complete=true] { color: var(--accent); }
+#checklist li span { display: inline-block; width: 1rem; font-weight: bold; }
+#upload-readiness { font-weight: 700; margin: .5rem 0 0; }
+#upload-progress { display: block; width: 100%; margin-top: .75rem; }
+#drive-queue { width: 100%; }
