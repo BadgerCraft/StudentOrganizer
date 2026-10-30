@@ -1,3 +1,4 @@
+import { memoryDatabaseRequired } from '../security/rendererStorageMode';
 import type { CaptureAttachment, CaptureImportReceipt } from '../capture/types';
 import Dexie, { type Table } from 'dexie';
 import type { MarkingRubric, MarkingAttempt, MarkingSession, MarkingCommit } from '../marking/types';
@@ -91,7 +92,7 @@ export class OntarioTeacherDB extends Dexie {
   captureImportReceipts!: Table<CaptureImportReceipt, string>;
 
   constructor(databaseName = 'OntarioTeacherAssessmentDB') {
-    super(databaseName);
+    super(databaseName, memoryDatabaseRequired() ? { cache: 'disabled' } : undefined);
 
     this.version(1).stores({
       // Organizations & Identity

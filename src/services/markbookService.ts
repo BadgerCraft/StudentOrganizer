@@ -1,3 +1,4 @@
+import { ValidationError } from './validationError';
 import type { OntarioTeacherDB } from '../db/database';
 import { normalizeEnteredScore } from './calculationEngine';
 import { assertClassSectionWriteAccess, AUTH_TABLES } from './authHelper';
@@ -57,12 +58,7 @@ export interface SaveMarkbookCellParams {
   deviceId: UUID;
 }
 
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
+export { ValidationError } from './validationError';
 
 export class ConcurrencyConflictError extends Error {
   constructor(message: string) {

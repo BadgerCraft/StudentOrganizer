@@ -173,3 +173,32 @@ jobs:
             /tmp/markinator-archive*
           if-no-files-found: warn
           retention-days: 90
+
+  encrypted-browser:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init --ipc=host
+    timeout-minutes: 12
+    env:
+      VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      ENCRYPTION_ARTIFACT_DIR: release/encryption-acceptance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Require matching preinstalled Chromium
+        run: node -e "if (require('playwright/package.json').version !== '1.63.0') throw new Error('Update browser image and lockfile together'); require('node:fs').accessSync(require('playwright').chromium.executablePath());"
+      - name: Verify protected App and real SQLite with synthetic OS providers
+        run: npm run test:encryption:app-browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protected-browser-evidence-${{ github.run_number }}
+          path: release/encryption-acceptance/**
+          if-no-files-found: warn
+          retention-days: 90

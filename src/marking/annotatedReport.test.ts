@@ -1,3 +1,4 @@
+import { setRendererStorageMode } from '../security/rendererStorageMode';
 import { describe, expect, it, vi } from 'vitest';
 import { drawAnnotatedPage, exportAnnotatedMarkingReport } from './annotatedReport';
 import type { MarkingReportInput } from './report';
@@ -35,6 +36,16 @@ describe('annotated page export geometry', () => {
 });
 
 describe('export authorization after asynchronous rendering', () => {
+  it('blocks a legacy render whose workspace locks before output', async () => {
+    const nativeSave = vi.fn(); vi.stubGlobal('window', { desktopReports: { exportPdf: nativeSave } });
+    try {
+      const input = { commit: { id: 'commit', draft: {} }, attempt: { documents: [] } } as unknown as MarkingReportInput;
+      const pending = exportAnnotatedMarkingReport(input);
+      setRendererStorageMode('locked');
+      await expect(pending).rejects.toThrow('No readable file was saved');
+      expect(nativeSave).not.toHaveBeenCalled();
+    } finally { setRendererStorageMode('legacy'); vi.unstubAllGlobals(); }
+  });
   it('blocks native export if the teacher changed during rendering', async () => {
     const nativeSave = vi.fn(); vi.stubGlobal('window', { desktopReports: { exportPdf: nativeSave } });
     try {

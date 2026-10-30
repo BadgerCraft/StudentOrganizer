@@ -30,7 +30,7 @@ export function MarkingModePicker({ onSelect, disabled = false }: {
   </section>;
 }
 
-export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange, renderCategory, categoryCode }: {
+export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annotations = [], imageFeedback = [], actor, onComposerDirtyChange, onBankSavingChange, renderCategory, categoryCode }: {
   rubric: MarkingRubric;
   categoryCode?: string;
   renderCategory?: (criterion: MarkingRubric['criteria'][number]) => ReactNode;
@@ -41,6 +41,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
   imageFeedback?: MarkingPageFeedback[];
   actor?: MarkingActor;
   onComposerDirtyChange?: (dirty: boolean) => void;
+  onBankSavingChange?: (saving: boolean) => void;
 }) {
   const titleId = useId();
   const [editingCriterion, setEditingCriterion] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export function RubricEvidenceEditor({ rubric, value, onChange, disabled, annota
           <label className="block text-sm">{criterion.name} feedback
             <textarea className={`${field} min-h-32`} data-testid={`marking-criterion-feedback-${criterion.id}`} value={current?.feedback ?? ''} maxLength={feedbackLimit} disabled={disabled} onChange={event => update(criterion.id, { feedback: event.target.value.slice(0, feedbackLimit) })} />
           </label>
-          {actor && <CommentBankPicker actor={actor} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
+          {actor && <CommentBankPicker actor={actor} onSavingChange={onBankSavingChange} disabled={disabled} onDirtyChange={dirty => { setBankDirty(dirty); onComposerDirtyChange?.(dirty); }} onSelect={text => {
             const existing = current?.feedback ?? '';
             const combined = `${existing}${existing ? '\n' : ''}${text}`;
             if (combined.length > feedbackLimit) throw new Error('This bank comment exceeds the remaining feedback space. Shorten the current comment or choose a shorter bank comment.');

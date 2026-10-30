@@ -1,4 +1,7 @@
-import React, { useState, useRef } from 'react';
+import { rendererStorageMode } from '../security/rendererStorageMode';
+import { protectedStorageBoundary, lockEncryptedRuntime } from '../security/encryptedRuntime';
+import { unwrapEncryption } from '../security/encryptionBridge';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   DownloadCloud,
   Upload,
@@ -20,10 +23,11 @@ import {
   type BackupMetadata
 } from '../services/portabilityService';
 import { clipboardRosterText, readRosterTable, mapRosterTable, mappingError, validateEditedRosterRow, MAX_ROSTER_CHARS, type RosterTable, type RosterMapping } from '../services/rosterTable';
-import { getAppIdentity } from '../services/identityService';
-import { AuthorizationError } from '../services/authHelper';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch } from '../services/identityService';
+import { AuthorizationError, assertClassSectionReadAccess } from '../services/authHelper';
 import { db } from '../db/database';
 import { downloadFile } from '../utils/downloadFile';
+import { protectedReadableRevision } from '../security/readableExports';
 import { usesNativeFiles, exportNativeBackup, selectNativeBackup } from '../services/nativeFiles';
 
 interface ImportExportModalProps {
@@ -33,6 +37,7 @@ interface ImportExportModalProps {
   deviceId?: UUID;
   onRefresh: () => void;
   onOpenSeating?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({
@@ -41,7 +46,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   userId: propUserId,
   deviceId: propDeviceId,
   onRefresh,
-  onOpenSeating
+  onOpenSeating, onBusyChange
 }) => {
   // Add Students workflow state: 'input' | 'preview' | 'success'
   const [importStep, setImportStep] = useState<'input' | 'preview' | 'success'>('input');
@@ -59,12 +64,22 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [candidateRows, setCandidateRows] = useState<CandidateStudentRow[]>([]);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const backupExportPending = useRef(false), backupPickerPending = useRef(false), restorePending = useRef(false);
+  const readableExportPending = useRef(false), exportContext = useRef({ sectionId: classSection?.id, userId: propUserId, alive: true, generation: 0 });
+  if (exportContext.current.sectionId !== classSection?.id || exportContext.current.userId !== propUserId) {
+    exportContext.current = { sectionId: classSection?.id, userId: propUserId, alive: true, generation: exportContext.current.generation + 1 };
+  }
+  useEffect(() => { exportContext.current.alive = true; return () => { exportContext.current.alive = false; exportContext.current.generation++; }; }, []);
+  useEffect(() => () => { if (readableExportPending.current) void window.desktopReports?.cancelReadableExport?.().catch(() => lockEncryptedRuntime()); }, [classSection?.id, propUserId]);
+  const [readableExportStatus, setReadableExportStatus] = useState('');
+  useEffect(() => { onBusyChange?.(isProcessing); return () => onBusyChange?.(false); }, [isProcessing, onBusyChange]);
   const [importResult, setImportResult] = useState<ImportRosterResult | null>(null);
 
   // Backup & Restore state
   const [backupDownloadStatus, setBackupDownloadStatus] = useState<string | null>(null);
+  const [backupExportError, setBackupExportError] = useState('');
   const [pendingBackupContent, setPendingBackupContent] = useState<string | null>(null);
-  const [pendingBackupMetadata, setPendingBackupMetadata] = useState<BackupMetadata | null>(null);
+  const [pendingBackupMetadata, setPendingBackupMetadata] = useState<Pick<BackupMetadata, 'exportedAt' | 'totalRecords' | 'tableCount'> | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
 
@@ -72,6 +87,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   const portability = new PortabilityService(db);
+  const protectedMode = rendererStorageMode() !== 'legacy';
+  const [protectedRestoreToken, setProtectedRestoreToken] = useState<string | null>(null);
+  const backupPreviewGeneration = useRef(0);
+  useEffect(() => () => { backupPreviewGeneration.current++; }, []);
 
   // Section 1: Roster Preview Handler
   const handlePreviewStudents = async () => {
@@ -184,8 +203,28 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   };
 
   // Section 2: CSV Exporters
+  const protectedCsv = async (kind: 'markbook' | 'participation') => {
+    if (!classSection || readableExportPending.current || isProcessing) return;
+    readableExportPending.current = true; setIsProcessing(true); setReadableExportStatus('');
+    const sectionId = classSection.id, expectedUser = propUserId, epoch = getIdentityEpoch(), generation = exportContext.current.generation;
+    const current = () => {
+      if (!exportContext.current.alive || exportContext.current.generation !== generation || exportContext.current.sectionId !== sectionId || exportContext.current.userId !== expectedUser || getIdentityEpoch() !== epoch || !expectedUser || getActiveTeacherId() !== expectedUser || rendererStorageMode() !== 'encrypted') throw new Error('Teacher or class context changed. No readable file was saved.');
+    };
+    try {
+      current(); const revision = await protectedReadableRevision(); current(); await assertClassSectionReadAccess(db, expectedUser!, sectionId); current();
+      const csv = await (kind === 'markbook' ? portability.exportClassMarkbookCSV(sectionId, null) : portability.exportParticipationEventsCSV(sectionId));
+      current(); await assertClassSectionReadAccess(db, expectedUser!, sectionId); current();
+      if (!window.desktopReports?.exportCsv) throw new Error('Protected CSV export is unavailable. No readable file was saved.');
+      const safeSection = classSection.sectionNumber.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'class';
+      const filename = kind === 'markbook' ? `Markbook-${safeSection}-${new Date().toISOString().slice(0, 10)}.csv` : `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`;
+      const saved = await window.desktopReports.exportCsv(filename, csv, revision);
+      if (exportContext.current.alive && exportContext.current.generation === generation) setReadableExportStatus(saved ? 'Unencrypted CSV saved.' : 'Export cancelled. No file was saved.');
+    } catch (err: any) { if (exportContext.current.alive && exportContext.current.generation === generation) setReadableExportStatus(err.message || 'CSV export did not complete.'); }
+    finally { readableExportPending.current = false; if (exportContext.current.alive) setIsProcessing(false); }
+  };
   const handleExportMarkbook = async () => {
     if (!classSection) return;
+    if (protectedMode) return protectedCsv('markbook');
     try {
       const csv = await portability.exportClassMarkbookCSV(classSection.id, null);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -197,6 +236,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   const handleExportParticipation = async () => {
     if (!classSection) return;
+    if (protectedMode) return protectedCsv('participation');
     try {
       const csv = await portability.exportParticipationEventsCSV(classSection.id);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -208,7 +248,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   // Section 3: Backup Download
   const handleCreateBackup = async () => {
+    if (backupExportPending.current || isProcessing) return; backupExportPending.current = true; setIsProcessing(true); setBackupExportError(''); setBackupDownloadStatus(null);
     try {
+      if (protectedMode) {
+        const native = window.desktopEncryption; if (!native) throw Error('Protected backup export requires the native encryption connection.');
+        const saved = await protectedStorageBoundary(async () => unwrapEncryption(await native.exportBackupFile()));
+        setBackupDownloadStatus(saved.cancelled ? 'Encrypted backup export cancelled. No file was saved.' : 'Encrypted backup file saved. Keep the offline recovery code separately and verify this copy before relying on it.'); return;
+      }
       const json = await portability.createFullBackupJSON();
       const filename = `OntarioTeacherApp-Backup-${new Date().toISOString().slice(0, 10)}.json`;
       if (usesNativeFiles()) {
@@ -220,24 +266,40 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       }
       setTimeout(() => setBackupDownloadStatus(null), 5000);
     } catch (err: any) {
-      alert(err.message);
-    }
+      if (protectedMode) setBackupExportError('Encrypted backup export was not verified. Check the selected destination and available storage; keep your recovery code and use another verified backup.');
+      else alert(err.message);
+    } finally { backupExportPending.current = false; setIsProcessing(false); }
   };
 
   // Both pickers use the same validator and require explicit confirmation before restore.
-  const previewBackup = (content: string) => {
+  const previewBackup = async (content: string) => {
+    const generation = ++backupPreviewGeneration.current; setProtectedRestoreToken(null);
     try {
+      if (protectedMode) throw Error('Use the native encrypted backup file chooser.');
       const metadata = portability.validateBackupJSON(content);
       setPendingBackupContent(content);
       setPendingBackupMetadata(metadata);
     } catch (err: any) {
       setPendingBackupContent(null);
       setPendingBackupMetadata(null);
-      setRestoreError(err.message || 'Invalid backup file.');
+      if (generation === backupPreviewGeneration.current) setRestoreError(err.message || 'Invalid backup file.');
     }
   };
 
   const handleChooseBackup = async () => {
+    if (backupPickerPending.current || isProcessing) return;
+    if (protectedMode) {
+      backupPickerPending.current = true; setIsProcessing(true); const generation = ++backupPreviewGeneration.current;
+      setProtectedRestoreToken(null); setPendingBackupContent(null); setPendingBackupMetadata(null); setRestoreError(null); setRestoreSuccess(null);
+      try {
+        const native = window.desktopEncryption; if (!native) throw Error('Native encrypted recovery is unavailable.');
+        const checked = await protectedStorageBoundary(async () => unwrapEncryption(await native.previewImportFile()));
+        if (generation !== backupPreviewGeneration.current || checked.cancelled) return;
+        setProtectedRestoreToken(checked.token); setPendingBackupMetadata(checked.metadata);
+      } catch { if (generation === backupPreviewGeneration.current) setRestoreError('The encrypted backup file could not be verified. Keep the original source and choose an intact backup for this app and recovery enrollment.'); }
+      finally { backupPickerPending.current = false; setIsProcessing(false); }
+      return;
+    }
     if (!usesNativeFiles()) {
       backupFileInputRef.current?.click();
       return;
@@ -248,13 +310,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     setPendingBackupMetadata(null);
     try {
       const content = await selectNativeBackup();
-      if (content !== null) previewBackup(content);
+      if (content !== null) await previewBackup(content);
     } catch {
       setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
     }
   };
 
   const handleBackupFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (protectedMode) { e.target.value = ''; return; }
     setRestoreError(null);
     setRestoreSuccess(null);
     setPendingBackupContent(null);
@@ -264,7 +327,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     const reader = new FileReader();
     reader.onload = evt => {
       const content = evt.target?.result;
-      if (typeof content === 'string') previewBackup(content);
+      if (typeof content === 'string') void previewBackup(content);
       else setRestoreError('Failed to read selected backup file.');
     };
     reader.onerror = () => setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
@@ -274,11 +337,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   // Section 3: Confirmed Backup Restore Execution
   const handleConfirmRestore = async () => {
-    if (!pendingBackupContent) return;
-    setIsProcessing(true);
+    if (isProcessing || restorePending.current || (!pendingBackupContent && !protectedRestoreToken)) return;
+    restorePending.current = true; setIsProcessing(true);
     setRestoreError(null);
     try {
-      const res = await portability.restoreFromJSON(pendingBackupContent);
+      if (protectedMode) {
+        const native = window.desktopEncryption; if (!native || !protectedRestoreToken) throw Error('Choose and verify an encrypted backup first.');
+        try { await protectedStorageBoundary(async () => unwrapEncryption(await native.applyImport(protectedRestoreToken))); } finally { lockEncryptedRuntime(); }
+        return;
+      }
+      const res = await portability.restoreFromJSON(pendingBackupContent!);
       setRestoreSuccess(
         `Database successfully restored (${res.totalRecords} records across ${res.restoredTables} collections).`
       );
@@ -288,7 +356,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } catch (err: any) {
       setRestoreError(err.message || 'Restore failed.');
     } finally {
-      setIsProcessing(false);
+      restorePending.current = false; setIsProcessing(false);
     }
   };
 
@@ -700,6 +768,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           </p>
         </div>
 
+        {readableExportStatus && <p role="status">{readableExportStatus}</p>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* 1. Markbook CSV */}
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between">
@@ -716,7 +785,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportMarkbook}
-                disabled={!classSection}
+                disabled={!classSection || isProcessing}
                 data-testid="export-markbook-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50"
               >
@@ -741,7 +810,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportParticipation}
-                disabled={!classSection}
+                disabled={!classSection || isProcessing}
                 data-testid="export-participation-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50"
               >
@@ -782,7 +851,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Download Full Application Backup</h3>
               <p className="text-xs text-slate-600 mt-1">
-                Generates an offline JSON snapshot of all your classes, students, marks, and settings. The file is not encrypted.
+                {protectedMode ? 'Creates an authenticated encrypted copy of the complete working bundle, including private feedback and recovery versions. Keep the recovery code separately.' : 'Generates an offline JSON snapshot of all your classes, students, marks, and settings. The file is not encrypted.'}
               </p>
             </div>
             <div>
@@ -790,13 +859,15 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 type="button"
                 onClick={handleCreateBackup}
                 data-testid="create-backup-btn"
+                disabled={isProcessing}
                 className="w-full inline-flex items-center justify-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition"
               >
                 <DownloadCloud className="w-4 h-4" />
-                <span>Download Full Backup</span>
+                <span>{protectedMode ? 'Save Encrypted Backup File' : 'Download Full Backup'}</span>
               </button>
+              {backupExportError && <p role="alert" className="mt-2 text-xs text-amber-800">{backupExportError}</p>}
               {backupDownloadStatus && (
-                <div className="mt-2 text-xs font-semibold text-emerald-700 text-center">
+                <div role="status" className="mt-2 text-xs font-semibold text-emerald-700 text-center">
                   {backupDownloadStatus}
                 </div>
               )}
@@ -820,11 +891,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 accept=".json,application/json"
                 className="hidden"
                 data-testid="restore-file-input"
+                disabled={protectedMode || isProcessing}
               />
               <button
                 type="button"
                 onClick={handleChooseBackup}
                 data-testid="choose-backup-file-btn"
+                disabled={isProcessing}
                 className="w-full inline-flex items-center justify-center space-x-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition"
               >
                 <Upload className="w-4 h-4 text-slate-500" />
@@ -839,7 +912,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-800 space-y-1">
             <div className="font-bold flex items-center space-x-1.5">
               <AlertCircle className="w-4 h-4 text-red-600" />
-              <span>Restore Rejected: Database Left Intact</span>
+              <span>{protectedMode ? 'Protected restore needs attention' : 'Restore Rejected: Database Left Intact'}</span>
             </div>
             <p className="text-red-700">{restoreError}</p>
           </div>
@@ -863,7 +936,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   Confirm Database Replacement
                 </h4>
                 <p className="text-xs text-red-800 mt-0.5">
-                  Restoring will completely replace your current local database with the contents of this backup file. All current data will be overwritten.
+                  {protectedMode ? 'Restoring replaces the complete encrypted working bundle, including private feedback and recovery history. A verified encrypted safety version is kept first; secure startup reopens after success. The preserved original workspace is separate.' : 'Restoring will completely replace your current local database with the contents of this backup file. All current data will be overwritten.'}
                 </p>
               </div>
             </div>
@@ -878,9 +951,11 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setPendingBackupContent(null);
+                  if (isProcessing || restorePending.current) return;
+                  backupPreviewGeneration.current++; setProtectedRestoreToken(null); setPendingBackupContent(null);
                   setPendingBackupMetadata(null);
                 }}
+                disabled={isProcessing}
                 className="px-4 py-2 text-slate-600 hover:bg-white text-xs font-semibold rounded-xl transition"
               >
                 Cancel
