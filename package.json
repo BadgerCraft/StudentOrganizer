@@ -61,7 +61,7 @@
     "build:encryption:native": "node scripts/buildEncryptionNative.cjs && node scripts/buildWindowsCredentialLedger.cjs",
     "test:encryption:storage-browser": "node --import tsx scripts/encryptedStorageSmoke.ts",
     "test:encryption:native-storage": "vitest run src/security/sqliteEncryptedVaultStore.test.ts src/security/sqliteProtectedKeyStore.test.ts src/security/platformKeyringStore.test.ts src/security/cipherChunkStore.test.ts src/security/protectedRevisionLedger.test.ts src/security/pendingEncryptedCommit.test.ts",
-    "test:encryption:app-browser": "node --import tsx scripts/encryptedAppSmoke.ts && node --import tsx scripts/encryptedNativeAppSmoke.ts && node --import tsx scripts/encryptedTransferSettingsSmoke.ts"
+    "test:encryption:app-browser": "node --import tsx scripts/encryptedAppSmoke.ts && node --import tsx scripts/encryptedNativeAppSmoke.ts && node --import tsx scripts/encryptedTransferSettingsSmoke.ts && node --import tsx scripts/protectedReadableExportsSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

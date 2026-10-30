@@ -25,6 +25,7 @@ function disconnectWorkspaceTransports() {
   captureDrive.disconnect(); organizerDrive.disconnect(); encryptedOrganizerDrive?.disconnect();
 }
 function lockWorkspace() {
+  protectedReports.cancel();
   if (!encryptionShuttingDown) encryptionController?.lockNow();
   disconnectWorkspaceTransports();
 }
@@ -62,12 +63,20 @@ for (const method of ['status', 'connect', 'list', 'download', 'upload', 'discon
 }
 
 const exportReportPdf = require('./reportPdf.cjs').createReportPdfExporter({ BrowserWindow, dialog, session, parent: () => updateWindow });
-ipcMain.handle('assessment-report:pdf', (event, ...args) => {
-  requireUpdateCaller(event, args, 2);
-  // A readable teacher-copy policy has not been selected for protected mode.
-  // Do not create a hidden plaintext PDF or staging file in the meantime.
-  if (protectedWorkspace()) return { ok: false, code: 'protected-export', message: 'Readable report export is unavailable in the protected workspace until its explicit-copy policy is configured. The encrypted workspace has not been exported.' };
+const protectedReports = require('./protectedReportExports.cjs').createProtectedReportExports({
+  dialog, parent: () => updateWindow, exportPdf: exportReportPdf,
+  captureContext: expectedRevision => encryptionController.captureReadableExportContext(expectedRevision)
+});
+for (const format of ['pdf', 'csv']) ipcMain.handle(`assessment-report:${format}`, (event, ...args) => {
+  requireUpdateCaller(event, args, args.length === 3 ? 3 : 2);
+  if (protectedWorkspace()) return protectedReports.run(format, args[0], args[1], () => requireUpdateCaller(event, args, 3), args[2]);
+  if (args.length !== 2) throw new Error('Invalid legacy report export.');
+  // The legacy renderer retains its existing CSV download path.
+  if (format !== 'pdf') throw new Error('Native CSV export requires an unlocked protected workspace.');
   return exportReportPdf(args[0], args[1]);
+});
+ipcMain.handle('assessment-report:cancel', (event, ...args) => {
+  requireUpdateCaller(event, args, 0); protectedReports.cancel();
 });
 function requireUpdateCaller(event, args, expectedCount) {
   const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;

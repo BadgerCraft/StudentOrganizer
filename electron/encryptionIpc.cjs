@@ -197,7 +197,18 @@ function createEncryptionController({ getHost, getStatus, validateIntegrity, ass
       return json; // Preserve authenticated original bytes for ancestry comparisons.
     }
   });
-  return Object.freeze({ invoke, lockNow, transferHost, getBoundActor: () => actor });
+  // Main-only report capability. Specific class/report access stays with the
+  // trusted renderer's existing READ policy; this is not full-workspace export.
+  function captureReadableExportContext(expectedRevision) {
+    const epoch = actorEpoch, selectedActor = actor, host = getHost(false), status = protectedStatus();
+    const saved = host?.status();
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || saved?.revision !== expectedRevision || busy || selectedActor === null || status.mode !== 'encrypted' || saved?.state !== 'unlocked' || !Number.isSafeInteger(saved.revision) || saved.revision < 1) throw fail('ENCRYPTION_CONTEXT_CHANGED');
+    return () => {
+      const current = protectedStatus(), now = getHost(false)?.status();
+      if (busy || actorEpoch !== epoch || actor !== selectedActor || getHost(false) !== host || current.mode !== 'encrypted' || now?.state !== 'unlocked' || now.revision !== saved.revision || now.appId !== saved.appId || now.vaultId !== saved.vaultId || now.keyVersion !== saved.keyVersion) throw fail('ENCRYPTION_CONTEXT_CHANGED');
+    };
+  }
+  return Object.freeze({ invoke, lockNow, transferHost, captureReadableExportContext, getBoundActor: () => actor });
 }
 function attachEncryptionIpc({ ipcMain, requireCaller, controller }) {
   for (const [method, count] of Object.entries(METHODS)) ipcMain.handle('encryption:' + method, async (event, ...args) => {

@@ -1,5 +1,7 @@
 import { downloadFile } from '../../utils/downloadFile';
 import { rendererStorageMode } from '../../security/rendererStorageMode';
+import { protectedReadableRevision } from '../../security/readableExports';
+import { lockEncryptedRuntime } from '../../security/encryptedRuntime';
 import { readFeedbackBank, writeFeedbackBank } from '../../security/privateFeedbackStorage';
 import { useEffect, useRef, useState } from 'react';
 import type { MarkingActor } from '../types';
@@ -22,13 +24,14 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, onSavingChan
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
+  const exportPending = useRef(false);
   const lifecycle = useRef(0);
   useEffect(() => {
     lifecycle.current++; busy.current = false; setImporting(false); setSaving(false);
     setBank([]); setView('closed'); setReview(null); setPaste(''); setError(''); setMessage('');
     const started = lifecycle.current;
     void readFeedbackBank(actor).then(value => { if (started === lifecycle.current) setBank(value); }, cause => { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); });
-    return () => { lifecycle.current++; onDirtyChange?.(false); };
+    return () => { lifecycle.current++; if (exportPending.current) { void window.desktopReports?.cancelReadableExport?.().catch(() => lockEncryptedRuntime()); onSavingChange?.(false); } onDirtyChange?.(false); };
   }, [actor.userId, actor.epoch]);
   const reviewComments = (comments: string[]) => { setReview(comments); onDirtyChange?.(true); setError(''); setMessage(''); };
   const matches = bank.map((text, index) => ({ text, index })).filter(({ text }) => text.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
@@ -52,12 +55,25 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, onSavingChan
         }}>{text}</button></li>)}</ul>
         {matches.length === 0 && <p className="text-sm">No matching comments.</p>}
         <button type="button" className={button} disabled={disabled || importing} onClick={() => { setView('import'); reviewComments([...bank]); }}>Edit bank comments</button>
-        <button type="button" className={button} disabled={disabled || importing} onClick={() => {
+        <button type="button" className={button} disabled={disabled || importing || saving} onClick={async () => {
+          if (exportPending.current) return;
+          const started = lifecycle.current;
+          exportPending.current = true; setSaving(true); onSavingChange?.(true);
           try {
             assertCommentBankActor(actor);
-            downloadFile(new Blob([exportCommentBank(bank)], { type: 'text/csv;charset=utf-8' }), 'comment-bank.csv');
-            setMessage('Comment bank download requested. Check your downloads.');
-          } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export comment bank.'); }
+            if (rendererStorageMode() === 'encrypted') {
+              const revision = await protectedReadableRevision(); assertCommentBankActor(actor);
+              const current = await readFeedbackBank(actor); assertCommentBankActor(actor);
+              if (started !== lifecycle.current || rendererStorageMode() !== 'encrypted') throw new Error('Comment bank context changed. No readable file was saved.');
+              if (!window.desktopReports?.exportCsv) throw new Error('Protected CSV export is unavailable. No readable file was saved.');
+              const saved = await window.desktopReports.exportCsv('comment-bank.csv', exportCommentBank(current), revision);
+              if (started === lifecycle.current) setMessage(saved ? 'Unencrypted comment bank CSV saved.' : 'Export cancelled. No file was saved.');
+            } else {
+              downloadFile(new Blob([exportCommentBank(bank)], { type: 'text/csv;charset=utf-8' }), 'comment-bank.csv');
+              setMessage('Comment bank download requested. Check your downloads.');
+            }
+          } catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not export comment bank.'); }
+          finally { exportPending.current = false; if (started === lifecycle.current) { setSaving(false); onSavingChange?.(false); } }
         }}>Export comment bank</button>
       </>}
     </div>}

@@ -10,6 +10,16 @@ function fixture() {
   return { host, options, controller, get commits() { return commits; }, get authorizations() { return authorizations; }, get switches() { return switches; }, get invalidations() { return invalidations; } };
 }
 describe('native encrypted IPC boundary', () => {
+  it('pins focused readable report permission to native actor, exact generation revision and unlocked lifecycle', async () => {
+    const f = fixture();
+    expect(() => f.controller.captureReadableExportContext(1)).toThrow();
+    await f.controller.invoke('selectActingTeacher', ['co-teacher']);
+    expect(() => f.controller.captureReadableExportContext(undefined)).toThrow(); expect(() => f.controller.captureReadableExportContext(2)).toThrow();
+    const current = f.controller.captureReadableExportContext(1); expect(() => current()).not.toThrow(); expect(f.authorizations).toBe(0); // class READ stays at existing renderer service boundary
+    await f.controller.invoke('commit', [1, original]); expect(() => current()).toThrow();
+    const next = f.controller.captureReadableExportContext(2); await f.controller.invoke('selectActingTeacher', ['owner']); expect(() => next()).toThrow();
+    const last = f.controller.captureReadableExportContext(2); await f.controller.invoke('lock', []); expect(() => last()).toThrow();
+  });
   it('clears an idle selected actor at startup without closing automatic unlock', async () => {
     const f = fixture(); await f.controller.invoke('read', []); await f.controller.invoke('selectActingTeacher', ['owner']);
     await f.controller.invoke('selectActingTeacher', [null]); expect(f.controller.getBoundActor()).toBeNull(); expect(f.host.status().state).toBe('unlocked');

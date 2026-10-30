@@ -23,10 +23,11 @@ import {
   type BackupMetadata
 } from '../services/portabilityService';
 import { clipboardRosterText, readRosterTable, mapRosterTable, mappingError, validateEditedRosterRow, MAX_ROSTER_CHARS, type RosterTable, type RosterMapping } from '../services/rosterTable';
-import { getAppIdentity } from '../services/identityService';
-import { AuthorizationError } from '../services/authHelper';
+import { getAppIdentity, getActiveTeacherId, getIdentityEpoch } from '../services/identityService';
+import { AuthorizationError, assertClassSectionReadAccess } from '../services/authHelper';
 import { db } from '../db/database';
 import { downloadFile } from '../utils/downloadFile';
+import { protectedReadableRevision } from '../security/readableExports';
 import { usesNativeFiles, exportNativeBackup, selectNativeBackup } from '../services/nativeFiles';
 
 interface ImportExportModalProps {
@@ -64,6 +65,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const backupExportPending = useRef(false), backupPickerPending = useRef(false), restorePending = useRef(false);
+  const readableExportPending = useRef(false), exportContext = useRef({ sectionId: classSection?.id, userId: propUserId, alive: true, generation: 0 });
+  if (exportContext.current.sectionId !== classSection?.id || exportContext.current.userId !== propUserId) {
+    exportContext.current = { sectionId: classSection?.id, userId: propUserId, alive: true, generation: exportContext.current.generation + 1 };
+  }
+  useEffect(() => { exportContext.current.alive = true; return () => { exportContext.current.alive = false; exportContext.current.generation++; }; }, []);
+  useEffect(() => () => { if (readableExportPending.current) void window.desktopReports?.cancelReadableExport?.().catch(() => lockEncryptedRuntime()); }, [classSection?.id, propUserId]);
+  const [readableExportStatus, setReadableExportStatus] = useState('');
   useEffect(() => { onBusyChange?.(isProcessing); return () => onBusyChange?.(false); }, [isProcessing, onBusyChange]);
   const [importResult, setImportResult] = useState<ImportRosterResult | null>(null);
 
@@ -195,8 +203,28 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   };
 
   // Section 2: CSV Exporters
+  const protectedCsv = async (kind: 'markbook' | 'participation') => {
+    if (!classSection || readableExportPending.current || isProcessing) return;
+    readableExportPending.current = true; setIsProcessing(true); setReadableExportStatus('');
+    const sectionId = classSection.id, expectedUser = propUserId, epoch = getIdentityEpoch(), generation = exportContext.current.generation;
+    const current = () => {
+      if (!exportContext.current.alive || exportContext.current.generation !== generation || exportContext.current.sectionId !== sectionId || exportContext.current.userId !== expectedUser || getIdentityEpoch() !== epoch || !expectedUser || getActiveTeacherId() !== expectedUser || rendererStorageMode() !== 'encrypted') throw new Error('Teacher or class context changed. No readable file was saved.');
+    };
+    try {
+      current(); const revision = await protectedReadableRevision(); current(); await assertClassSectionReadAccess(db, expectedUser!, sectionId); current();
+      const csv = await (kind === 'markbook' ? portability.exportClassMarkbookCSV(sectionId, null) : portability.exportParticipationEventsCSV(sectionId));
+      current(); await assertClassSectionReadAccess(db, expectedUser!, sectionId); current();
+      if (!window.desktopReports?.exportCsv) throw new Error('Protected CSV export is unavailable. No readable file was saved.');
+      const safeSection = classSection.sectionNumber.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'class';
+      const filename = kind === 'markbook' ? `Markbook-${safeSection}-${new Date().toISOString().slice(0, 10)}.csv` : `Participation-Evidence-${new Date().toISOString().slice(0, 10)}.csv`;
+      const saved = await window.desktopReports.exportCsv(filename, csv, revision);
+      if (exportContext.current.alive && exportContext.current.generation === generation) setReadableExportStatus(saved ? 'Unencrypted CSV saved.' : 'Export cancelled. No file was saved.');
+    } catch (err: any) { if (exportContext.current.alive && exportContext.current.generation === generation) setReadableExportStatus(err.message || 'CSV export did not complete.'); }
+    finally { readableExportPending.current = false; if (exportContext.current.alive) setIsProcessing(false); }
+  };
   const handleExportMarkbook = async () => {
     if (!classSection) return;
+    if (protectedMode) return protectedCsv('markbook');
     try {
       const csv = await portability.exportClassMarkbookCSV(classSection.id, null);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -208,6 +236,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   const handleExportParticipation = async () => {
     if (!classSection) return;
+    if (protectedMode) return protectedCsv('participation');
     try {
       const csv = await portability.exportParticipationEventsCSV(classSection.id);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -739,6 +768,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
           </p>
         </div>
 
+        {readableExportStatus && <p role="status">{readableExportStatus}</p>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* 1. Markbook CSV */}
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between">
@@ -755,7 +785,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportMarkbook}
-                disabled={!classSection}
+                disabled={!classSection || isProcessing}
                 data-testid="export-markbook-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50"
               >
@@ -780,7 +810,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportParticipation}
-                disabled={!classSection}
+                disabled={!classSection || isProcessing}
                 data-testid="export-participation-btn"
                 className="w-full inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition disabled:opacity-50"
               >

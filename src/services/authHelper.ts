@@ -41,6 +41,10 @@ export async function assertClassSectionWriteAccess(db: OntarioTeacherDB, userId
   return assertClassSectionAccess(db, userId, classSectionId, 'write');
 }
 
+export async function assertClassSectionReadAccess(db: OntarioTeacherDB, userId: UUID, classSectionId: UUID): Promise<AuthContext> {
+  return assertClassSectionAccess(db, userId, classSectionId, 'read');
+}
+
 /** Use the same membership/assignment rules for the class picker, allowing read-only staff. */
 export async function listAccessibleClassSections(db: OntarioTeacherDB, userId: UUID | null) {
   if (!userId) return [];

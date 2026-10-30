@@ -9,7 +9,9 @@ contextBridge.exposeInMainWorld('desktopUpdates', Object.freeze({
 }));
 
 contextBridge.exposeInMainWorld('desktopReports', Object.freeze({
-  exportPdf: (filename, html) => ipcRenderer.invoke('assessment-report:pdf', filename, html)
+  exportPdf: (filename, html, expectedRevision) => expectedRevision === undefined ? ipcRenderer.invoke('assessment-report:pdf', filename, html) : ipcRenderer.invoke('assessment-report:pdf', filename, html, expectedRevision),
+  exportCsv: (filename, csv, expectedRevision) => ipcRenderer.invoke('assessment-report:csv', filename, csv, expectedRevision),
+  cancelReadableExport: () => ipcRenderer.invoke('assessment-report:cancel')
 }));
 
 contextBridge.exposeInMainWorld('desktopDictation', Object.freeze({

@@ -26,6 +26,9 @@ import { sortCategoriesForDisplay } from '../utils/categoryDisplay';
 import { AuthorizationError } from '../services/authHelper';
 import { DocumentErrorBoundary } from './DocumentErrorBoundary';
 import { validateSavedMarkingSession } from '../marking/readValidation';
+import { lockEncryptedRuntime } from '../security/encryptedRuntime';
+import { rendererStorageMode } from '../security/rendererStorageMode';
+import { protectedReadableRevision } from '../security/readableExports';
 
 const button = 'border border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed';
 const field = 'border border-slate-300 rounded-lg p-2 w-full bg-white text-slate-900';
@@ -120,6 +123,8 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
   const [modeEnrollment, setModeEnrollment] = useState(initialEnrollmentId ?? '');
   const [filter, setFilter] = useState('all');
   const selectionRoot = useRef<HTMLDivElement>(null);
+  const readablePdfPending = useRef(false), exportContextEpoch = useRef(0);
+  useEffect(() => () => { exportContextEpoch.current++; if (readablePdfPending.current) void window.desktopReports?.cancelReadableExport?.().catch(() => lockEncryptedRuntime()); }, [assessmentId, userId]);
   const validActor = () => {
     const value = actorRef.current;
     if (!value || value.userId !== getActiveTeacherId() || value.epoch !== getIdentityEpoch()) throw new Error('Teacher context changed. Reopen marking under the intended teacher. Pending writes were blocked.');
@@ -315,11 +320,20 @@ export function MarkingWorkspace({ assessmentId, userId, initialEnrollmentId, on
     });
   }
   const exportCommit = async (commitId: string, annotated = false) => {
-    const saved = await service.exportContext(commitId, validActor());
-    validActor();
-    const exported = await (annotated ? exportAnnotatedMarkingReport(saved, () => { validActor(); }) : exportMarkingReport(saved));
-    validActor();
-    setExportStatus(exported ? (annotated && !supportsDesktopPdfExport() ? 'Print-ready report downloaded. Open it and choose Print / Save as PDF.' : 'Report exported locally.') : 'Export cancelled. Saved work is unchanged.');
+    const contextEpoch = exportContextEpoch.current;
+    const current = () => { if (contextEpoch !== exportContextEpoch.current) throw new Error('Assessment context changed. No readable file was saved.'); return validActor(); };
+    readablePdfPending.current = annotated;
+    try {
+      const revision = annotated && rendererStorageMode() === 'encrypted' ? await protectedReadableRevision() : undefined;
+      current();
+      const saved = await service.exportContext(commitId, current());
+      current();
+      const exported = await (annotated ? exportAnnotatedMarkingReport(saved, () => { current(); }, revision) : exportMarkingReport(saved));
+      // The native publisher reports uncertainty if revocation overlaps its
+      // final rename. Once it returns, avoid displaying an old context's result.
+      try { current(); } catch { return; }
+      setExportStatus(exported ? (annotated && !supportsDesktopPdfExport() ? 'Print-ready report downloaded. Open it and choose Print / Save as PDF.' : 'Report exported locally.') : 'Export cancelled. Saved work is unchanged.');
+    } finally { readablePdfPending.current = false; }
   };
   const renderCategoryJudgment = (categoryId: string) => {
     const entry = displayJudgments.find(item => item.judgment.assessmentCategoryId === categoryId);
