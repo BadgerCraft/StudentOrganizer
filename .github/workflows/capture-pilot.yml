@@ -56,6 +56,7 @@ jobs:
           for attempt in {1..30}; do curl --fail --silent http://127.0.0.1:4173 >/dev/null && break; sleep 1; done
           npm run test:browser --prefix apps/phone-capture
           npm run test:native-browser --prefix apps/phone-capture
+          npm run test:ui-browser --prefix apps/phone-capture
           CAPTURE_PHONE_ZIP=/tmp/capture-phone-e2e.zip node --import tsx scripts/captureDesktopSmoke.ts
           node --import tsx scripts/captureDriveSmoke.ts
           npm run test:capture:late-work
