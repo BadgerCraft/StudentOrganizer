@@ -1,0 +1,17 @@
+
+ RUN  v2.1.9 /workspace/StudentOrganizer-encrypted-storage
+
+ ✓ src/services/participationRecordIdentity.test.ts (9 tests) 550ms
+ ✓ src/security/studentOrganizerSource.test.ts (5 tests) 1145ms
+   ✓ complete authorized Student Organizer source collection > retains every primary table, photo bytes, recovery versions/base and local private state through encrypted migration 656ms
+
+ Test Files  2 passed (2)
+      Tests  14 passed (14)
+   Start at  04:11:48
+   Duration  2.20s (transform 525ms, setup 0ms, collect 1.11s, tests 1.69s, environment 0ms, prepare 136ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
