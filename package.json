@@ -6,7 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && npm run build:encryption:native && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -58,7 +58,9 @@
     "test:recovery:guidance": "node --import tsx scripts/recoveryGuidanceSmoke.ts",
     "test:encryption": "vitest run shared/encryption src/security",
     "test:encryption:browser": "node --import tsx scripts/encryptionContractSmoke.ts",
-    "test:qa:capacity-seating": "node --import tsx scripts/qaSeatingResizeSmoke.ts && node --import tsx scripts/qaCaptureReferenceSmoke.ts && node --import tsx scripts/qaCaptureReferenceLifecycleSmoke.ts"
+    "test:qa:capacity-seating": "node --import tsx scripts/qaSeatingResizeSmoke.ts && node --import tsx scripts/qaCaptureReferenceSmoke.ts && node --import tsx scripts/qaCaptureReferenceLifecycleSmoke.ts",
+    "build:encryption:native": "node scripts/buildEncryptionNative.cjs",
+    "test:encryption:storage-browser": "node --import tsx scripts/encryptedStorageSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
