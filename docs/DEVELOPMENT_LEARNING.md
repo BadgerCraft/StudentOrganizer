@@ -423,3 +423,12 @@ Independent browser review found that a key held outside the control could be mi
 Recovery messages distinguish a failed read from a locally completed merge with an unconfirmed upload. Retrying a read is different from repeating a write that might already have reached Drive. The guidance work preserves that distinction and the separate approval for live setup. No live provider/device acceptance is inferred.
 
 Walkthrough prepared for this material PR49 increment; no understanding or acceptance inferred. Deferred learning check for the continuing product review: after a category chord, what must happen before a standalone Shift can lower the evidence level? Existing PR walkthrough remains the same review, not a new merge gate.
+
+
+## October 29 — encrypted storage foundation (walkthrough prepared)
+
+Encryption changes readable data into bytes that require a secret key; authentication also detects alteration or use in the wrong app/record/context. Separate per-app keys keep one application's recovery secret from unlocking another. A recovery code is randomly generated secret material, not a memorable password. OS-protected key storage supports trusted-device unlock but does not protect an already unlocked app from same-user malware.
+
+An encrypted save must be durable before the app reports success. A periodic encrypted snapshot while the ordinary database remains plaintext does not provide encrypted working storage. The current foundation therefore exposes explicit commit and migration contracts, with no production activation until every writer/storage surface, recovery and second-device path is integrated and tested. Independent review found that a retained mutable draft could diverge from encrypted disk; the saved revision now publishes a detached snapshot.
+
+First-stage verification and contract are linked in work-orders/ENCRYPTION-2026-10-29.md. Review question deferred for the continuing product walkthrough: why is successful backup encryption alone insufficient to say the working app is encrypted? No comprehension or activation approval inferred.
