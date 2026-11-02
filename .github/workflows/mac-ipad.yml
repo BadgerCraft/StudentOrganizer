@@ -108,7 +108,9 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --init --ipc=host
-    timeout-minutes: 20
+    # The real 35 MiB capture/restore/export regression adds about four minutes
+    # to the existing acceptance chain; retain time for the final WebKit checks.
+    timeout-minutes: 30
     env:
       VITE_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
