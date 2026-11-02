@@ -1,3 +1,4 @@
+import { privateStorageWrite } from '../security/encryptedRuntime';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UserCheck, ShieldAlert, AlertCircle, RefreshCw, X } from 'lucide-react';
 import { db } from '../db/database';
@@ -171,7 +172,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
     setErrorMessage(null);
     try {
       await onSelectTeacher(userId);
-      try { window.localStorage.setItem('ota.last-confirmed-teacher.v1', userId); } catch { /* Optional convenience only. */ }
+      try { await privateStorageWrite(storage => storage.setItem('ota.last-confirmed-teacher.v1', userId)); } catch { /* Optional convenience only. */ }
       submitGuard.current = false;
       setIsSubmitting(false);
       // NOTE: Do not call handleCancelAction() or onClose() here.
@@ -210,7 +211,7 @@ export const TeacherSelectorModal: React.FC<TeacherSelectorModalProps> = ({
       setEditor(null);
       await fetchTeachers();
       await onSelectTeacher(teacher.id);
-      try { window.localStorage.setItem('ota.last-confirmed-teacher.v1', teacher.id); } catch { /* Optional suggestion. */ }
+      try { await privateStorageWrite(storage => storage.setItem('ota.last-confirmed-teacher.v1', teacher.id)); } catch { /* Optional suggestion. */ }
     } catch (err: any) { setErrorMessage(err.message || 'Could not save the teacher profile. Please retry.'); }
     finally { submitGuard.current = false; setIsSubmitting(false); }
   };

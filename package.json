@@ -53,14 +53,15 @@
     "dictation:prepare": "node scripts/prepareDictation.cjs",
     "test:dictation:browser": "node --import tsx scripts/dictationSmoke.ts",
     "test:qa:integrity": "node --import tsx scripts/qaMarkbookConcurrencySmoke.ts && node --import tsx scripts/qaClassroomAuthorizationSmoke.ts && node --import tsx scripts/qaCustomAssessmentSmoke.ts && node --import tsx scripts/qaReportingScopeSmoke.ts",
-    "test:focused-organizer": "node --import tsx scripts/focusedOrganizerSmoke.ts && node --import tsx scripts/focusedMarkingSmoke.ts && node --import tsx scripts/participationCorrectionSmoke.ts && node --import tsx scripts/participationPendingSmoke.ts && node --import tsx scripts/personalSyncSmoke.ts && npm run test:marking:keyboard && npm run test:recovery:guidance",
+    "test:focused-organizer": "node --import tsx scripts/focusedOrganizerSmoke.ts && node --import tsx scripts/focusedMarkingSmoke.ts && node --import tsx scripts/participationCorrectionSmoke.ts && node --import tsx scripts/participationPendingSmoke.ts && node --import tsx scripts/personalSyncSmoke.ts && node --import tsx scripts/recoveryOptionsSmoke.ts && npm run test:marking:keyboard && npm run test:recovery:guidance",
     "test:marking:keyboard": "node --import tsx scripts/gradingKeyboardSmoke.ts",
     "test:recovery:guidance": "node --import tsx scripts/recoveryGuidanceSmoke.ts",
     "test:encryption": "vitest run shared/encryption src/security",
     "test:encryption:browser": "node --import tsx scripts/encryptionContractSmoke.ts",
     "build:encryption:native": "node scripts/buildEncryptionNative.cjs && node scripts/buildWindowsCredentialLedger.cjs",
     "test:encryption:storage-browser": "node --import tsx scripts/encryptedStorageSmoke.ts",
-    "test:encryption:native-storage": "vitest run src/security/sqliteEncryptedVaultStore.test.ts src/security/sqliteProtectedKeyStore.test.ts src/security/platformKeyringStore.test.ts src/security/cipherChunkStore.test.ts src/security/protectedRevisionLedger.test.ts src/security/pendingEncryptedCommit.test.ts"
+    "test:encryption:native-storage": "vitest run src/security/sqliteEncryptedVaultStore.test.ts src/security/sqliteProtectedKeyStore.test.ts src/security/platformKeyringStore.test.ts src/security/cipherChunkStore.test.ts src/security/protectedRevisionLedger.test.ts src/security/pendingEncryptedCommit.test.ts",
+    "test:encryption:app-browser": "node --import tsx scripts/encryptedAppSmoke.ts && node --import tsx scripts/encryptedNativeAppSmoke.ts && node --import tsx scripts/encryptedTransferSettingsSmoke.ts && node --import tsx scripts/protectedReadableExportsSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
