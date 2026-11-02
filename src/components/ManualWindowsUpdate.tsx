@@ -7,7 +7,7 @@ type CheckResult = { status: 'available' | 'current' | 'unpublished' | 'unsuppor
 type InstallResult = {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'cancelled' | 'error' | 'unsupported' | 'current';
   installationAvailable: boolean; version?: string; percent?: number;
-  signature?: 'unsigned' | 'valid'; publisher?: string; backupPath?: string; error?: string;
+  signature?: 'unsigned' | 'valid'; publisher?: string; backupPath?: string; recoveryDirectory?: string; error?: string;
 };
 declare global {
   interface Window {
@@ -76,7 +76,7 @@ export function ManualWindowsUpdate({ installationBlocked = false }: { installat
   const downloading = installer?.status === 'downloading';
   const ready = installer?.status === 'downloaded';
   const capable = result?.status === 'available' && result.installationAvailable && bridge.download && bridge.install;
-  const message = result?.status === 'available' ? `Version ${result.version} is available.${capable ? ' Download it when you are ready.' : ' Installation is unavailable for this build. Your records have not changed.'}`
+  const message = ready ? '' : result?.status === 'available' ? `Version ${result.version} is available.${capable ? ' Download it when you are ready.' : ' Installation is unavailable for this build. Your records have not changed.'}`
     : result?.status === 'current' ? 'This version is current for the stable release channel.'
     : result?.status === 'unpublished' ? 'No approved stable release is published. Your installed app remains available.'
     : result?.status === 'unsupported' ? 'Update checks require a packaged Windows build.'
@@ -102,6 +102,7 @@ export function ManualWindowsUpdate({ installationBlocked = false }: { installat
       <div className="space-y-4">
         <h3 className="text-lg font-bold">Install version {installer?.version}?</h3>
         <p>A recovery backup will be saved on this device before the app closes. Your classroom records stay in the same local profile. Windows may ask for permission to replace the application.</p>
+        {installer?.recoveryDirectory && <p>Record this location before installing: <code>{installer.recoveryDirectory}</code>. If the app does not reopen, its recovery guide and backup will be there. Keep that folder private; the backup contains classroom data.</p>}
         {installer?.signature === 'unsigned' && <div className="rounded-lg bg-amber-50 p-3 space-y-2">
           <p className="text-sm text-amber-900">This installer has no verified Windows publisher signature. Windows may warn or block it. Its download checksum was checked, but that does not verify the publisher.</p>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={acknowledgeUnsigned} disabled={preparing} onChange={event => setAcknowledgeUnsigned(event.target.checked)} />I understand this installer is unsigned.</label>

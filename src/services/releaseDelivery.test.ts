@@ -64,6 +64,9 @@ it('prepares actual files, serves isolated fixture delivery, discovers only appr
     const folder = await preparePublicationBundle(temporary, prepared, source, hashFile);
     expect((await readdir(folder)).sort()).toEqual(['PUBLICATION-INSTRUCTIONS.txt', c.artifact.name, 'latest.yml', 'student-organizer-approval-x64.json'].sort());
     expect(await readFile(path.join(folder, c.artifact.name))).toEqual(bytes);
+    const instructions = await readFile(path.join(folder, 'PUBLICATION-INSTRUCTIONS.txt'), 'utf8');
+    expect(instructions).toContain(`Declared source commit: ${c.sourceCommit}`);
+    expect(instructions).toMatch(/does not prove which source built them/i);
     const servedRelease = release();
     let offerApproval = false;
     const requests: string[] = [];

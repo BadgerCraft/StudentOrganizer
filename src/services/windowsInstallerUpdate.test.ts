@@ -1,7 +1,7 @@
 import { CAPTURE_BACKUP_MAX_BYTES } from '../capture/backupCapacity';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, open, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -73,9 +73,33 @@ describe('explicit local-backup-first Windows installer updates', () => {
     try {
       const file = await saveBackup(backupJSON, directory);
       expect(await readFile(file, 'utf8')).toBe(backupJSON);
-      expect(await readdir(path.join(directory, 'update-backups'))).toHaveLength(1);
+      const guide = file.replace(/\.json$/, '.recovery.txt');
+      const instructions = await readFile(guide, 'utf8');
+      expect(instructions).toContain(path.basename(file));
+      expect(instructions).toMatch(/confirmed restore replaces current data/i);
+      expect(instructions).toMatch(/does not include browser-local preferences/i);
+      expect(await readdir(path.join(directory, 'update-backups'))).toHaveLength(2);
       await expect(saveBackup('{}', directory)).rejects.toThrow();
-      expect(await readdir(path.join(directory, 'update-backups'))).toHaveLength(1);
+      expect(await readdir(path.join(directory, 'update-backups'))).toHaveLength(2);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+  it.each(['create', 'write', 'readback'])('retains verified backups and blocks installation on guide %s failure', async stage => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'installer-guide-failure-'));
+    try {
+      const previous = await saveBackup(backupJSON, directory);
+      const failingBackup = (json: string, userData: string) => saveBackup(json, userData, { openGuide: async (...args: Parameters<typeof open>) => {
+        if (stage === 'create') throw new Error('fictional disk failure');
+        const handle = await open(...args);
+        return { writeFile: async (data: string, encoding: BufferEncoding) => { if (stage === 'write') throw new Error('fictional disk failure'); await handle.writeFile(data, encoding); }, sync: () => handle.sync(), close: () => handle.close() };
+      }, readGuide: async () => 'fictional mismatched bytes' });
+      const { controller, updater } = setup({ userData: directory, backup: failingBackup });
+      await controller.download();
+      expect(await controller.install(backupJSON, true)).toMatchObject({ status: 'error' });
+      expect(updater.quitAndInstall).not.toHaveBeenCalled();
+      expect(await readFile(previous, 'utf8')).toBe(backupJSON);
+      const names = await readdir(path.join(directory, 'update-backups'));
+      expect(names.filter(name => name.endsWith('.json'))).toHaveLength(2);
+      expect(names.filter(name => name.endsWith('.recovery.txt'))).toHaveLength(1);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
   it('proves directory writability with an actual exclusive create/delete before allowing replacement', async () => {

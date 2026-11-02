@@ -24,20 +24,28 @@ function validateBackup(json) {
     }
   }
 }
-async function saveBackup(json, userData) {
+async function saveBackup(json, userData, { openGuide = fs.open, readGuide = fs.readFile } = {}) {
   validateBackup(json);
   const directory = path.join(userData, 'update-backups');
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const destination = path.join(directory, `before-update-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}.json`);
   const temporary = destination + '.tmp';
+  const guide = destination.replace(/\.json$/, '.recovery.txt');
+  let guideCreated = false;
   try {
     const file = await fs.open(temporary, 'wx', 0o600);
     try { await file.writeFile(json, 'utf8'); await file.sync(); } finally { await file.close(); }
     await fs.rename(temporary, destination);
     if ((await fs.readFile(destination, 'utf8')) !== json) throw new Error('Local backup verification failed.');
+    const instructions = `STUDENT ORGANIZER UPDATE RECOVERY\n\nIf the app does not reopen after an update, do not delete this folder or uninstall the app's data. Sign in to the same Windows account. Obtain the separately approved Student Organizer installer, reinstall the app for that account, and open it.\n\nFirst check whether your current work is present. If recovery is needed, open Settings > Backups & import / export > Open import / export & manual restore, then choose Select Backup File. Preview this backup from this folder: ${path.basename(destination)}\n\nA confirmed restore replaces current data. Check for newer work before confirming, then restart and check your records. This database backup does not include browser-local preferences such as the light/dark theme. Keep this backup private: it contains classroom data.\n\nThis guide does not mean the update succeeded. If reinstalling fails, retain this folder and seek help before changing or deleting the profile.\n`;
+    const guideFile = await openGuide(guide, 'wx', 0o600);
+    guideCreated = true;
+    try { await guideFile.writeFile(instructions, 'utf8'); await guideFile.sync(); } finally { await guideFile.close(); }
+    if ((await readGuide(guide, 'utf8')) !== instructions) throw new Error('Local recovery guide verification failed.');
     return destination;
   } catch (error) {
     await fs.rm(temporary, { force: true }).catch(() => {});
+    if (guideCreated) await fs.rm(guide, { force: true }).catch(() => {});
     throw error;
   }
 }
@@ -169,7 +177,7 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
   backup = saveBackup, hash = hashFile, canReplace = () => assertWritableInstallation(installationDirectory), launch = installAndReopen, metadataTimeout = 10000, downloadTimeout = 15 * 60 * 1000 }) {
   let state = { status: supported ? 'idle' : 'unsupported', installationAvailable: supported };
   let active = false, cancellation, timedOut = false, downloaded, approvedRelease;
-  const snapshot = () => ({ ...state });
+  const snapshot = () => ({ ...state, ...(supported ? { recoveryDirectory: path.join(userData, 'update-backups') } : {}) });
   const fail = (message) => { state = { status: 'error', installationAvailable: supported, error: message }; return snapshot(); };
   if (supported) {
     updater.autoDownload = false;
