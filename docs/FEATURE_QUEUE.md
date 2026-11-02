@@ -4,7 +4,7 @@
 
 | Stable ID | Disposition | Next action / gate |
 | --- | --- | --- |
-| TUV-ENCRYPTION | Tyler approved encryption for both apps, and on November 2 authorized merging SO PRs 51–55 in dependency order. | PR51 merged as 90057b3 after integrating phone PR50 and passing four workflows. PR52 adds Dexie durability gating and validated migration sources; integration verification continues. Encryption activation stays unavailable until recovery/second-device verification and full storage-surface coverage. Synthetic data/keys only; no provisioning, new service/repository, paid dependency, release or deployment. |
+| TUV-ENCRYPTION | Tyler approved encryption for both apps and on November 2 authorized merging SO PRs 51–55 in dependency order. | PR51 merged as 90057b3 and PR52 as 5ea7015, each after integrated verification. PR53 adds SQLite WAL/FULL, protected OS keys and exact pending receipts; its earlier Windows packaged probes and four workflows passed at a4b079a. Integration verification continues. Activation stays unavailable until recovery/second-device verification and full storage-surface coverage. Synthetic data/keys only; no provisioning, new service/repository, paid dependency, release or deployment. |
 | TUV-PR49-MERGE | Tyler explicitly said “Merge both” for SO49 and VBS5. | SO49 verified unchanged at f369624 with all4 checks green, merged as a789e33c62220d2deaac0b6124b1d7e4debf2e97. Main Windows run40811764419 completed successfully on that exact merge commit (package, install-recovery, legacy-bootstrap). Historical draft/unmerged notes below are superseded by this row. |
 
 ## October 29 — phone capture UI fundamentals

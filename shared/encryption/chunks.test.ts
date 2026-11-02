@@ -23,7 +23,8 @@ describe('bounded authenticated chunk stream', () => {
     expect(await openChunkManifest(master, scope, a.manifest)).toEqual(a.plan);
     await expect(verifyChunkStream(master,scope,a.manifest,sequence(chunks),async()=>{})).rejects.toThrow(EncryptionError);
     await expect(finalizeChunkManifest(master,scope,a.plan,sequence([chunks[0]]))).rejects.toThrow(EncryptionError);
-  }, 30000);
+  // Multi-megabyte AEAD corruption cases share CPU with native storage suites on Intel CI.
+  }, 90000);
   it('supports bounded plans for actual20GiB/32GiB consumer limits without allocating entire files', async () => {
     const master = generateMasterKey();
     for (const totalBytes of [0, 20*1024**3, 100*1024**3, MAX_STREAM_BYTES]) {

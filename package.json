@@ -58,8 +58,9 @@
     "test:recovery:guidance": "node --import tsx scripts/recoveryGuidanceSmoke.ts",
     "test:encryption": "vitest run shared/encryption src/security",
     "test:encryption:browser": "node --import tsx scripts/encryptionContractSmoke.ts",
-    "build:encryption:native": "node scripts/buildEncryptionNative.cjs",
-    "test:encryption:storage-browser": "node --import tsx scripts/encryptedStorageSmoke.ts"
+    "build:encryption:native": "node scripts/buildEncryptionNative.cjs && node scripts/buildWindowsCredentialLedger.cjs",
+    "test:encryption:storage-browser": "node --import tsx scripts/encryptedStorageSmoke.ts",
+    "test:encryption:native-storage": "vitest run src/security/sqliteEncryptedVaultStore.test.ts src/security/sqliteProtectedKeyStore.test.ts src/security/platformKeyringStore.test.ts src/security/cipherChunkStore.test.ts src/security/protectedRevisionLedger.test.ts src/security/pendingEncryptedCommit.test.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",
@@ -71,6 +72,7 @@
     "fflate": "0.8.3",
     "lucide-react": "^0.439.0",
     "mammoth": "1.13.0",
+    "node-addon-api": "8.3.0",
     "parse5": "8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -87,6 +89,7 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.0.0",
+    "node-gyp": "13.1.0",
     "playwright": "^1.63.0",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
@@ -154,6 +157,15 @@
       }
     ],
     "afterPack": "scripts/dictationAfterPack.cjs",
-    "afterSign": "scripts/dictationAfterSign.cjs"
+    "afterSign": "scripts/dictationAfterSign.cjs",
+    "asarUnpack": [
+      "electron/generated/*.node",
+      "node_modules/@primno/**/*.node",
+      "node_modules/@napi-rs/**/*.node"
+    ]
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "2.1.2",
+    "@primno/dpapi": "2.0.1"
   }
 }
