@@ -32,3 +32,33 @@ export async function observeRecoveryFixture(options: {
   }
   throw new Error('Timed out observing verified NSIS deletion and installer-tree quiescence; inspect fixture observations (no harness deletion attempted)');
 }
+
+/** The actual Windows PowerShell 5.1 observer, also executed by native unit tests. */
+export const recoveryFixtureProcessScript = `$all=@(Get-CimInstance Win32_Process)
+    $selected=New-Object 'System.Collections.Generic.HashSet[uint32]'
+    # Windows PowerShell 5.1 carries a JSON array as one pipeline object.
+    # Assign it first; an outer @(...pipeline...) would nest even an empty [].
+    $knownPids=ConvertFrom-Json -InputObject $env:OTA_RECOVERY_KNOWN_PIDS
+    if ($knownPids -isnot [System.Array]) { throw 'Recovery fixture known PIDs must be an array' }
+    foreach ($knownPid in $knownPids) {
+      if (($knownPid -isnot [int] -and $knownPid -isnot [long]) -or $knownPid -le 0 -or $knownPid -gt [uint32]::MaxValue) { throw 'Recovery fixture known PID must be a scalar UInt32' }
+      [void]$selected.Add([uint32]$knownPid)
+    }
+    if ($env:OTA_RECOVERY_FIXTURE_PID) { [void]$selected.Add([uint32]$env:OTA_RECOVERY_FIXTURE_PID) }
+    foreach ($row in $all) {
+      $command=[string]$row.CommandLine
+      if ($row.ExecutablePath -eq $env:OTA_RECOVERY_INSTALLER -or $row.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE -or
+        $command.IndexOf($env:OTA_UPGRADE_DIRECTORY,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+        $command.IndexOf($env:OTA_RECOVERY_INSTALLER,[System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        [void]$selected.Add([uint32]$row.ProcessId)
+      }
+    }
+    do {
+      $added=$false
+      foreach ($row in $all) { if ($selected.Contains([uint32]$row.ParentProcessId) -and $selected.Add([uint32]$row.ProcessId)) { $added=$true } }
+    } while ($added)
+    $rows=@($all | Where-Object { $selected.Contains([uint32]$_.ProcessId) } | ForEach-Object {
+      [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; path=$_.ExecutablePath; commandLine=$_.CommandLine;
+        installedApp=($_.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE) }
+    })
+    [pscustomobject]@{ processes=$rows } | ConvertTo-Json -Depth 4 -Compress`;

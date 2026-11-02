@@ -1,4 +1,4 @@
-import { observeRecoveryFixture, type RecoveryFixtureProcess } from '../../scripts/helpers/installRecoveryFixture';
+import { observeRecoveryFixture, recoveryFixtureProcessScript, type RecoveryFixtureProcess } from '../../scripts/helpers/installRecoveryFixture';
 import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
@@ -304,28 +304,7 @@ async function installedProcess(executable: string) {
 /** Observe the fixture process plus its NSIS launcher/unpack descendants, not
  * only the downloaded file's exact path. Read-only and confined to unique QA paths. */
 async function recoveryFixtureProcesses(executable: string, installer: string, fixturePid: number | undefined, knownPids: Set<number>): Promise<RecoveryFixtureProcess[]> {
-  const script = `$all=@(Get-CimInstance Win32_Process)
-    $selected=New-Object 'System.Collections.Generic.HashSet[uint32]'
-    foreach ($id in @($env:OTA_RECOVERY_KNOWN_PIDS | ConvertFrom-Json)) { [void]$selected.Add([uint32]$id) }
-    if ($env:OTA_RECOVERY_FIXTURE_PID) { [void]$selected.Add([uint32]$env:OTA_RECOVERY_FIXTURE_PID) }
-    foreach ($row in $all) {
-      $command=[string]$row.CommandLine
-      if ($row.ExecutablePath -eq $env:OTA_RECOVERY_INSTALLER -or $row.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE -or
-        $command.IndexOf($env:OTA_UPGRADE_DIRECTORY,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-        $command.IndexOf($env:OTA_RECOVERY_INSTALLER,[System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        [void]$selected.Add([uint32]$row.ProcessId)
-      }
-    }
-    do {
-      $added=$false
-      foreach ($row in $all) { if ($selected.Contains([uint32]$row.ParentProcessId) -and $selected.Add([uint32]$row.ProcessId)) { $added=$true } }
-    } while ($added)
-    $rows=@($all | Where-Object { $selected.Contains([uint32]$_.ProcessId) } | ForEach-Object {
-      [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; path=$_.ExecutablePath; commandLine=$_.CommandLine;
-        installedApp=($_.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE) }
-    })
-    [pscustomobject]@{ processes=$rows } | ConvertTo-Json -Depth 4 -Compress`;
-  const result = await windowsPowerShell(script, { OTA_UPGRADE_EXECUTABLE: canonicalExecutable(executable), OTA_UPGRADE_DIRECTORY: path.dirname(canonicalExecutable(executable)),
+  const result = await windowsPowerShell(recoveryFixtureProcessScript, { OTA_UPGRADE_EXECUTABLE: canonicalExecutable(executable), OTA_UPGRADE_DIRECTORY: path.dirname(canonicalExecutable(executable)),
     OTA_RECOVERY_INSTALLER: canonicalExecutable(installer), OTA_RECOVERY_FIXTURE_PID: fixturePid === undefined ? '' : String(fixturePid), OTA_RECOVERY_KNOWN_PIDS: JSON.stringify([...knownPids]) });
   const parsed = JSON.parse(result.stdout.trim());
   assert.ok(Array.isArray(parsed.processes), 'Native fixture process observation must return an array');
@@ -668,6 +647,10 @@ async function runInstallRecovery() {
   } catch (error) {
     writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined,
       versions: pair, signatures, safetyBackup, fixtureDownload, marking, requests, fixtureDeletion, fixtureObservations });
+    // Preserve the NSIS trace even if native process inspection itself failed
+    // before an observation could be recorded. Teardown must not erase it.
+    const fixtureFileEvidence = (file: string) => { try { return fs.readFileSync(file, 'utf8'); } catch (readError) { return { readError: String(readError) }; } };
+    writeEvidence('fixture-final-state.json', { executableExists: fs.existsSync(executable), marker: fixtureFileEvidence(failureMarker), diagnostic: fixtureFileEvidence(failureDiagnostic) });
     writeEvidence('fixture-native-diagnostics.json', await nativeInstallDiagnostics(executable).catch(diagnosticError => ({ error: String(diagnosticError) })));
     console.error('INSTALL RECOVERY PRIMARY FAILURE:', error);
     if (running) await running.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
