@@ -1,0 +1,21 @@
+Synthetic-data stage3 checkpoint; activation disabled. Full exact-head CI and remaining offline recovery/startup preflight are separate gates.
+
+/tmp/native-freeze-verify.log
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+   Duration  47.78s (transform 685ms, setup 0ms, collect 1.17s, tests 46.35s, environment 1ms, prepare 404ms)
+
+/tmp/workspace-archive-ceiling-final-tests.log
+ Test Files  6 passed (6)
+      Tests  67 passed (67)
+   Duration  25.36s (transform 600ms, setup 0ms, collect 1.14s, tests 44.12s, environment 1ms, prepare 386ms)
+
+/tmp/archive-retry-final-tests.log
+ Test Files  2 passed (2)
+      Tests  21 passed (21)
+   Duration  31.92s (transform 113ms, setup 0ms, collect 173ms, tests 39.68s, environment 0ms, prepare 103ms)
+
+/workspace/readable-export-guard-tests.log
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+   Duration  1.18s (transform 668ms, setup 0ms, collect 1.08s, tests 67ms, environment 1ms, prepare 382ms)

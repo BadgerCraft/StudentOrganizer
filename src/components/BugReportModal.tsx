@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { readPrivateReport, savePrivateReport, clearPrivateReport } from '../security/privateReportStorage';
+import React, { useEffect, useState, useRef } from 'react';
 import { ModalDialog } from './ModalDialog';
 import { downloadFile } from '../utils/downloadFile';
 import {
@@ -20,52 +21,33 @@ export const BugReportModal: React.FC<BugReportModalProps> = ({ isOpen, onClose,
   const [actionMessage, setActionMessage] = useState('');
   const [saved, setSaved] = useState(false);
   const [unreadableDraft, setUnreadableDraft] = useState(false);
+  const lifecycle = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
-    try {
-      const loaded = loadBugReportDraft(window.localStorage);
+    const started = ++lifecycle.current;
+    void readPrivateReport().then(loaded => {
+      if (started !== lifecycle.current) return;
       setDraft(loaded.ok && loaded.value ? loaded.value : createBugReportDraft(currentView));
-      setSaved(loaded.ok && !!loaded.value);
-      setStorageError(loaded.ok ? '' : loaded.error);
-      setUnreadableDraft(!loaded.ok);
-    } catch {
-      setDraft(createBugReportDraft(currentView));
-      setSaved(false);
-      setStorageError('Local storage is unavailable. Copy or download your report before closing.');
-      setUnreadableDraft(false);
-    }
-    setPreview(false);
-    setActionMessage('');
+      setSaved(loaded.ok && !!loaded.value); setStorageError(loaded.ok ? '' : loaded.error); setUnreadableDraft(!loaded.ok);
+    }, () => { if (started === lifecycle.current) { setSaved(false); setStorageError('Private storage is unavailable. Copy or download your report before closing.'); setUnreadableDraft(false); } });
+    setPreview(false); setActionMessage('');
+    return () => { lifecycle.current++; };
   }, [isOpen]);
 
   const updateDraft = (next: BugReportDraft) => {
-    setDraft(next);
-    setActionMessage('');
-    try {
-      const result = saveBugReportDraft(window.localStorage, next);
-      setSaved(result.ok);
-      setStorageError(result.ok ? '' : result.error);
-    } catch {
-      setSaved(false);
-      setStorageError('Local storage is unavailable. Copy or download your report before closing.');
-    }
+    const started = ++lifecycle.current; setDraft(next); setActionMessage(''); setSaved(false);
+    void savePrivateReport(next).then(result => { if (started === lifecycle.current) { setSaved(result.ok); setStorageError(result.ok ? '' : result.error); } }, () => { if (started === lifecycle.current) { setSaved(false); setStorageError('The private save was not verified. Keep this window open and copy or download your report before leaving.'); } });
   };
-  const startNew = () => {
+  const startNew = async () => {
     if (!window.confirm('Clear the saved report draft and start a new one?')) return;
+    const started = ++lifecycle.current;
     try {
-      const result = clearBugReportDraft(window.localStorage);
+      const result = await clearPrivateReport();
+      if (started !== lifecycle.current) return;
       if (!result.ok) { setStorageError(result.error); return; }
-    } catch {
-      setStorageError('The saved draft could not be cleared. Copy any text you need before closing.');
-      return;
-    }
-    setDraft(createBugReportDraft(currentView));
-    setUnreadableDraft(false);
-    setSaved(false);
-    setStorageError('');
-    setActionMessage('Draft cleared.');
-    setPreview(false);
+    } catch { if (started === lifecycle.current) setStorageError('The saved draft could not be cleared. Copy any text you need before closing.'); return; }
+    setDraft(createBugReportDraft(currentView)); setUnreadableDraft(false); setSaved(false); setStorageError(''); setActionMessage('Draft cleared.'); setPreview(false);
   };
   const copyReport = async () => {
     try {

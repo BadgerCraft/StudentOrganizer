@@ -1,5 +1,6 @@
+import { saveDatedBackup } from '../security/datedBackups';
 import type { OntarioTeacherDB } from '../db/database';
-import { recoveryStore, saveBackup, type RecoveryStore } from './backupStore';
+import { recoveryStore, type RecoveryStore } from './backupStore';
 let error:string|null=null;
 const listeners=new Set<()=>void>();
 export const automaticBackupStatus={
@@ -8,6 +9,6 @@ export const automaticBackupStatus={
 };
 export async function runAutomaticBackup(database:OntarioTeacherDB,userId:string,store:RecoveryStore=recoveryStore):Promise<void> {
  let next:string|null=null;
- try{await saveBackup(database,userId,'automatic',store);}catch(e){next=e instanceof Error?e.message:'Automatic backup failed.';}
+ try{await saveDatedBackup(database,userId,'automatic',store);}catch(e){next=e instanceof Error?e.message:'Automatic backup failed.';}
  if(error!==next){error=next;for(const listener of listeners)listener();}
 }

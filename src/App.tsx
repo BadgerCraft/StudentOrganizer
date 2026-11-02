@@ -54,9 +54,12 @@ export function App() {
   const participationDraftDirty = useRef(false);
   const participationActionBusy = useRef(false);
   const settingsDraftDirty = useRef(false);
+  const settingsActionBusy = useRef(false);
+  const handleSettingsBusy = useCallback((busy: boolean) => { settingsActionBusy.current = busy; }, []);
   const handleSettingsDirty = useCallback((dirty: boolean) => { settingsDraftDirty.current = dirty; }, []);
   const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
   const confirmParticipationDiscard = () => {
+    if (settingsActionBusy.current) { setParticipationError('Wait for the Settings save or protection step to finish before changing context.'); return false; }
     if (participationActionBusy.current) { setParticipationError('Wait for the participation action to finish before changing context.'); return false; }
     return (!participationDraftDirty.current && !settingsDraftDirty.current) || window.confirm(
       settingsDraftDirty.current ? 'Leave Settings with unsaved changes? Cancel keeps your edits.' : 'Discard unsaved participation note, category or level choice? Cancel keeps your current students and edits.'
@@ -718,6 +721,7 @@ export function App() {
             deviceId={appIdentity?.deviceId}
             onRefresh={() => {}}
             onOpenSeating={() => handleViewChange('seating')}
+            onBusyChange={handleSettingsBusy}
           /></div>
         )}
 
@@ -732,6 +736,7 @@ export function App() {
             onRefresh={() => {}}
             onOpenPortability={() => handleViewChange('portability')}
             onDirtyChange={handleSettingsDirty}
+            onBusyChange={handleSettingsBusy}
           />
         )}
       </main>

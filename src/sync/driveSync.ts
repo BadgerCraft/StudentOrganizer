@@ -1,10 +1,12 @@
+import { saveDatedBackup } from '../security/datedBackups';
+import { rendererStorageMode } from '../security/rendererStorageMode';
 import { RecoveryActionError, type RecoveryCode } from './recoveryGuidance';
 import type { OntarioTeacherDB } from '../db/database';
 import { PortabilityService } from '../services/portabilityService';
 import { getIdentityEpoch } from '../services/identityService';
-import { recoveryStore, saveBackup, type RecoveryStore } from './backupStore';
+import { recoveryStore, type RecoveryStore } from './backupStore';
 import { applySnapshot, assertWorkspaceAccess, guardMergeRelationships, snapshotDigest, dataSignature, mergeSnapshots, readSnapshot, resolvePlan, type MergePlan, type Snapshot } from './snapshot';
-export interface DriveStatus { configured:boolean; connected:boolean }
+export interface DriveStatus { configured:boolean; connected:boolean; protection?:'legacy'|'encrypted-v1'; workspaceUnlocked?:boolean }
 export interface RemoteSnapshot { id:string; name:string; modifiedTime:string }
 export interface DriveBridge {
   status():Promise<DriveResult<DriveStatus>>; connect():Promise<DriveResult<DriveStatus>>;
@@ -14,8 +16,18 @@ export interface DriveBridge {
 export type DriveResult<T>={ok:true;value:T}|{ok:false;message:string;code?:RecoveryCode};
 declare global { interface Window { desktopOrganizerDrive?:DriveBridge } }
 export async function unwrap<T>(promise:Promise<DriveResult<T>>):Promise<T> {const r=await promise;if(!r.ok)throw new RecoveryActionError(r.message,r.code??'unknown');return r.value;}
+/** Protected mode can never route a snapshot to the legacy plaintext sender. */
+export async function requireDriveProtection(bridge:DriveBridge):Promise<void> {
+  const mode=rendererStorageMode();
+  if(mode==='legacy')return;
+  if(mode!=='encrypted')throw new RecoveryActionError('Unlock the verified encrypted workspace before syncing.','auth','unchanged');
+  const status=await unwrap(bridge.status());
+  if(status.protection!=='encrypted-v1')throw new RecoveryActionError('Encrypted Drive setup is unavailable. Keep sync off; plaintext sync is blocked.','setup','unchanged');
+  if(status.workspaceUnlocked!==true)throw new RecoveryActionError('Unlock the verified encrypted workspace before syncing.','auth','unchanged');
+}
 export interface SyncPreview { plan:MergePlan; remote:RemoteSnapshot; remoteJSON:string; epoch:number; userId:string }
 export async function previewSync(database:OntarioTeacherDB,userId:string,remote:RemoteSnapshot,bridge:DriveBridge,store:RecoveryStore=recoveryStore):Promise<SyncPreview> {
+  await requireDriveProtection(bridge);
   const epoch=getIdentityEpoch();await assertWorkspaceAccess(database,userId,epoch);
   const {json}=await unwrap(bridge.download(remote.id));
   try { new PortabilityService(database).validateBackupJSON(json); } catch { throw new RecoveryActionError('Invalid Drive backup.','invalid','unchanged'); }
@@ -47,6 +59,7 @@ export async function previewSync(database:OntarioTeacherDB,userId:string,remote
 }
 /** Foreground only. Remote files are immutable dated snapshots; no remote file is overwritten. */
 export async function finishSync(database:OntarioTeacherDB,preview:SyncPreview,choices:Record<string,'local'|'remote'>,bridge:DriveBridge,store:RecoveryStore=recoveryStore):Promise<string> {
+  await requireDriveProtection(bridge);
   await assertWorkspaceAccess(database,preview.userId,preview.epoch);
   // A remote choice is bound to verified immutable bytes, and local choices to the displayed revision.
   const remoteNow=await unwrap(bridge.download(preview.remote.id));
@@ -55,7 +68,7 @@ export async function finishSync(database:OntarioTeacherDB,preview:SyncPreview,c
   if(dataSignature(current)!==dataSignature(preview.plan.local))throw new Error('Local work changed. Refresh before syncing.');
   const merged=resolvePlan(preview.plan,choices);
   new PortabilityService(database).validateBackupJSON(JSON.stringify(merged));
-  await saveBackup(database,preview.userId,'before-sync',store);
+  await saveDatedBackup(database,preview.userId,'before-sync',store);
   await applySnapshot(database,merged,preview.plan.local,preview.userId,preview.epoch);
   // Persist locally first. Offline/upload failures leave merged work and a recovery snapshot intact.
   let uploaded=false;
@@ -67,17 +80,20 @@ export async function finishSync(database:OntarioTeacherDB,preview:SyncPreview,c
   if(state?.base&&state.lastRemoteId) ancestors.push({id:state.lastRemoteId,digest:await snapshotDigest(state.base)});
   actual.organizerSync={ancestors:Array.from(new Map(ancestors.filter(a=>typeof a.id==='string'&&typeof a.digest==='string'&&/^[a-f0-9]{64}$/.test(a.digest)).map(a=>[a.id,a])).values()).slice(-100)};
   await assertWorkspaceAccess(database,preview.userId,preview.epoch);
+  await requireDriveProtection(bridge);
   const result=await unwrap(bridge.upload(JSON.stringify(actual)));uploaded=true;
   await store.state.put({id:'sync',lastRemoteId:result.id,base:actual});
   return result.id;
   } catch(error) { throw new RecoveryActionError('Local merge completed; Drive verification or checkpoint failed.',error instanceof RecoveryActionError?error.code:'unknown',uploaded?'merged-uploaded':'merged'); }
 }
 export async function publishFirstSnapshot(database:OntarioTeacherDB,userId:string,bridge:DriveBridge,store:RecoveryStore=recoveryStore):Promise<string> {
+  await requireDriveProtection(bridge);
   const epoch=getIdentityEpoch();await assertWorkspaceAccess(database,userId,epoch);
   if((await unwrap(bridge.list())).length)throw new Error('Drive already has versions. Choose one to review and merge first.');
   const snapshot=await readSnapshot(database);
   new PortabilityService(database).validateBackupJSON(JSON.stringify(snapshot));
   await assertWorkspaceAccess(database,userId,epoch);
+  await requireDriveProtection(bridge);
   const result=await unwrap(bridge.upload(JSON.stringify(snapshot)));
   try{await store.state.put({id:'sync',lastRemoteId:result.id,base:snapshot});}catch{throw new RecoveryActionError('Uploaded; checkpoint failed.','storage','uploaded');}
   return result.id;

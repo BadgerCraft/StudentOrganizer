@@ -1,3 +1,5 @@
+import { assertReadableExportAllowed } from '../security/readableExports';
+import { rendererStorageMode } from '../security/rendererStorageMode';
 import { markingImageDecodeBytes } from './importImages';
 import { imageDisplaySize, originalToDisplay } from './imageGeometry';
 import type { MarkingImagePage, MarkingPageFeedback } from './types';
@@ -5,7 +7,7 @@ import { renderMarkingReport, type MarkingReportInput } from './report';
 
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
-declare global { interface Window { desktopReports?: { exportPdf(filename: string, html: string): Promise<boolean> } } }
+declare global { interface Window { desktopReports?: { exportPdf(filename: string, html: string, revision?: number): Promise<boolean>; exportCsv?(filename: string, csv: string, revision: number): Promise<boolean>; cancelReadableExport?(): Promise<void> } } }
 export function supportsDesktopPdfExport(): boolean { return typeof window !== 'undefined' && typeof window.desktopReports?.exportPdf === 'function'; }
 
 /** Flatten only a copy: image pixels, crop, rotation and original-coordinate anchors match the editor. */
@@ -82,11 +84,17 @@ export async function renderAnnotatedMarkingReport(input: MarkingReportInput): P
 }
 
 /** Desktop writes genuine PDF bytes. Browser fallback is deliberately named printable HTML. */
-export async function exportAnnotatedMarkingReport(input: MarkingReportInput, assertAuthorized?: () => void): Promise<boolean> {
+export async function exportAnnotatedMarkingReport(input: MarkingReportInput, assertAuthorized?: () => void, revision?: number): Promise<boolean> {
+  const protectedPdf = rendererStorageMode() === 'encrypted' && supportsDesktopPdfExport() && typeof assertAuthorized === 'function' && Number.isSafeInteger(revision) && revision! > 0;
+  if (!protectedPdf) assertReadableExportAllowed();
+  assertAuthorized?.();
   const html = await renderAnnotatedMarkingReport(input);
   const filename = `marked-assessment-${input.commit.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   assertAuthorized?.();
-  if (supportsDesktopPdfExport()) return window.desktopReports!.exportPdf(`${filename}.pdf`, html);
+  if (protectedPdf) {
+    if (rendererStorageMode() !== 'encrypted') throw new Error('The protected workspace changed. No readable file was saved.');
+  } else assertReadableExportAllowed();
+  if (supportsDesktopPdfExport()) return protectedPdf ? window.desktopReports!.exportPdf(`${filename}.pdf`, html, revision) : window.desktopReports!.exportPdf(`${filename}.pdf`, html);
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${filename}-print-to-pdf.html`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);

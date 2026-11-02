@@ -1,7 +1,7 @@
 import Dexie from 'dexie';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import type { OntarioTeacherDB } from '../db/database';
-import { PortabilityService } from '../services/portabilityService';
+import { validateBackupDataWithTables } from '../services/backupValidation';
 import { assertWorkspaceAccess, type Snapshot } from '../sync/snapshot';
 import { getIdentityEpoch } from '../services/identityService';
 import { validateMarkingBackupFiles } from '../marking/portabilityValidation';
@@ -35,7 +35,7 @@ function collectStorage(source: Readonly<Record<string, string>>): Record<string
 function rows(snapshots: FrozenDatabases, db: Dexie): Record<string, any[]> {
   const captured = snapshots.get(db); if (!captured) throw new Error('Every source database must be registered with the durable writer gate.');
   if (Object.keys(captured).sort().join('|') !== db.tables.map(table => table.name).sort().join('|')) throw new Error('The encrypted source is missing database tables.');
-  return structuredClone(captured) as Record<string, any[]>;
+  return Object.fromEntries(Object.entries(captured).map(([table, values]) => [table, values.map(value => JSON.parse(JSON.stringify(value)))])) as Record<string, any[]>;
 }
 /** Memory-only inspection preserves existing authorization queries without granting live-RAM read bypasses. */
 async function inspectAuthority(database: OntarioTeacherDB, tables: Record<string, any[]>, userId: string, epoch: number): Promise<void> {
@@ -53,36 +53,33 @@ async function inspectAuthority(database: OntarioTeacherDB, tables: Record<strin
  * The adapter reads only memory; do not supply live localStorage while legacy writers are active.
  * The original databases/storage are never changed by collection or migration.
  */
+export interface StudentOrganizerMigrationSource extends MigrationSource<StudentOrganizerWorkingBundle> { withFinalReadLock<R>(task: (bundle: StudentOrganizerWorkingBundle) => Promise<R>): Promise<R> }
 export function createStudentOrganizerMigrationSource(options: {
   gate: DurableDexieGate; database: OntarioTeacherDB; recovery: RecoveryStore; userId: string;
   captureApplicationStorage: () => Readonly<Record<string, string>>;
-}): MigrationSource<StudentOrganizerWorkingBundle> {
+}): StudentOrganizerMigrationSource {
   const { gate, database, recovery, userId } = options;
   const epoch = getIdentityEpoch(), exportedAt = new Date().toISOString();
-  return {
-    withReadLock: task => gate.withReadLock(async snapshots => {
+  const capture = async <R>(snapshots: FrozenDatabases, task: (bundle: StudentOrganizerWorkingBundle) => Promise<R>): Promise<R> => {
       const primaryTables = rows(snapshots, database), recoveryTables = rows(snapshots, recovery);
       // Existing retained-user/archived-class/organization authority applies before exposing captured content.
       await inspectAuthority(database, primaryTables, userId, epoch);
       const primary: Snapshot = { version: 2, schemaVersion: 5, exportedAt, tables: primaryTables };
-      const service = new PortabilityService(database);
-      const primaryJSON = JSON.stringify(primary); if (primaryJSON.length > MAX_CHARS) throw new Error('Workspace exceeds the supported encrypted container size.');
-      service.validateBackupJSON(primaryJSON); await validateMarkingBackupFiles(primary.tables); await validateCaptureBackupFiles(primary.tables);
+      const validateSnapshot = (snapshot: Snapshot) => validateBackupDataWithTables({ ...snapshot, tables: { ...snapshot.tables } }, database.tables);
+      validateSnapshot(primary); await validateMarkingBackupFiles(primary.tables); await validateCaptureBackupFiles(primary.tables);
       if (Object.keys(recoveryTables).sort().join('|') !== 'backups|options|state') throw new Error('Unsupported recovery storage schema.');
       const backups = recoveryTables.backups as SavedBackup[], settings = recoveryTables.options as RecoveryOptions[], state = recoveryTables.state as SyncState[];
-      let size = primaryJSON.length;
       for (const backup of backups) {
-        if (!backup || typeof backup.id !== 'string' || !['automatic', 'manual', 'before-restore', 'before-sync'].includes(backup.reason) || !Number.isFinite(Date.parse(backup.createdAt)) || typeof backup.json !== 'string' || (size += backup.json.length) > MAX_CHARS) throw new Error('Invalid or oversized recovery snapshot.');
-        service.validateBackupJSON(backup.json); const parsed = JSON.parse(backup.json); await validateMarkingBackupFiles(parsed.tables); await validateCaptureBackupFiles(parsed.tables); await inspectAuthority(database, parsed.tables, userId, epoch);
+        if (!backup || typeof backup.id !== 'string' || !['automatic', 'manual', 'before-restore', 'before-sync'].includes(backup.reason) || !Number.isFinite(Date.parse(backup.createdAt)) || typeof backup.json !== 'string') throw new Error('Invalid recovery snapshot.');
+        const parsed = JSON.parse(backup.json); validateSnapshot(parsed); await validateMarkingBackupFiles(parsed.tables); await validateCaptureBackupFiles(parsed.tables); await inspectAuthority(database, parsed.tables, userId, epoch);
       }
       if (settings.length > 1 || settings.some(value => value.id !== 'options' || typeof value.automatic !== 'boolean' || ![1, 6, 24].includes(value.intervalHours) || ![7, 14, 30].includes(value.retain))) throw new Error('Invalid recovery settings.');
       if (state.length > 1 || state.some(value => value.id !== 'sync' || (value.lastRemoteId !== undefined && typeof value.lastRemoteId !== 'string'))) throw new Error('Invalid recovery checkpoint.');
-      for (const value of state) if (value.base) { service.validateBackupJSON(JSON.stringify(value.base)); await validateMarkingBackupFiles(value.base.tables); await validateCaptureBackupFiles(value.base.tables); await inspectAuthority(database, value.base.tables, userId, epoch); }
+      for (const value of state) if (value.base) { validateSnapshot(value.base); await validateMarkingBackupFiles(value.base.tables); await validateCaptureBackupFiles(value.base.tables); await inspectAuthority(database, value.base.tables, userId, epoch); }
       const applicationStorage = collectStorage(options.captureApplicationStorage());
       const bundle: StudentOrganizerWorkingBundle = { format: 'student-organizer-working', version: 1, primary, recovery: { backups, options: settings, state }, applicationStorage };
-      if (JSON.stringify(bundle).length > MAX_CHARS) throw new Error('Workspace and recovery history exceed the supported encrypted container size.');
       await inspectAuthority(database, primaryTables, userId, epoch);
       return task(bundle);
-    })
   };
+  return { withReadLock: task => gate.withReadLock(snapshots => capture(snapshots, task)), withFinalReadLock: task => gate.withFinalReadLock(snapshots => capture(snapshots, task)) };
 }

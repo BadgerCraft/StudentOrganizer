@@ -1,3 +1,4 @@
+import { privateStorageWrite } from '../security/encryptedRuntime';
 export type AppTheme = 'dark' | 'light';
 const KEY = 'student-organizer-appearance';
 
@@ -11,7 +12,6 @@ export function applyTheme(theme: AppTheme) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }
-export function saveTheme(theme: AppTheme) {
-  localStorage.setItem(KEY, theme);
-  applyTheme(theme);
+export async function saveTheme(theme: AppTheme): Promise<void> {
+  await privateStorageWrite(storage => storage.setItem(KEY, theme)); applyTheme(theme);
 }

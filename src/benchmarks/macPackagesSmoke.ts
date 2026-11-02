@@ -16,6 +16,20 @@ const evidence = path.join(release, 'mac-smoke');
 const arch = process.env.QA_ARCH || process.arch;
 fs.mkdirSync(evidence, { recursive: true });
 
+// A failed native quit must fail the QA check, rather than conceal the original
+// error until the whole CI job times out. Only this test-owned process is killed.
+async function closeOwnedApp(app: ElectronApplication): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([app.close(), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('Test-owned Mac app did not close within 15 seconds.')), 15_000);
+    })]);
+  } catch (error) {
+    try { app.process().kill('SIGKILL'); } catch { /* already exited */ }
+    throw error;
+  } finally { if (timer) clearTimeout(timer); }
+}
+
 // These helpers observe IndexedDB; all classroom writes use the packaged UI.
 async function records(page: Page, table: string): Promise<any[]> {
   return page.evaluate(tableName => new Promise<any[]>((resolve, reject) => {
@@ -103,6 +117,7 @@ async function checkApp(appPath: string, format: string) {
   const feedback = `Fictional Mac category feedback ${marker}`;
   const errors: string[] = [];
   let app: ElectronApplication | undefined;
+  let flowFailed = false;
   try {
     app = await electron.launch({ executablePath, timeout: 45000 });
     const userDataPath = await app.evaluate(({ app }) => app.getPath('userData'));
@@ -263,7 +278,7 @@ async function checkApp(appPath: string, format: string) {
     });
 
 
-    await app.close();
+    await closeOwnedApp(app);
     app = undefined;
     app = await electron.launch({ executablePath, timeout: 45000 });
     page = await app.firstWindow();
@@ -289,17 +304,21 @@ async function checkApp(appPath: string, format: string) {
       fullBackupAllStores: true, invalidRestoreRejected: true, confirmedRecoveryAndRestart: true,
       backupEvidence: path.basename(backupPath), nativeSaveDialog: 'CI selects evidence destination; unverified' };
   } catch (error) {
+    flowFailed = true; console.error('Fictional Mac package flow failed before cleanup:', error);
     if (app) {
-      const failedPage = await app.firstWindow().catch(() => undefined);
+      const failedPage = await app.firstWindow({ timeout: 5000 }).catch(() => undefined);
       if (failedPage && !failedPage.isClosed()) {
-        await failedPage.screenshot({ path: path.join(evidence, `${format}-failure.png`) }).catch(() => {});
-        const dialogText = await failedPage.locator('[data-testid="student-settings-modal"]').innerText().catch(() => 'Settings dialog closed');
+        await failedPage.screenshot({ path: path.join(evidence, `${format}-failure.png`), timeout: 5000 }).catch(() => {});
+        const dialogText = await failedPage.locator('[data-testid="student-settings-modal"]').innerText({ timeout: 2000 }).catch(() => 'Settings dialog closed');
         console.error('Fictional package flow UI at failure:', dialogText);
       }
     }
     throw error;
   } finally {
-    await app?.close();
+    if (app) {
+      try { await closeOwnedApp(app); }
+      catch (cleanupError) { if (!flowFailed) throw cleanupError; console.error('Test-owned Mac cleanup also failed:', cleanupError); }
+    }
   }
 }
 

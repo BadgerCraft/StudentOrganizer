@@ -1,0 +1,31 @@
+Focused phase evidence; full aggregate and exact-head CI are separately recorded in PR54. Synthetic data/keys only, activation disabled.
+
+/tmp/native-final-phase-tests.log
+ Test Files  5 passed (5)
+      Tests  42 passed (42)
+   Duration  68.20s (transform 625ms, setup 0ms, collect 1.05s, tests 67.06s, environment 1ms, prepare 496ms)
+
+/tmp/encryption-runtime-final.log
+ Test Files  2 passed (2)
+      Tests  32 passed (32)
+   Duration  41.07s (transform 341ms, setup 0ms, collect 498ms, tests 40.07s, environment 0ms, prepare 187ms)
+
+/tmp/encrypted-transfer-shutdown-final.log
+ Test Files  4 passed (4)
+      Tests  37 passed (37)
+   Duration  999ms (transform 378ms, setup 0ms, collect 564ms, tests 135ms, environment 1ms, prepare 243ms)
+
+/workspace/app-comment-bank-loading-browser.log
+PASS: manually entered complete 2×4 rubric matrix; duplicate achievement label and malformed pasted rubric rejected without descriptor loss; corrected custom labels persist.
+PASS: failed-only import survives source change and canceled departure; leaving requires explicit discard.
+PASS: pending text autosave, Back/document/submission/selection guards and cancel/reselect preserve exact feedback
+PASS: edited comment-bank source invalidates stale review; concurrent composers preserve newer bank additions; delayed import requires discard and cannot recreate a phantom guard; selecting bank feedback appends to existing passage text; primary button colors contrast.
+PASS: repeated Save/Cancel interruption retains edited passage bank review and feedback; explicit discard permits save.
+PASS: grouped TXT attachments retain originals and isolated comments; explicit same-student resubmission creates linked attempt; predecessor feedback and both queue entries survive reload.
+PASS: malformed DOCX, unsupported PDF, invalid UTF-8 and browser file-read failures produce named errors; cancelled/failed replacements keep original Retry; same-name replacement, duplicate completion and newer selection preservation pass without a redundant failure acknowledgment.
+PASS: later-item storage failure preserves earlier atomic import and pending student match; retry imports only remaining item; duplicate reimport rejected; official records unchanged, zero external requests or browser exceptions.
+
+/workspace/app-archive-runtime-repairs.log
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Duration  37.41s (transform 1.03s, setup 0ms, collect 1.62s, tests 36.51s, environment 1ms, prepare 414ms)

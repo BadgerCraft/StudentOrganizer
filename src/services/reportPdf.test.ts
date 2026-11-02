@@ -43,6 +43,27 @@ describe('local desktop PDF export', () => {
   });
 });
 
+describe('protected PDF context guards', () => {
+  it.each(['save-dialog', 'load', 'print', 'write', 'read'])('rejects context loss during %s without replacing the destination', async phase => {
+    const f = fixture(); let current = true;
+    if (phase === 'save-dialog') f.dialog.showSaveDialog.mockImplementationOnce(async () => { current = false; return { canceled: false, filePath: '/fictional/report.pdf' }; });
+    if (phase === 'load') f.window.loadURL.mockImplementationOnce(async () => { current = false; });
+    if (phase === 'print') f.window.webContents.printToPDF.mockImplementationOnce(async () => { current = false; return f.pdf; });
+    if (phase === 'write') f.write.mockImplementationOnce(async () => { current = false; });
+    if (phase === 'read') f.read.mockImplementationOnce(async () => { current = false; return f.pdf; });
+    await expect(f.run('marked-assessment-fictional.pdf', '<!doctype html><p>fictional</p>', { assertCurrent: () => { if (!current) throw Error('revoked'); } })).rejects.toThrow();
+    expect(f.replace).not.toHaveBeenCalled();
+    if (phase === 'load') expect(f.window.webContents.printToPDF).not.toHaveBeenCalled();
+    if (['write', 'read'].includes(phase)) expect(f.cleanup).toHaveBeenCalled();
+  });
+  it('communicates protected plaintext cleanup failure while preserving legacy behavior', async () => {
+    const f = fixture(); f.cleanup.mockRejectedValue(Error('private path'));
+    await expect(f.run('marked-assessment-fictional.pdf', '<!doctype html>', { assertCurrent: () => {} })).rejects.toMatchObject({ code: 'REPORT_PUBLISHED_CLEANUP_REQUIRED' });
+    expect(f.replace).toHaveBeenCalledOnce();
+    expect(await f.run('marked-assessment-fictional.pdf', '<!doctype html>')).toBe(true);
+  });
+});
+
 describe('PDF overwrite preservation on the real filesystem', () => {
   it.each(['generation', 'invalid-generation', 'write', 'validation', 'replacement', 'success', 'cancel'])
     ('preserves existing bytes and cleans staging on %s', async outcome => {

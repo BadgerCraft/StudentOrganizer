@@ -1,13 +1,18 @@
+import { downloadFile } from '../../utils/downloadFile';
+import { rendererStorageMode } from '../../security/rendererStorageMode';
+import { protectedReadableRevision } from '../../security/readableExports';
+import { lockEncryptedRuntime } from '../../security/encryptedRuntime';
+import { readFeedbackBank, writeFeedbackBank } from '../../security/privateFeedbackStorage';
 import { useEffect, useRef, useState } from 'react';
 import type { MarkingActor } from '../types';
-import { addReviewedBankComments, assertCommentBankActor, exportCommentBank, importCommentBankFile, loadCommentBank, parseCommentBank, saveCommentBank } from '../commentBank';
+import { assertCommentBankActor, exportCommentBank, importCommentBankFile, parseCommentBank } from '../commentBank';
 
 const button = 'rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm disabled:opacity-50';
 const field = 'w-full rounded-lg border border-slate-300 bg-white p-2 text-slate-900';
 
 /** Caller inserts the chosen text into its focused editor; links remain caller-owned. */
-export function CommentBankPicker({ actor, onSelect, onDirtyChange, disabled = false }: {
-  actor: MarkingActor; onSelect: (text: string) => void; onDirtyChange?: (dirty: boolean) => void; disabled?: boolean;
+export function CommentBankPicker({ actor, onSelect, onDirtyChange, onSavingChange, disabled = false }: {
+  actor: MarkingActor; onSelect: (text: string) => void; onDirtyChange?: (dirty: boolean) => void; onSavingChange?: (saving: boolean) => void; disabled?: boolean;
 }) {
   const [bank, setBank] = useState<string[]>([]);
   const [view, setView] = useState<'closed' | 'choose' | 'import'>('closed');
@@ -17,23 +22,26 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, disabled = f
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const busy = useRef(false);
+  const exportPending = useRef(false);
   const lifecycle = useRef(0);
   useEffect(() => {
-    lifecycle.current++; busy.current = false; setImporting(false);
+    lifecycle.current++; busy.current = false; setImporting(false); setSaving(false);
     setBank([]); setView('closed'); setReview(null); setPaste(''); setError(''); setMessage('');
-    try { setBank(loadCommentBank(window.localStorage, actor)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); }
-    return () => { lifecycle.current++; onDirtyChange?.(false); };
+    const started = lifecycle.current;
+    void readFeedbackBank(actor).then(value => { if (started === lifecycle.current) setBank(value); }, cause => { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); });
+    return () => { lifecycle.current++; if (exportPending.current) { void window.desktopReports?.cancelReadableExport?.().catch(() => lockEncryptedRuntime()); onSavingChange?.(false); } onDirtyChange?.(false); };
   }, [actor.userId, actor.epoch]);
   const reviewComments = (comments: string[]) => { setReview(comments); onDirtyChange?.(true); setError(''); setMessage(''); };
   const matches = bank.map((text, index) => ({ text, index })).filter(({ text }) => text.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   return <section aria-label="Comment bank" className="rounded-lg border border-slate-200 p-3 space-y-2">
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={button} disabled={disabled || importing} onClick={() => {
+      <button type="button" className={button} disabled={disabled || importing} onClick={async () => {
         if (view === 'choose') { setView('closed'); return; }
-        try { setBank(loadCommentBank(window.localStorage, actor)); setView('choose'); setMessage(''); setError(''); }
-        catch (cause) { setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); }
+        const started = lifecycle.current;
+        try { const value = await readFeedbackBank(actor); if (started !== lifecycle.current) return; setBank(value); setView('choose'); setMessage(''); setError(''); }
+        catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'The saved comment bank is unavailable.'); }
       }}>Choose bank comment ({bank.length})</button>
       <button type="button" className={button} disabled={disabled || importing} onClick={() => { setView('import'); setMessage(''); }}>Import comment bank</button>
     </div>
@@ -47,12 +55,25 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, disabled = f
         }}>{text}</button></li>)}</ul>
         {matches.length === 0 && <p className="text-sm">No matching comments.</p>}
         <button type="button" className={button} disabled={disabled || importing} onClick={() => { setView('import'); reviewComments([...bank]); }}>Edit bank comments</button>
-        <button type="button" className={button} disabled={disabled || importing} onClick={() => {
+        <button type="button" className={button} disabled={disabled || importing || saving} onClick={async () => {
+          if (exportPending.current) return;
+          const started = lifecycle.current;
+          exportPending.current = true; setSaving(true); onSavingChange?.(true);
           try {
             assertCommentBankActor(actor);
-            const url = URL.createObjectURL(new Blob([exportCommentBank(bank)], { type: 'text/csv;charset=utf-8' }));
-            const link = document.createElement('a'); link.href = url; link.download = 'comment-bank.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setMessage('Comment bank exported.');
-          } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export comment bank.'); }
+            if (rendererStorageMode() === 'encrypted') {
+              const revision = await protectedReadableRevision(); assertCommentBankActor(actor);
+              const current = await readFeedbackBank(actor); assertCommentBankActor(actor);
+              if (started !== lifecycle.current || rendererStorageMode() !== 'encrypted') throw new Error('Comment bank context changed. No readable file was saved.');
+              if (!window.desktopReports?.exportCsv) throw new Error('Protected CSV export is unavailable. No readable file was saved.');
+              const saved = await window.desktopReports.exportCsv('comment-bank.csv', exportCommentBank(current), revision);
+              if (started === lifecycle.current) setMessage(saved ? 'Unencrypted comment bank CSV saved.' : 'Export cancelled. No file was saved.');
+            } else {
+              downloadFile(new Blob([exportCommentBank(bank)], { type: 'text/csv;charset=utf-8' }), 'comment-bank.csv');
+              setMessage('Comment bank download requested. Check your downloads.');
+            }
+          } catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not export comment bank.'); }
+          finally { exportPending.current = false; if (started === lifecycle.current) { setSaving(false); onSavingChange?.(false); } }
         }}>Export comment bank</button>
       </>}
     </div>}
@@ -85,20 +106,24 @@ export function CommentBankPicker({ actor, onSelect, onDirtyChange, disabled = f
           <button type="button" className={`${button} mt-5`} aria-label={`Remove bank comment ${index + 1}`} onClick={() => reviewComments(review.filter((_, at) => at !== index))}>Remove</button>
         </div>)}</div>
         <div className="flex gap-2 flex-wrap">
-          <button type="button" className={button} onClick={() => {
-            try { setBank(addReviewedBankComments(window.localStorage, actor, review)); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comments added to your bank.'); }
-            catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
+          <button type="button" className={button} onClick={async () => {
+            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); setSaving(true); onSavingChange?.(true);
+            try { const value = await writeFeedbackBank(actor, review, 'add'); if (started !== lifecycle.current) return; setBank(value); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comments added to your bank.'); }
+            catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
+            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); setSaving(false); } }
           }}>Add reviewed comments to bank</button>
-          <button type="button" className={button} onClick={() => {
-            try { setBank(saveCommentBank(window.localStorage, actor, review)); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comment bank saved.'); }
-            catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
+          <button type="button" className={button} onClick={async () => {
+            if (busy.current) return; const started = lifecycle.current; busy.current = true; setImporting(true); setSaving(true); onSavingChange?.(true);
+            try { const value = await writeFeedbackBank(actor, review, 'replace'); if (started !== lifecycle.current) return; setBank(value); setReview(null); setPaste(''); setView('choose'); onDirtyChange?.(false); setMessage('Reviewed comment bank saved.'); }
+            catch (cause) { if (started === lifecycle.current) setError(cause instanceof Error ? cause.message : 'Could not save comments. Your review is retained; retry saving.'); }
+            finally { onSavingChange?.(false); if (started === lifecycle.current) { busy.current = false; setImporting(false); setSaving(false); } }
           }}>Replace bank with reviewed comments</button>
         </div>
       </div>}
     </fieldset>}
-    {importing && <p role="status" className="text-sm">Reading comment bank…</p>}
+    {importing && <p role="status" className="text-sm">{saving ? 'Saving comment bank…' : 'Reading comment bank…'}</p>}
     {message && <p role="status" className="text-sm text-emerald-800">{message}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    {view !== 'closed' && <p className="text-xs text-slate-600">This teacher’s bank is saved on this device. It is separate from student records and is not included in the application backup. Export the bank to keep a transferable copy.</p>}
+    {view !== 'closed' && <p className="text-xs text-slate-600">{rendererStorageMode() === 'legacy' ? 'This teacher’s bank is saved on this device. It is separate from student records and is not included in the application backup. Export the bank to keep a transferable copy.' : 'This teacher’s bank is included in encrypted workspace backups. Keep a verified encrypted backup and its recovery code separately.'}</p>}
   </section>;
 }
