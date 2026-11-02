@@ -1,3 +1,4 @@
+import { observeRecoveryFixture, type RecoveryFixtureProcess } from '../../scripts/helpers/installRecoveryFixture';
 import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import assert from 'node:assert/strict';
@@ -300,6 +301,40 @@ async function installedProcess(executable: string) {
   const parsed = result.stdout.trim() ? JSON.parse(result.stdout.trim()) : [];
   return (Array.isArray(parsed) ? parsed : [parsed]) as { pid: number; path: string; version: string; title: string }[];
 }
+/** Observe the fixture process plus its NSIS launcher/unpack descendants, not
+ * only the downloaded file's exact path. Read-only and confined to unique QA paths. */
+async function recoveryFixtureProcesses(executable: string, installer: string, fixturePid: number | undefined, knownPids: Set<number>): Promise<RecoveryFixtureProcess[]> {
+  const script = `$all=@(Get-CimInstance Win32_Process)
+    $selected=New-Object 'System.Collections.Generic.HashSet[uint32]'
+    foreach ($id in @($env:OTA_RECOVERY_KNOWN_PIDS | ConvertFrom-Json)) { [void]$selected.Add([uint32]$id) }
+    if ($env:OTA_RECOVERY_FIXTURE_PID) { [void]$selected.Add([uint32]$env:OTA_RECOVERY_FIXTURE_PID) }
+    foreach ($row in $all) {
+      $command=[string]$row.CommandLine
+      if ($row.ExecutablePath -eq $env:OTA_RECOVERY_INSTALLER -or $row.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE -or
+        $command.IndexOf($env:OTA_UPGRADE_DIRECTORY,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+        $command.IndexOf($env:OTA_RECOVERY_INSTALLER,[System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        [void]$selected.Add([uint32]$row.ProcessId)
+      }
+    }
+    do {
+      $added=$false
+      foreach ($row in $all) { if ($selected.Contains([uint32]$row.ParentProcessId) -and $selected.Add([uint32]$row.ProcessId)) { $added=$true } }
+    } while ($added)
+    $rows=@($all | Where-Object { $selected.Contains([uint32]$_.ProcessId) } | ForEach-Object {
+      [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; path=$_.ExecutablePath; commandLine=$_.CommandLine;
+        installedApp=($_.ExecutablePath -eq $env:OTA_UPGRADE_EXECUTABLE) }
+    })
+    [pscustomobject]@{ processes=$rows } | ConvertTo-Json -Depth 4 -Compress`;
+  const result = await windowsPowerShell(script, { OTA_UPGRADE_EXECUTABLE: canonicalExecutable(executable), OTA_UPGRADE_DIRECTORY: path.dirname(canonicalExecutable(executable)),
+    OTA_RECOVERY_INSTALLER: canonicalExecutable(installer), OTA_RECOVERY_FIXTURE_PID: fixturePid === undefined ? '' : String(fixturePid), OTA_RECOVERY_KNOWN_PIDS: JSON.stringify([...knownPids]) });
+  const parsed = JSON.parse(result.stdout.trim());
+  assert.ok(Array.isArray(parsed.processes), 'Native fixture process observation must return an array');
+  for (const row of parsed.processes) {
+    assert.ok(Number.isSafeInteger(row.pid) && row.pid > 0 && Number.isSafeInteger(row.parentPid) && typeof row.installedApp === 'boolean', 'Native fixture process observation is invalid');
+    knownPids.add(row.pid);
+  }
+  return parsed.processes;
+}
 async function closeRelaunched(pid: number) {
   await windowsPowerShell('$p=Get-Process -Id $env:OTA_UPGRADE_PID -ErrorAction Stop; if (-not $p.CloseMainWindow()) { throw "Reopened app has no closable visible window" }; $p.WaitForExit(10000); if (-not $p.HasExited) { throw "Reopened app did not close" }', { OTA_UPGRADE_PID: String(pid) });
 }
@@ -495,6 +530,9 @@ async function runInstallRecovery() {
   const installDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fictional-ota-install-recovery-'));
   const executable = path.join(installDir, 'Ontario Teacher Assessment.exe');
   const failureMarker = path.join(installDir, 'student-organizer-ci-install-failure.txt');
+  const failureDiagnostic = path.join(installDir, 'student-organizer-ci-install-diagnostic.txt');
+  const fixtureObservations: unknown[] = [];
+  let fixtureDeletion: { pid: number; attempts: number } | undefined;
   let running: Awaited<ReturnType<typeof launchInstalled>> | undefined;
   let setup: ChildProcess | undefined;
   let marking: MarkingDesktopEvidence | undefined;
@@ -533,9 +571,13 @@ async function runInstallRecovery() {
     await dialog.getByRole('button', { name: 'Install and reopen', exact: true }).click();
     await Promise.race([exit, delay(60000).then(() => { throw new Error('Production updater did not close A for the failure fixture'); })]);
     running = undefined;
-    await waitUntil(async () => fs.existsSync(failureMarker) ? true : undefined, 'deliberate post-copy NSIS failure marker', 120000);
-    await waitUntil(async () => (await installedProcess(fixtureDownload)).length === 0 ? true : undefined,
-      'deliberate failure installer process exit', 120000);
+    const knownFixturePids = new Set<number>();
+    const readFixtureFile = (file: string) => { try { return fs.readFileSync(file, 'utf8'); } catch (error: any) { if (error.code === 'ENOENT') return undefined; throw error; } };
+    fixtureDeletion = await observeRecoveryFixture({
+      marker: () => readFixtureFile(failureMarker), diagnostic: () => readFixtureFile(failureDiagnostic), executableExists: () => fs.existsSync(executable),
+      processes: pid => recoveryFixtureProcesses(executable, fixtureDownload, pid, knownFixturePids), sleep: delay,
+      record: observation => { fixtureObservations.push(observation); if (fixtureObservations.length > 60) fixtureObservations.shift(); writeEvidence('fixture-observations.json', fixtureObservations); }
+    });
     assert.equal(fs.existsSync(executable), false, 'The failure fixture must leave the installed executable unusable');
     assert.equal((await installedProcess(executable)).length, 0, 'A failed replacement must not claim an automatic reopen');
 
@@ -607,7 +649,7 @@ async function runInstallRecovery() {
 
     writeEvidence('install-recovery-results.json', {
       versions: pair, signatures, acknowledgedUnsigned: true, profilePreserved: true,
-      failureFixture: { marker: path.basename(failureMarker), downloadedInstaller: path.basename(fixtureDownload),
+      failureFixture: { marker: path.basename(failureMarker), deletion: fixtureDeletion, observedInstallerTreeQuietMilliseconds: 1500, downloadedInstaller: path.basename(fixtureDownload),
         installerProcessExited: true, executableMissing: true, kind: 'deterministic post-copy NSIS abort; not a physical power interruption' },
       safetyBackup: { file: path.basename(safetyBackup), schemaVersion: backup.schemaVersion },
       installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, {
@@ -625,7 +667,8 @@ async function runInstallRecovery() {
     console.log('PASS: A deterministic post-launch NSIS failure left the app unusable while preserving the complete safety backup; manual B repair plus actual UI restore recovered all 41 current tables, visible marking and identical report bytes across another restart.');
   } catch (error) {
     writeEvidence('failure.json', { error: String(error), stack: error instanceof Error ? error.stack : undefined,
-      versions: pair, signatures, safetyBackup, fixtureDownload, marking, requests });
+      versions: pair, signatures, safetyBackup, fixtureDownload, marking, requests, fixtureDeletion, fixtureObservations });
+    writeEvidence('fixture-native-diagnostics.json', await nativeInstallDiagnostics(executable).catch(diagnosticError => ({ error: String(diagnosticError) })));
     console.error('INSTALL RECOVERY PRIMARY FAILURE:', error);
     if (running) await running.page.screenshot({ path: path.join(evidenceDir, 'failed.png'), fullPage: true }).catch(() => {});
     throw error;
