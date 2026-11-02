@@ -6,14 +6,39 @@ import { transferStatus, captureTransferStatus, acceptedReceipt, transferZip } f
 import './style.css';
 const root = document.querySelector<HTMLDivElement>('#app')!;
 if (window.CaptureNative) document.documentElement.classList.add('native-app');
-root.innerHTML = `<h1>Phone capture</h1><p>Fictional-data pilot · no AI processing</p><p class="notice">Name an assignment, capture one student’s pages, then Preview and label the set. Originals stay here until you explicitly delete the assignment. Keep a local ZIP backup: browser storage can be cleared.</p><p id="status" role="status" aria-live="polite">Opening local assignments…</p><fieldset id="controls" disabled>
-<nav aria-label="Capture navigation"><button id="home">Home</button><button id="new">New assignment</button></nav><section id="home-view" aria-labelledby="home-title"><h2 id="home-title">Saved assignments</h2><p>Drafts and completed packages stay on this device until you explicitly delete them. Open a package to check its Drive delivery confirmation.</p><div id="home-list"></div></section><section id="editor-view"><label>Saved assignments<select id="archive"></select></label><button id="delete">Delete this package</button><button id="late-work">Add late work</button><section id="assignment-history" aria-label="Linked assignment history"></section><p id="late-work-help" hidden>Capture only the new work or additional pages. The completed package stays unchanged. On desktop, choose the student and explicitly append to their existing draft. Finalized or archived marking cannot receive appended pages.</p>
-<label>Assignment name<input id="assignment" maxlength="120" placeholder="Fictional leaf study"></label><button id="name">Save assignment name</button>
-<p id="local-status" role="status"></p><p id="phase"></p><section id="intake"><button id="native-camera">Start continuous camera</button><label id="browser-camera">Take a photo (browser)<input id="camera" type="file" accept="image/jpeg,image/png" capture="environment"></label><label>Import photos for this student<input id="files" type="file" accept="image/jpeg,image/png" multiple></label><small>Up to 40 students × 10 pages; 8 MB / 20 megapixels per photo; 800 megapixels and 256 MB per assignment including retained originals. Cancel the native camera when ready to Preview. Camera cancellation keeps saved pages.</small><button id="preview">Preview this student</button></section>
-<section id="pages" aria-label="Current student pages"></section><section id="label-section"><label>Student name label<input id="label" maxlength="120"></label><small>This is a label only. Choose the actual student on desktop.</small><button id="save-group">Save &amp; Finish</button><button id="resume">Take more photos</button><button id="discard-draft">Discard current student draft</button></section>
-<section id="groups" aria-label="Saved student groups"></section><button id="done">All done — complete locally</button><button id="export">Export local ZIP</button><section aria-label="Drive delivery for this package"><h2>Drive delivery for this package</h2><p id="delivery-status" role="status" aria-live="polite"></p><p id="delivery-detail"></p><button id="drive-queue">Transfer completed ZIP to private Drive</button><button id="drive-settings">Private Drive settings</button><p id="transfer-status"></p></section></section></fieldset>`;
+root.innerHTML = `
+<header><div><p class="eyebrow">Student Organizer · fictional-data pilot</p><h1>Phone capture</h1></div><button id="theme" aria-label="Switch to light mode">Light mode</button></header>
+<p id="status" role="status" aria-live="polite">Opening local assignments…</p>
+<fieldset id="controls" disabled>
+<nav aria-label="Capture navigation"><button id="home">Home</button><button id="new">New assignment</button></nav>
+<section id="home-view" aria-labelledby="home-title"><h2 id="home-title">Saved assignments</h2><p>Resume a student’s pages or open a completed package to transfer it.</p><div id="home-list"></div></section>
+<section id="editor-view" aria-labelledby="task-title">
+<aside id="upload-checklist" aria-label="Upload prerequisites"><ul id="checklist"></ul><p id="upload-readiness" role="status" aria-live="polite"></p><progress id="upload-progress" aria-label="Upload in progress" hidden></progress><button id="drive-queue" class="primary">Upload</button></aside>
+<div class="task-heading"><p id="step" class="eyebrow"></p><h2 id="task-title" tabindex="-1"></h2><p id="phase"></p></div>
+<p id="local-status" role="status"></p>
+<details id="package-details"><summary>Assignment &amp; saved packages</summary><label>Saved assignments<select id="archive"></select></label><section id="assignment-history" aria-label="Linked assignment history"></section><button id="delete" class="danger">Delete this package</button></details>
+<p id="late-work-help" class="notice" hidden>Capture only the new work or additional pages. The completed package stays unchanged. On desktop, choose the student and explicitly append to their existing draft. Finalized or archived marking cannot receive appended pages.</p>
+<section id="setup"><label>Assignment name<input id="assignment" maxlength="120" placeholder="Class · assignment name" autocomplete="off"></label><button id="name" class="primary">Save assignment name</button></section>
+<section id="intake" aria-label="Capture this student’s pages"><button id="native-camera" class="primary">Start continuous camera</button><label id="browser-camera" class="file-action">Take a photo (browser)<input id="camera" type="file" accept="image/jpeg,image/png" capture="environment"></label><label class="file-action">Import photos for this student<input id="files" type="file" accept="image/jpeg,image/png" multiple></label><p>Keep capturing pages for this student, then preview and label the set.</p><details><summary>Capture limits &amp; camera help</summary><p>Up to 40 students × 10 pages; 8 MB / 20 megapixels per photo; 800 megapixels and 256 MB per assignment including retained originals. Cancel the native camera when ready to Preview. Camera cancellation keeps saved pages.</p></details><button id="preview" class="primary">Preview this student</button></section>
+<section id="pages" aria-label="Current student pages"></section>
+<section id="label-section"><label>Student name label<input id="label" maxlength="120" required aria-describedby="label-help" autocomplete="off"></label><p id="label-help">Required label only. Choose the actual student on desktop; no automatic matching.</p><div class="actions"><button id="save-group" class="primary">Save &amp; Finish</button><button id="resume">Back — take more photos</button></div><button id="discard-draft" class="danger">Discard current student draft</button></section>
+<section id="saved-summary"><h3 id="groups-title">Saved students</h3><section id="groups" aria-label="Saved student groups"></section></section>
+<section id="complete-action"><p>When every student’s set is saved, finish the assignment on this device.</p><button id="done" class="primary">All done — complete locally</button></section>
+<section id="delivery" aria-label="Transfer completed assignment"><h3>Transfer to your computer</h3><p>Export a ZIP backup or deliberately send to private Drive. On desktop, match each label to a student yourself.</p><button id="export">Export local ZIP</button><section aria-label="Drive delivery for this package"><h3>Private Drive</h3><p id="delivery-status" role="status" aria-live="polite"></p><p id="delivery-detail"></p><button id="check-upload">Recheck package and upload status</button><button id="drive-settings">Private Drive settings</button><p id="transfer-status"></p></section><button id="late-work">Add late work</button></section>
+</section></fieldset>
+<footer><details><summary>Privacy &amp; keeping your photos</summary><p>No AI processing. Originals stay on this device until you explicitly delete the assignment. Browser storage can be cleared: export and verify a local ZIP backup. Completing an assignment does not upload it.</p></details></footer>`;
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+function applyTheme(light:boolean) {
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  el('theme').textContent = light ? 'Dark mode' : 'Light mode';
+  el('theme').setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} mode`);
+}
+applyTheme(localStorage.getItem('capture-theme') === 'light');
+el('theme').onclick = () => { const light = document.documentElement.dataset.theme !== 'light'; applyTheme(light); localStorage.setItem('capture-theme', light ? 'light' : 'dark'); };
 const db = new CaptureDB(); let batch = emptyBatch(), busy = false; let renderGeneration = 0; let view: 'home'|'editor' = localStorage.getItem('capture-view') === 'editor' ? 'editor' : 'home';
+let validatedPackage = '', packageValidationError = false, uploadPreparing = false;
+const packageKey = () => `${batch.captureId}:${batch.revision}`;
+const uncertainKey = () => `capture-upload-uncertain:${packageKey()}`;
 const status = (message:string) => { el('status').textContent = message; };
 async function persist(next:Batch) { batch = await save(db,next); status(`Saved locally · ${batch.groups.length} student group(s), ${batch.pages.length} current page(s).`); }
 async function render() {
@@ -56,19 +81,49 @@ async function render() {
   el<HTMLInputElement>('assignment').value = batch.assignment;
   el<HTMLInputElement>('assignment').disabled = batch.completed || !!batch.parentBatchId || !!batch.pages.length || !!batch.groups.length;
   el<HTMLButtonElement>('name').disabled = el<HTMLInputElement>('assignment').disabled;
-  el('phase').textContent = batch.completed ? 'Completed on this device · ready for deliberate export or transfer' : batch.stage === 'preview' ? 'Preview, edit, then label this student’s page set' : 'Capture pages for one student';
-  el('intake').hidden = batch.completed || batch.stage === 'preview'; el('label-section').hidden = batch.completed || batch.stage !== 'preview';
+  const setup = !batch.assignment;
+  el('task-title').textContent = setup ? 'Name this assignment' : batch.assignment;
+  el('step').textContent = batch.completed ? 'Complete · transfer' : setup ? 'Assignment setup' : batch.stage === 'preview' ? 'Preview & label' : 'Capture · one student at a time';
+  // A saved name becomes secondary context; keep renaming in package details.
+  if (setup) el('editor-view').insertBefore(el('setup'), el('intake'));
+  else el('package-details').append(el('setup'));
+  el('setup').hidden = batch.completed || !!batch.pages.length || !!batch.groups.length || !!batch.parentBatchId;
+  el('delivery').hidden = !batch.completed;
+  el('saved-summary').hidden = !batch.groups.length || batch.stage === 'preview' || !!batch.pages.length;
+  el('complete-action').hidden = batch.completed || !batch.groups.length || batch.stage === 'preview' || !!batch.pages.length;
+  el('groups-title').textContent = `${batch.groups.length} saved student set${batch.groups.length === 1 ? '' : 's'}`;
+  el('phase').textContent = setup ? 'Use your class and assignment name to keep this batch recognizable.' : batch.completed ? 'Completed on this device · ready for deliberate export or transfer' : batch.stage === 'preview' ? 'Preview, edit, then label this student’s page set' : 'Capture pages for one student';
+  el('intake').hidden = setup || batch.completed || batch.stage === 'preview'; el('label-section').hidden = batch.completed || batch.stage !== 'preview';
   el<HTMLInputElement>('label').value = batch.draftLabel;
+  el('native-camera').hidden = !window.CaptureNative?.startCamera;
+  el('name').classList.toggle('primary', setup);
   el<HTMLButtonElement>('native-camera').disabled = !window.CaptureNative?.startCamera || !batch.assignment || batch.pages.length >= 10 || batch.groups.length >= 40;
   el('browser-camera').hidden = !!window.CaptureNative?.startCamera;
   for (const id of ['camera','files','preview']) el<HTMLInputElement>(id).disabled = !batch.assignment;
+  el('native-camera').classList.toggle('primary', !batch.pages.length);
+  el<HTMLButtonElement>('preview').hidden = !batch.pages.length;
+  el<HTMLButtonElement>('preview').disabled = !batch.assignment || !batch.pages.length;
   el<HTMLButtonElement>('done').disabled = batch.completed || !batch.groups.length || !!batch.pages.length || !!batch.draftLabel;
   el<HTMLButtonElement>('export').disabled = !batch.completed;
   el('local-status').textContent = batch.completed ? 'Completed and saved on this device. Drive delivery is confirmed separately below.' : batch.revision > 0 ? `Draft saved on this device · ${batch.groups.length} student group(s), ${batch.pages.length} current page(s).` : 'Not saved yet. Enter an assignment name to start.';
+  packageValidationError = false;
+  if (view === 'editor' && batch.completed && validatedPackage !== packageKey()) {
+    validatedPackage = ''; renderTransfer();
+    el('upload-readiness').textContent='Checking the saved package…';
+    try {
+      await exportSavedBatch(db,batch);
+      if (generation !== renderGeneration) return;
+      validatedPackage = packageKey();
+    } catch {
+      if (generation !== renderGeneration) return;
+      packageValidationError = true;
+      status('Package check failed. Saved originals are retained. Use the Recheck button below to retry, or Home to open another assignment.');
+    }
+  }
   renderTransfer();
   el('pages').replaceChildren();
   for (const [index,p] of batch.pages.entries()) {
-    const article = document.createElement('article'); const heading = document.createElement('h2'); heading.textContent = `Page ${index+1}`;
+    const article = document.createElement('article'); article.classList.toggle('capture-thumbnail', batch.stage !== 'preview'); const heading = document.createElement('h2'); heading.textContent = `Page ${index+1}`;
     const canvas = document.createElement('canvas'); canvas.setAttribute('aria-label',`Preview of page ${index+1}`); article.append(heading,canvas);
     void drawCapturePreview(canvas,p.bytes,p.mime,p.edits).catch(() => { if (generation === renderGeneration) status('Photo preview failed. Original remains saved; remove this photo or retry.'); });
     const button = (title:string, action:()=>Promise<void>) => { const b=document.createElement('button'); b.textContent=title; b.onclick=()=>void run(action); article.append(b); return b; };
@@ -77,7 +132,10 @@ async function render() {
       button('Move up',()=>persist(movePage(batch,index,-1))).disabled=index===0;
       button('Move down',()=>persist(movePage(batch,index,1))).disabled=index===batch.pages.length-1;
       button('Remove photo',()=>persist(removePage(batch,index)));
-      article.append(createCropEditor(p, crop => void run(() => editPage(index,{...p,edits:{...p.edits,crop}}))));
+      const cropDetails = document.createElement('details');
+      const cropSummary = document.createElement('summary'); cropSummary.textContent = 'Crop photo';
+      cropDetails.append(cropSummary, createCropEditor(p, crop => void run(() => editPage(index,{...p,edits:{...p.edits,crop}}))));
+      article.append(cropDetails);
       button('Restore original view',()=>editPage(index,{...p,edits:defaultEdits()}));
     }
     el('pages').append(article);
@@ -92,11 +150,24 @@ async function preserveDraftName() {
 }
 async function editPage(index:number,page:Page) { await persist({...batch,pages:batch.pages.map((p,i)=>i===index?page:p)}); }
 async function run(action:()=>Promise<void>) {
-  if (busy) return; busy=true;el<HTMLFieldSetElement>('controls').disabled=true;
+  if (busy) return;
+  const previousTask = `${view}:${batch.id}:${batch.completed}:${batch.stage}:${!!batch.assignment}`;
+  const focused = document.activeElement as HTMLElement | null;
+  busy=true;el<HTMLFieldSetElement>('controls').disabled=true;
   const startingBatchId=batch.id, label=el<HTMLInputElement>('label').value, name=el<HTMLInputElement>('assignment').value; let failed=false;
   try {if (!batch.completed && label!==batch.draftLabel) await persist({...batch,draftLabel:label}); await action();}
-  catch(error) {failed=true;status(`Not completed: ${error instanceof Error?error.message:String(error)} Saved photos remain; retry.`);}
-  finally {try{await render();if(failed&&batch.id===startingBatchId){el<HTMLInputElement>('label').value=label;if(!el<HTMLInputElement>('assignment').disabled)el<HTMLInputElement>('assignment').value=name;}}catch(error){status(`Could not refresh saved assignments: ${String(error)}. Saved photos remain; reload to recover.`);}finally{busy=false;el<HTMLFieldSetElement>('controls').disabled=false;}}
+  catch(error) {failed=true;status(`Not completed: ${error instanceof Error?error.message:String(error)} Saved photos remain; ${localStorage.getItem(uncertainKey()) === 'true' ? 'check upload status before retrying.' : 'retry.'}`);}
+  finally {try{await render();if(failed&&batch.id===startingBatchId){el<HTMLInputElement>('label').value=label;if(!el<HTMLInputElement>('assignment').disabled)el<HTMLInputElement>('assignment').value=name;}}catch(error){status(`Could not refresh saved assignments: ${String(error)}. Saved photos remain; reload to recover.`);}finally{
+    busy=false;el<HTMLFieldSetElement>('controls').disabled=false;
+    const nextTask = `${view}:${batch.id}:${batch.completed}:${batch.stage}:${!!batch.assignment}`;
+    if (failed) el('status').scrollIntoView({block:'nearest'});
+    else if (previousTask !== nextTask) {
+      const heading = el(view === 'home' ? 'home-title' : 'task-title');
+      heading.setAttribute('tabindex','-1'); heading.focus({preventScroll:true});
+      (view === 'editor' ? el('upload-checklist') : heading).scrollIntoView({block:'start'});
+    } else if (focused?.isConnected && focused.getClientRects().length) focused.focus({preventScroll:true});
+    else if (focused && focused !== document.body) el('task-title').focus({preventScroll:true});
+  }}
 }
 async function preparePhoto(file:File,id?:string):Promise<Page> {
   let photo=await readPhoto(file); inspectMarkingImage(photo.bytes);
@@ -121,19 +192,62 @@ el('new').onclick=()=>void run(async()=>{await preserveDraftName();const next=aw
 el<HTMLSelectElement>('archive').onchange=event=>{const id=(event.target as HTMLSelectElement).value;void run(async()=>{await preserveDraftName();const saved=await db.batches.get(id);if(saved)batch=recoverBatch(saved);});};
 el('delete').onclick=()=>{if(confirm('Permanently delete this package and its local originals? Linked late-work packages, downloaded copies and Drive copies remain separate. Export and verify your ZIP first.'))void run(async()=>{await deleteSavedBatch(db,batch,()=>{if(window.CaptureNative?.deleteAssignment)acceptedReceipt(window.CaptureNative.deleteAssignment(batch.id,batch.captureId));});batch=emptyBatch();await persist(batch);});};
 el('export').onclick=()=>void run(async()=>{const bytes=await exportSavedBatch(db,batch);if(window.CaptureNative){status(await transferZip(window.CaptureNative,bytes,batch,'local'));return;}const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'application/zip'}));const a=document.createElement('a');a.href=url;a.download=`capture-${batch.captureId}.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);status('ZIP download requested. Verify the saved file. Local originals retained.');});
-el('drive-queue').onclick=()=>void run(async()=>{if(!window.CaptureNative)throw new Error('Native transfer unavailable.');status(await transferZip(window.CaptureNative,await exportSavedBatch(db,batch),batch,'drive'));});
+el('drive-queue').onclick=()=>void run(async()=>{
+  renderTransfer();
+  if (el<HTMLButtonElement>('drive-queue').disabled || !window.CaptureNative) throw new Error('Upload is not ready. Check the checklist and upload status.');
+  uploadPreparing = true; renderTransfer();
+  try {
+    const bytes = await exportSavedBatch(db,batch);
+    // Persist before handing anything to native: a lost reply must survive reopen.
+    localStorage.setItem(uncertainKey(),'true');
+    status(await transferZip(window.CaptureNative,bytes,batch,'drive'));
+    localStorage.removeItem(uncertainKey());
+  } finally { uploadPreparing = false; }
+});
+el('check-upload').onclick=()=>void run(async()=>{
+  validatedPackage = '';
+  if (!window.CaptureNative) { status('Rechecking the local package. Local ZIP export does not upload to Drive.'); return; }
+  const delivery=captureTransferStatus(window.CaptureNative,batch.captureId,batch.revision);
+  if (delivery.state !== 'UNAVAILABLE') {
+    localStorage.removeItem(uncertainKey());
+    status('Upload status checked. Follow the current delivery state below; local photos are retained.');
+  } else status('Upload status is still unknown. Do not resend. Check Private Drive settings, then check status again. Local photos are retained.');
+});
 el('drive-settings').onclick=()=>window.CaptureNative?.requestDriveSetup();
-for (const id of ['assignment','label']) el<HTMLInputElement>(id).addEventListener('input',()=>{el('local-status').textContent='Unsaved changes on this screen. Choose Save or Home to keep them on this device.';});
+for (const id of ['assignment','label']) el<HTMLInputElement>(id).addEventListener('input',()=>{renderTransfer();el('upload-readiness').textContent='Save changes to update the checklist';el('local-status').textContent='Unsaved changes on this screen. Choose Save or Home to keep them on this device.';});
 function renderTransfer() {
   const settings=transferStatus(window.CaptureNative), delivery=captureTransferStatus(window.CaptureNative,batch.captureId,batch.revision);
-  const titles = { NOT_QUEUED:'Not sent to Drive', QUEUED:'Queued — Drive delivery not yet confirmed', UPLOADING:'Uploading — Drive delivery not yet confirmed', RETRY:'Retry needed — Drive delivery not confirmed', NEEDS_AUTH:'Reconnect Drive — delivery not confirmed', BLOCKED:'Transfer blocked — Drive delivery not confirmed', PAUSED:'Transfer paused — Drive delivery not confirmed', COMPLETE:'Verified on Drive', UNAVAILABLE:'Drive delivery not confirmed' };
+  const supported = !!window.CaptureNative?.beginZip && !!window.CaptureNative?.appendZip && !!window.CaptureNative?.finishZip && !!window.CaptureNative?.cancelZip;
+  const steps: [string,boolean][] = [
+    ['Assignment named', !!batch.assignment.trim() && batch.assignment.trim().length <= 120 && el<HTMLInputElement>('assignment').value.trim() === batch.assignment],
+    ['Photos captured', batch.groups.length + batch.pages.length > 0 && batch.groups.every(group=>group.pages.length > 0) && [...batch.pages,...batch.groups.flatMap(group=>group.pages)].every(page=>page.bytes.length > 0)],
+    ['Student sets labelled', batch.groups.length > 0 && batch.groups.every(group=>!!group.label.trim() && group.label.trim().length <= 120) && !batch.pages.length && !batch.draftLabel.trim() && batch.stage !== 'preview'],
+    ['Package checked', batch.completed && validatedPackage === packageKey()],
+    ['Private Drive enabled', settings.available && settings.enabled && supported],
+  ];
+  el('checklist').replaceChildren(...steps.map(([label,complete])=>{
+    const item=document.createElement('li'); item.dataset.complete=String(complete);
+    const icon=document.createElement('span');icon.setAttribute('aria-hidden','true');icon.textContent=complete?'✓':'○';
+    item.append(icon,document.createTextNode(` ${label} — ${complete?'Complete':'Incomplete'}`));return item;
+  }));
+  if (delivery.state === 'COMPLETE') localStorage.removeItem(uncertainKey());
+  const uncertain = localStorage.getItem(uncertainKey()) === 'true';
+  const ready = steps.every(([,complete])=>complete) && !uncertain && ['NOT_QUEUED','RETRY'].includes(delivery.state);
+  const active = uploadPreparing || ['QUEUED','UPLOADING'].includes(delivery.state);
+  el('upload-readiness').textContent = batch.completed && delivery.state === 'COMPLETE' ? 'Uploaded!' : uploadPreparing ? 'Preparing upload…' : active ? (delivery.state === 'QUEUED' ? 'Upload queued…' : 'Uploading…') : uncertain || delivery.state === 'UNAVAILABLE' && batch.completed && settings.available ? 'Upload status unknown — check before retrying' : ready ? 'Clear to Upload' : batch.completed && ['NEEDS_AUTH','PAUSED','BLOCKED'].includes(delivery.state) ? 'Upload needs attention — open Private Drive settings' : 'Complete the checklist to upload';
+  el('upload-progress').hidden = !active;
+  el('upload-checklist').setAttribute('aria-busy',String(active));
+  const titles = { NOT_QUEUED:'Not sent to Drive', QUEUED:'Queued — Drive delivery not yet confirmed', UPLOADING:'Uploading — Drive delivery not yet confirmed', RETRY:'Retry needed — Drive delivery not confirmed', NEEDS_AUTH:'Reconnect Drive — delivery not confirmed', BLOCKED:'Transfer blocked — Drive delivery not confirmed', PAUSED:'Transfer paused — Drive delivery not confirmed', COMPLETE:'Uploaded!', UNAVAILABLE:'Drive delivery not confirmed' };
   el('delivery-status').textContent=batch.completed?titles[delivery.state]:'Draft only — finish with All done before sending to Drive';
   el('delivery-status').dataset.state=batch.completed?delivery.state:'DRAFT';
-  el('delivery-detail').textContent=batch.completed ? `${delivery.message}${delivery.state==='RETRY' ? ' Your local copy is retained. Retry the transfer; an expired upload session does not confirm delivery.' : ''}` : 'Saving pages or completing a package does not upload it. Local originals are retained.';
+  el('delivery-detail').textContent=batch.completed ? `${delivery.message}${delivery.state === 'COMPLETE' ? ' Desktop student matching is still required.' : ''}${uncertain ? ' The last upload outcome is uncertain. Check upload status before retrying; do not resend yet.' : ''}${delivery.state==='RETRY' ? ' Your local copy is retained. Retry the transfer; an expired upload session does not confirm delivery.' : ''}` : 'Saving pages or completing a package does not upload it. Local originals are retained.';
   el('transfer-status').textContent=settings.summary;
   const button=el<HTMLButtonElement>('drive-queue');
-  button.disabled=!batch.completed||!settings.available||!settings.enabled||['QUEUED','UPLOADING','COMPLETE'].includes(delivery.state);
-  button.textContent=delivery.state==='RETRY'?'Retry Drive transfer':'Transfer completed ZIP to private Drive';
+  button.hidden=!batch.completed;
+  button.disabled=!ready || uploadPreparing;
+  button.textContent='Upload';
+  el<HTMLButtonElement>('check-upload').disabled = uploadPreparing || !batch.completed;
+  el('check-upload').textContent=window.CaptureNative ? 'Recheck package and upload status' : 'Recheck local package';
   el<HTMLButtonElement>('drive-settings').disabled=!window.CaptureNative;
 }
 function refreshTransfer(){if(!busy)renderTransfer();}
@@ -165,5 +279,5 @@ window.addEventListener('capture-photo',()=>void recoverNative());
 window.addEventListener('capture-preview',()=>{pendingPreview=true;void recoverNative();});
 setInterval(()=>{if(pendingNative&&!busy){pendingNative=false;void recoverNative();}},500);
 window.addEventListener('beforeunload',event=>{if(busy||el<HTMLInputElement>('label').value!==batch.draftLabel||(!el<HTMLInputElement>('assignment').disabled&&el<HTMLInputElement>('assignment').value.trim()!==batch.assignment)){event.preventDefault();event.returnValue='';}});
-try {const rows=await listBatchSummaries(db);const selected=rows.find(b=>b.id===localStorage.getItem('capture-camera-batch'))??rows.find(b=>b.id===localStorage.getItem('capture-selected-batch'))??rows.find(b=>!b.completed)??rows[0];batch=selected?recoverBatch(await db.batches.get(selected.id)??emptyBatch()):emptyBatch();await render();el<HTMLFieldSetElement>('controls').disabled=false;status('Opened local assignments. Saved pages and groups retained.');if(batch.assignment&&!batch.completed)await recoverNative();}
+try {const rows=await listBatchSummaries(db);const selected=rows.find(b=>b.id===localStorage.getItem('capture-camera-batch'))??rows.find(b=>b.id===localStorage.getItem('capture-selected-batch'))??rows.find(b=>!b.completed)??rows[0];batch=selected?recoverBatch(await db.batches.get(selected.id)??emptyBatch()):emptyBatch();await render();el<HTMLFieldSetElement>('controls').disabled=false;if (!packageValidationError) status('Opened local assignments. Saved pages and groups retained.');if(batch.assignment&&!batch.completed)await recoverNative();}
 catch(error){status(`Local storage could not open: ${String(error)}. No changes made.`);}
