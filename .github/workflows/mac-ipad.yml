@@ -35,7 +35,17 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run tests
+        if: matrix.arch != 'x64'
+        run: npm test
+      - name: Run Intel tests with bounded large-fixture concurrency
+        if: matrix.arch == 'x64'
+        # Real capture fixtures retain >32 MiB of original pixels. Keep their
+        # IndexedDB/backup copies from competing with encryption fixtures on
+        # the Intel runner; preserve every test and its existing time budget.
+        run: |
+          npm test -- --maxWorkers=2 --minWorkers=1 --exclude src/marking/captureReferences.test.ts --exclude src/capture/attachmentService.test.ts
+          npm test -- --maxWorkers=1 --minWorkers=1 src/marking/captureReferences.test.ts src/capture/attachmentService.test.ts
       - name: Require credential-free test signature
         run: node -e "if (require('./package.json').build.mac.identity !== '-') throw new Error('This PR job only allows an ad-hoc test signature')"
       - name: Prepare pinned local speech runtime (no model)

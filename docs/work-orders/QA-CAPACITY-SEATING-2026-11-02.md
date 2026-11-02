@@ -40,3 +40,13 @@ Coordinator integrated verification: **97 files /1036 tests passed /one native-o
 The page decoder is bounded per consumer; IndexedDB still reads the containing attachment’s encoded payload, and PDF export accumulates bounded rendered pages. No claim of zero-copy streaming or physical low-memory acceptance. Existing8MiB/page,10page,pixel,32MiB manual inline-import and256MiB full-backup guards remain. Saved capture originals stay byte-identical; large marking attempts hold checked local references instead of duplicating encoded originals. Impossible append/page/backup limits reject with originals and marks intact.
 
 Draft PR creation and evidence updates are authorized for this batch; no merge, release, deployment or real-data/encryption activation. Exact publication and CI results follow in the PR. Physical-device/native dialogs and Electron export-specific verification remain gaps; genuine Chromium PDF export was exercised.
+
+## Hosted verification follow-up
+
+Draft PR56 was created through the same connector after one initial automatic-approval denial was resolved by the parent's additional explicit standing PR-creation authorization. Readback confirmed head1c424c0, draft/open and mergeable. No alternative route or remote merge was used.
+
+Initial exact-head hosted capture and Control Panel workflows passed. Mac ARM full tests and packaged launch checks passed. Mac Intel hit only test/hook timeouts: the real35MiB reference matrix240s, late-page promotion60s and following cleanup10s, plus unchanged encryption chunk tests30s/5s. No failing domain assertion was reported. The Intel CI command now bounds ordinary suites to two workers and runs both large capture suites separately with one worker, retaining every test, original-size fixture, isolation and existing timeout. This avoids concurrent large IndexedDB/backup copies contending with encryption fixtures. Final hosted results are pending this scheduling-only adjustment.
+
+Main advanced to5ea7015 (PR52) while hosted checks ran;53–55 remain separately managed. Complete-stack integration remains pending and is not claimed verified.
+
+Independent Vitest discovery confirmed full97 files = ordinary95 + serial2, with no missing/duplicate/extra files. Exact two capture suites passed15/15 serially in135.30s: large pixel matrix99.857s within unchanged240s, late-page21.427s within unchanged60s. Sampled runner+worker memory reached approximately1.12GiB, supporting separation from other heavy fixtures. No production or test-source adjustment was needed; final Intel hosted execution remains decisive.
