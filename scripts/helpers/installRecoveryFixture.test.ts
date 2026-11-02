@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { observeRecoveryFixture, parseRecoveryFixtureMarker, recoveryFixtureProcessScript, type RecoveryFixtureProcess } from './installRecoveryFixture';
@@ -44,6 +44,31 @@ describe('read-only install recovery fixture observation', () => {
   });
 });
 
+/** An expected parser rejection must be a real, diagnostic process exit. */
+function assertNativePidRejection(run: () => unknown, expected: RegExp) {
+  let failure: any;
+  try { run(); } catch (error) { failure = error; }
+  expect(failure, 'PowerShell must reject the malformed PID input').toBeDefined();
+  expect(failure.code, 'Timeouts and launch failures are not parser rejection').not.toBe('ETIMEDOUT');
+  expect(failure.signal, 'The process must exit rather than be terminated').toBeNull();
+  expect(Number.isInteger(failure.status) && failure.status > 0, 'Expected a nonzero PowerShell exit status').toBe(true);
+  expect(String(failure.stderr), 'Expected the specific PID validation/parser diagnostic').toMatch(expected);
+}
+describe('native PID rejection evidence', () => {
+  const diagnostic = /Recovery fixture known PID must be a scalar UInt32/;
+  it('accepts an actual nonzero exit with the expected validation diagnostic', () => {
+    assertNativePidRejection(() => { throw { status: 1, signal: null, stderr: 'Recovery fixture known PID must be a scalar UInt32' }; }, diagnostic);
+  });
+  it.each([
+    { code: 'ETIMEDOUT', status: null, signal: 'SIGTERM', stderr: 'Recovery fixture known PID must be a scalar UInt32' },
+    { code: 'ENOENT', status: null, signal: null, stderr: '' },
+    { status: 0, signal: null, stderr: 'Recovery fixture known PID must be a scalar UInt32' },
+    { status: 1, signal: null, stderr: 'Command not recognized' }
+  ])('does not count infrastructure/timeout/unrelated failure as valid rejection (%j)', failure => {
+    expect(() => assertNativePidRejection(() => { throw failure; }, diagnostic)).toThrow();
+  });
+});
+
 // Execute the SAME observer source under the production PowerShell 5.1 binary.
 // Only its read-only CIM source is replaced with fictional process rows.
 // Linux cannot establish PowerShell enumeration semantics; these remain skipped
@@ -55,20 +80,46 @@ describe.skipIf(process.platform !== 'win32')('Windows PowerShell 5.1 fixture PI
     [pscustomobject]@{ ProcessId=202; ParentProcessId=101; ExecutablePath='D:\child.exe'; CommandLine='fictional child' }
     [pscustomobject]@{ ProcessId=303; ParentProcessId=0; ExecutablePath='D:\other.exe'; CommandLine='fictional independent' }
   }; `;
-  function nativeObserver(knownPids: string) {
+  function invokePowerShell(script: string, knownPids: string, timeout: number) {
     const systemRoot = process.env.SystemRoot || 'C:\\Windows';
     const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'));
-    return execFileSync(join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; " + fictionalCim + recoveryFixtureProcessScript], {
-      encoding: 'utf8', timeout: 15000, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe'], env: { ...environment,
+    return execFileSync(join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; " + script], {
+      encoding: 'utf8', timeout, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe'], env: { ...environment,
         PSModulePath: join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'),
         OTA_RECOVERY_KNOWN_PIDS: knownPids, OTA_RECOVERY_FIXTURE_PID: '', OTA_UPGRADE_EXECUTABLE: 'D:\\fixture\\app.exe',
         OTA_UPGRADE_DIRECTORY: 'D:\\fixture\\workspace', OTA_RECOVERY_INSTALLER: 'D:\\fixture-setup.exe' }
     });
   }
+  // This prerequisite measures cold runtime/module readiness separately. It is
+  // one mandatory attempt, not a retry of an observer case. In particular []
+  // remains the first observer input and retains its 15-second process bound.
+  beforeAll(() => {
+    const started = Date.now(); console.info('NATIVE_POWERSHELL_READINESS_START');
+    const output = invokePowerShell(`[Console]::Error.WriteLine('native-runtime-entered');
+      $clock=[System.Diagnostics.Stopwatch]::StartNew()
+      if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'Windows PowerShell 5 is required' }
+      $probe=ConvertFrom-Json -InputObject '{"ready":true}'
+      $set=New-Object 'System.Collections.Generic.HashSet[uint32]'
+      [void]$set.Add([uint32]1)
+      if ($probe.ready -ne $true -or -not $set.Contains([uint32]1)) { throw 'Native runtime readiness failed' }
+      [pscustomobject]@{ ready=$true; major=$PSVersionTable.PSVersion.Major; initializationMilliseconds=$clock.ElapsedMilliseconds } | ConvertTo-Json -Compress`, '[]', 60000);
+    const ready = JSON.parse(output); expect(ready.ready).toBe(true); expect(ready.major).toBe(5); expect(Number.isFinite(ready.initializationMilliseconds)).toBe(true);
+    console.info('NATIVE_POWERSHELL_READINESS_COMPLETE', JSON.stringify({ elapsedMilliseconds: Date.now() - started, initializationMilliseconds: ready.initializationMilliseconds }));
+  }, 65000);
+  function nativeObserver(knownPids: string) {
+    const started = Date.now();
+    try {
+      return invokePowerShell("[Console]::Error.WriteLine('native-observer-entered'); " + fictionalCim + recoveryFixtureProcessScript + "; [Console]::Error.WriteLine('native-observer-completed')", knownPids, 15000);
+    } finally { console.info('NATIVE_OBSERVER_ATTEMPT', JSON.stringify({ knownPids, elapsedMilliseconds: Date.now() - started })); }
+  }
   it.each<[string, number[]]>([['[]', []], ['[101]', [101, 202]], ['[303]', [303]], ['[101,303]', [101, 202, 303]]])('observes validated known PID array %s', (known, expected) => {
     const result = JSON.parse(nativeObserver(known)); expect(result.processes.map((row: any) => row.pid).sort((a: number, b: number) => a - b)).toEqual(expected);
   }, 20000);
-  it.each(['[[]]', '[{}]', '["101"]', '[true]', '[0]', '[-1]', '[4294967296]', '{}', '101', 'not-json'])('rejects non-scalar or malformed known PID payload %s', known => {
-    expect(() => nativeObserver(known)).toThrow();
+  it.each<[string, RegExp]>([
+    ...['[[]]', '[{}]', '["101"]', '[true]', '[0]', '[-1]', '[4294967296]'].map(known => [known, /Recovery fixture known PID must be a scalar UInt32/] as [string, RegExp]),
+    ['{}', /Recovery fixture known PIDs must be an array/], ['101', /Recovery fixture known PIDs must be an array/],
+    ['not-json', /Invalid JSON/]
+  ])('rejects non-scalar or malformed known PID payload %s', (known, diagnostic) => {
+    assertNativePidRejection(() => nativeObserver(known), diagnostic);
   }, 20000);
 });

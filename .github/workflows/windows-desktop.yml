@@ -24,8 +24,13 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Run tests
-        run: npm test
+      # Keep every test file, while separating native PowerShell startup and
+      # FULL SQLite fixtures from the remaining suite's parallel I/O.
+      - name: Run native observer and structured storage tests serially
+        timeout-minutes: 10
+        run: npx vitest run scripts/helpers/installRecoveryFixture.test.ts src/security/structuredWorkspace.test.ts --no-file-parallelism --maxWorkers=1 --minWorkers=1
+      - name: Run remaining full test suite
+        run: npm test -- --exclude scripts/helpers/installRecoveryFixture.test.ts --exclude src/security/structuredWorkspace.test.ts
       - name: Prepare pinned local speech runtime (no model)
         run: npm run dictation:prepare
       - name: Identify QA build
