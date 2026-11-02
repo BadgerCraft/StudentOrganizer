@@ -1,6 +1,7 @@
 // Prerequisite main-process host. No app startup/IPC or activation is wired here.
 // The constructor's fixed scope, device identity, validation and activation gate are main-owned.
 const path = require('node:path');
+const { createHash, randomUUID } = require('node:crypto');
 const { createEncryptionKeyStore } = require('./encryptionKeyStore.cjs');
 const { createEncryptedVaultStore } = require('./encryptedVaultStore.cjs');
 const APP_ID = 'student-organizer';
@@ -17,9 +18,19 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
   const keys = keyStore || createEncryptionKeyStore({ directory: path.join(directory, 'keys'), safeStorage, platform });
   const durabilityReady = Boolean(workspaceStore) || platform === 'darwin' || (platform === 'win32' && typeof syncDirectory === 'function');
   const store = workspaceStore || createEncryptedVaultStore({ directory: path.join(directory, 'working'), scope, platform, syncDirectory });
-  let session = null, preparation = null, epoch = 0, queue = Promise.resolve();
+  let pendingSafety = null;
+  const sessionStore = {
+    read: () => store.read(),
+    commit: (expected, next) => {
+      if (!pendingSafety) return store.commit(expected, next);
+      if (typeof store.commitWithSafety !== 'function') throw error('ENCRYPTED_STORAGE_DURABILITY_UNAVAILABLE');
+      return store.commitWithSafety(expected, next, pendingSafety);
+    }
+  };
+  let session = null, preparation = null, epoch = 0, transferEpoch = 0, queue = Promise.resolve();
+  const transferTickets = new WeakMap();
   function closePreparation() { preparation?.migration.close(); preparation?.key.fill(0); preparation = null; }
-  function lock() { epoch++; session?.lock(); session = null; closePreparation(); }
+  function lock() { epoch++; transferEpoch++; session?.lock(); session = null; closePreparation(); }
   function validate(value) { validateSnapshot(value); return structuredClone(value); }
   function source(value) { const snapshot = validate(value); return { withReadLock: async read => read(structuredClone(snapshot)) }; }
   function run(action) {
@@ -33,6 +44,7 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
     queue = pending.catch(() => {}); return pending;
   }
   async function ensureEnrollment(inputKey, current) {
+    if (typeof store.initialize === 'function') { await store.initialize(); current(); }
     const key = new Uint8Array(inputKey);
     try {
     const existing = await keys.load(scope);
@@ -48,6 +60,16 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
   function status() { return { appId: APP_ID, vaultId, keyVersion, state: session ? 'unlocked' : preparation ? 'preparing' : 'locked', revision: session ? session.getRevision() : null }; }
   return Object.freeze({
     status, lock,
+    invalidateTransferContext: () => { transferEpoch++; },
+    captureTransferContext: () => {
+      if (!session) throw error();
+      const token = Object.freeze({}); transferTickets.set(token, { epoch, transferEpoch }); return token;
+    },
+    assertTransferContext: async token => {
+      await requireActivation();
+      const captured = token && typeof token === 'object' ? transferTickets.get(token) : null;
+      if (!session || !captured || captured.epoch !== epoch || captured.transferEpoch !== transferEpoch) throw error();
+    },
     prepareMigration: snapshot => run(async current => {
       if (session || preparation || await store.read() !== null) throw error();
       const initialSource = source(snapshot);
@@ -69,8 +91,8 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
       const candidate = preparation, latestSource = source(snapshot);
       try {
         await ensureEnrollment(candidate.key, current); current();
-        await candidate.migration.convert(latestSource, store); current();
-        const opened = await api.EncryptedWorkspaceSession.open(store, scope, candidate.key, validateSnapshot);
+        await candidate.migration.convert(latestSource, sessionStore); current();
+        const opened = await api.EncryptedWorkspaceSession.open(sessionStore, scope, candidate.key, validateSnapshot);
         try { current(); session = opened; } catch (e) { opened.lock(); throw e; }
         return { revision: session.getRevision() };
       } finally { if (preparation === candidate) closePreparation(); else candidate.key.fill(0); }
@@ -78,7 +100,7 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
     unlock: () => run(async current => {
       await requireActivation(); current(); if (session || preparation) throw error(); const key = await keys.load(scope); if (!key) throw error();
       try {
-        const opened = await api.EncryptedWorkspaceSession.open(store, scope, key, validateSnapshot);
+        const opened = await api.EncryptedWorkspaceSession.open(sessionStore, scope, key, validateSnapshot);
         try { current(); session = opened; return { revision: opened.getRevision() }; } catch (e) { opened.lock(); throw e; }
       } finally { key.fill(0); }
     }),
@@ -90,6 +112,35 @@ function createEncryptionHost({ directory, vaultId, deviceId, keyVersion = 1, sa
       catch (e) { if (session === active) { active.lock(); session = null; } throw e; }
     }),
     exportEncrypted: (purpose, recordId) => run(async current => { await requireActivation(); current(); if (!session || !['backup', 'transfer'].includes(purpose)) throw error(); const result = await session.exportEncrypted(purpose, recordId); current(); return result; }),
+    // The following transfer methods are native transport callbacks, not renderer IPC.
+    sealTransfer: (id, json) => run(async current => {
+      await requireActivation(); current(); if (!session || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,180}$/.test(id) || typeof json !== 'string') throw error();
+      const bytes = new TextEncoder().encode(json); try { const result = await session.sealExternal('transfer', 'drive/' + id, bytes); current(); return result; } finally { bytes.fill(0); }
+    }),
+    openTransfer: (id, ciphertext, selection) => run(async current => {
+      await requireActivation(); current();
+      if (!session || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,180}$/.test(id) || typeof ciphertext !== 'string' || !selection || typeof selection.version !== 'string' || !/^[1-9][0-9]{0,29}$/.test(selection.version) || typeof selection.sha256Checksum !== 'string' || !/^[a-f0-9]{64}$/i.test(selection.sha256Checksum) || createHash('sha256').update(ciphertext).digest('hex') !== selection.sha256Checksum.toLowerCase()) throw error();
+      const envelope = api.parseEnvelope(ciphertext);
+      const bytes = await session.openExternal({ purpose: 'transfer', recordId: 'drive/' + id, revision: envelope.context.revision }, ciphertext);
+      try { current(); return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } finally { bytes.fill(0); }
+    }),
+    previewBackup: ciphertext => run(async current => {
+      await requireActivation(); current(); if (!session) throw error();
+      const envelope = api.parseEnvelope(ciphertext);
+      if (envelope.context.purpose !== 'backup') throw error();
+      const bytes = await session.openExternal({ purpose: 'backup', recordId: envelope.context.recordId, revision: envelope.context.revision }, ciphertext);
+      try { const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); validateSnapshot(value); current(); return structuredClone(value); } finally { bytes.fill(0); }
+    }),
+    restoreBundle: (expectedRevision, snapshot) => run(async current => {
+      await requireActivation(); current(); if (!session || session.getRevision() !== expectedRevision || typeof store.commitWithSafety !== 'function') throw error();
+      const candidate = validate(snapshot), active = session, id = randomUUID();
+      const safety = await active.exportEncrypted('backup', 'safety/' + id); current();
+      pendingSafety = { id, revision: safety.revision, ciphertext: safety.ciphertext };
+      try {
+        await active.transact(draft => { for (const key of Object.keys(draft)) delete draft[key]; Object.assign(draft, candidate); }); current(); return { revision: active.getRevision() };
+      } catch (cause) { active.lock(); if (session === active) session = null; throw cause; }
+      finally { pendingSafety = null; }
+    }),
     enrollFromRecovery: (code, wrappedKey, challenge) => run(async current => {
       await requireActivation(); current(); if (session || preparation || !challenge || challenge.deviceId !== deviceId || challenge.context?.appId !== APP_ID || challenge.context?.vaultId !== vaultId || challenge.context?.keyVersion !== keyVersion) throw error();
       const key = await api.recoverMasterKey(code, wrappedKey, APP_ID, vaultId, keyVersion);

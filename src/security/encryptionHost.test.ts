@@ -10,11 +10,11 @@ beforeAll(() => { execFileSync(process.execPath, ['scripts/buildEncryptionNative
 const original = { students: [{ id: 'fictional', name: 'Fictional work' }], attachment: 'synthetic-attachment-bytes' };
 function validate(value: unknown) { const v = value as typeof original; if (!v || !Array.isArray(v.students) || typeof v.attachment !== 'string') throw new Error('PRIVATE_VALIDATION_DETAIL'); }
 function fixture(deviceId = 'computer-A', activationGate = async () => true, shared?: any) {
-  let key: Uint8Array | null = null, saved: any = null, saves = 0, commits = 0;
+  let key: Uint8Array | null = null, saved: any = null, saves = 0, commits = 0; const safeties: any[] = [];
   const state = shared || {
     read: async () => saved ? structuredClone(saved) : null,
     commit: async (expected: number | null, next: any) => { if ((saved?.revision ?? null) !== expected) throw new Error('private CAS mismatch'); saved = structuredClone(next); commits++; },
-    get saved() { return saved; }, get commits() { return commits; }
+    commitWithSafety: async (expected: number, next: any, safety: any) => { if (saved?.revision !== expected) throw new Error('private CAS mismatch'); safeties.push(structuredClone(safety)); saved = structuredClone(next); commits++; }, get safeties() { return safeties; }, get saved() { return saved; }, get commits() { return commits; }
   };
   const keys = { load: async () => key ? new Uint8Array(key) : null, save: async (_scope: any, value: Uint8Array) => { if (key) throw new Error('no overwrite'); key = new Uint8Array(value); saves++; } };
   const host = createEncryptionHost({ directory: path.join(os.tmpdir(), 'synthetic-host-no-disk'), vaultId: 'synthetic-vault', deviceId, keyStore: keys, workspaceStore: state, validateSnapshot: validate, activationGate });
@@ -108,6 +108,22 @@ describe('packaged native encryption host prerequisite', () => {
     const write = a.host.commit(1, { ...original, attachment: 'interrupted synthetic work' }); await entered; a.host.lock(); release();
     await expect(write).rejects.toThrow(); expect(a.host.status().state).toBe('locked'); await expect(a.host.read()).rejects.toThrow();
     await a.host.unlock(); expect((await a.host.read()).revision).toBe(2); expect((await a.host.read()).snapshot.attachment).toBe('interrupted synthetic work');
+  });
+  it('keeps private transfer crypto inside native callbacks and preserves authenticated original JSON bytes', async () => {
+    const { createHash } = await import('node:crypto'); const a = fixture(), b = fixture('computer-B'); await ceremony(a, b); await a.host.completeMigration(original);
+    const json = JSON.stringify(original, null, 2), sealed = await a.host.sealTransfer('_native-id', json);
+    const selection = { version: '1', sha256Checksum: createHash('sha256').update(sealed.ciphertext).digest('hex') };
+    expect(JSON.parse(sealed.ciphertext).context.recordId).toBe('drive/_native-id'); expect(await a.host.openTransfer('_native-id', sealed.ciphertext, selection)).toBe(json);
+    await expect(a.host.openTransfer('different-id', sealed.ciphertext, selection)).rejects.toThrow(); await expect(a.host.openTransfer('_native-id', sealed.ciphertext, { ...selection, sha256Checksum: '0'.repeat(64) })).rejects.toThrow();
+    a.host.lock(); await expect(a.host.openTransfer('_native-id', sealed.ciphertext, selection)).rejects.toThrow();
+  });
+  it('previews a complete encrypted backup and atomically binds an encrypted safety snapshot to restoration', async () => {
+    const a = fixture(), b = fixture('computer-B'); await ceremony(a, b); await a.host.completeMigration(original);
+    const backup = await a.host.exportEncrypted('backup', 'synthetic-backup'); expect(await a.host.previewBackup(backup.ciphertext)).toEqual(original);
+    const changed = { ...original, attachment: 'later synthetic work' }; await a.host.commit(1, changed);
+    const preview = await a.host.previewBackup(backup.ciphertext); expect(await a.host.restoreBundle(2, preview)).toEqual({ revision: 3 }); expect((await a.host.read()).snapshot).toEqual(original);
+    expect(a.state.safeties).toHaveLength(1); expect(a.state.safeties[0].revision).toBe(2); expect(await a.host.previewBackup(a.state.safeties[0].ciphertext)).toEqual(changed);
+    await expect(a.host.restoreBundle(2, preview)).rejects.toThrow(); expect(a.state.safeties).toHaveLength(1);
   });
   it('invalidates pending preparation on lock without making a protected enrollment', async () => {
     const a = fixture(); const pending = a.host.prepareMigration(original); a.host.lock(); await expect(pending).rejects.toThrow(); expect(a.saves).toBe(0); expect(a.state.saved).toBeNull();

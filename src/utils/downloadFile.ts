@@ -1,5 +1,7 @@
+import { assertReadableExportAllowed } from '../security/readableExports';
 /** Keep the Blob alive while Safari hands the download to Files. */
 export function downloadFile(blob: Blob, filename: string): void {
+  assertReadableExportAllowed();
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

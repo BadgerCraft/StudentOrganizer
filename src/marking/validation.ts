@@ -1,7 +1,7 @@
 import { getClassroomLevel } from '../services/classroomLevels';
 import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { MARKING_LIMITS } from './types';
-import { ValidationError } from '../services/markbookService';
+import { ValidationError } from '../services/validationError';
 import type { AssessmentCategory } from '../types/schema';
 import type { MarkingImagePage, MarkingPageFeedback } from './types';
 

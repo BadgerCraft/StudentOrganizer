@@ -1,7 +1,7 @@
 import { resolveCaptureReference } from '../marking/captureReferences';
 import { MARKING_LIMITS } from '../marking/types';
 import { validateCaptureManifest, captureSha256 } from '../../shared/capturePackage';
-import { base64ToBytes, captureContentHash } from './attachmentService';
+import { base64ToBytes, captureContentHash } from './attachmentBytes';
 import { inspectMarkingImage, validateMarkingImageBytes } from '../marking/importImages';
 import type { CaptureAttachment, CaptureImportReceipt } from './types';
 const names = ['captureAttachments', 'captureImportReceipts'] as const;
@@ -13,7 +13,7 @@ export function normalizeLegacyCaptureTables(tables: Tables, version: number): v
     else if (!Array.isArray(tables[name]) || tables[name].length) fail();
   }
 }
-export function validateCaptureBackup(tables: Tables): void {
+export function validateCaptureBackup(tables: Tables, verifiedBytes?: WeakSet<object>, verifiedAttempts?: WeakSet<object>): void {
   const maps = Object.fromEntries(Object.entries(tables).map(([name, records]) => [name, new Map(records.map(r => [r.id, r]))]));
   const ref = (table: string, id: string) => { const value = maps[table]?.get(id); if (!value) fail(); return value; };
   const keys = new Set<string>();
@@ -26,8 +26,10 @@ export function validateCaptureBackup(tables: Tables): void {
     if (a.packageId !== a.manifest.packageId || !submission || submission.label !== a.label || !Array.isArray(a.pages) || a.pages.length !== submission.pages.length) fail();
     for (let i = 0; i < a.pages.length; i++) {
       if (JSON.stringify(a.pages[i].metadata) !== JSON.stringify(submission.pages[i])) fail();
-      const bytes = base64ToBytes(a.pages[i].base64);
-      if (bytes.length !== a.pages[i].metadata.byteLength || inspectMarkingImage(bytes).mime !== a.pages[i].metadata.mime) fail();
+      if (!verifiedBytes?.has(a)) {
+        const bytes = base64ToBytes(a.pages[i].base64);
+        if (bytes.length !== a.pages[i].metadata.byteLength || inspectMarkingImage(bytes).mime !== a.pages[i].metadata.mime) fail();
+      }
     }
     const assessment = ref('assessments', a.assessmentId), enrollment = ref('classEnrollments', a.classEnrollmentId);
     ref('users', a.createdBy); const student = ref('students', a.studentId);
@@ -87,7 +89,10 @@ export function validateCaptureBackup(tables: Tables): void {
         const pageIndex = attempt.imagePages?.findIndex((page: any) => page.id === id) ?? -1;
         const page = attempt.imagePages?.[pageIndex], original = source.pages[index];
         if (pageIndex !== previousIndex + 1 || !page) fail();
-        const resolved = page.captureRef ? resolveCaptureReference(attempt, page, source) : page;
+        // Only exact immutable records verified together by the main-process cache
+        // can reuse dimensions. Relationship and reference metadata checks still run.
+        const reuseDimensions = verifiedBytes?.has(source) && verifiedAttempts?.has(attempt);
+        const resolved = page.captureRef ? resolveCaptureReference(attempt, page, source, !reuseDimensions) : page;
         if (resolved.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
         previousIndex = pageIndex;
       }

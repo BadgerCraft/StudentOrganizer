@@ -1,3 +1,5 @@
+import { unwrapEncryption } from '../security/encryptionBridge';
+import { privateStorageRead, privateStorageWrite } from '../security/encryptedRuntime';
 import type { OntarioTeacherDB } from '../db/database';
 import type { UUID, User, Device } from '../types/schema';
 import { AuthorizationError } from './authHelper';
@@ -112,6 +114,7 @@ export function getActiveTeacherId(): UUID | null {
  * Clears any explicit active teacher override from session storage and memory.
  */
 export function clearActiveTeacherId(): void {
+  if (typeof window !== 'undefined' && window.desktopEncryption) { const bridge = window.desktopEncryption; void Promise.resolve().then(() => bridge.selectActingTeacher(null)).then(result => { if (!result.ok) throw Error('Native actor revocation failed.'); }).catch(async () => { const runtime = await import('../security/encryptedRuntime'); runtime.lockEncryptedRuntime(); }); }
   inMemoryActiveUserId = null;
   try {
     if (typeof sessionStorage !== 'undefined') {
@@ -181,6 +184,8 @@ export async function selectActingTeacher(
     throw new AuthorizationError('The teacher selection changed. Choose the teacher again.');
   }
   // A failed device write must not silently establish an acting teacher.
+  if (typeof window !== 'undefined' && window.desktopEncryption) unwrapEncryption(await window.desktopEncryption.selectActingTeacher(userId));
+  if (selectionEpoch !== getIdentityEpoch()) { if (typeof window !== 'undefined' && window.desktopEncryption) void window.desktopEncryption.selectActingTeacher(null); throw new AuthorizationError('The teacher selection changed. Choose the teacher again.'); }
   setActiveTeacherId(userId);
 
   return {
@@ -201,7 +206,7 @@ export async function resolveAppDevice(
   let deviceId: string | null = inMemoryDeviceId;
   try {
     if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_DEVICE_ID_KEY);
+      const stored = await privateStorageRead(storage => storage.getItem(STORAGE_DEVICE_ID_KEY));
       if (stored) deviceId = stored;
     }
   } catch (_) {}
@@ -211,7 +216,7 @@ export async function resolveAppDevice(
     inMemoryDeviceId = deviceId;
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_DEVICE_ID_KEY, deviceId);
+        await privateStorageWrite(storage => storage.setItem(STORAGE_DEVICE_ID_KEY, deviceId!));
       }
     } catch (_) {}
   }

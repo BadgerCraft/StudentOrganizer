@@ -1,16 +1,24 @@
 const { writeFile, readFile, mkdtemp, rename, rm } = require('node:fs/promises');
 const { dirname, join } = require('node:path');
+const { createReadableReportWriter } = require('./readableReportFile.cjs');
 const validPdf = pdf => Buffer.isBuffer(pdf) && pdf.subarray(0, 5).toString() === '%PDF-' && /%%EOF\s*$/.test(pdf.subarray(-1024).toString());
 /** Isolated, scriptless print renderer. No persistent student HTML or network access. */
 function createReportPdfExporter({ BrowserWindow, dialog, session, parent, write = writeFile, read = readFile, makeTemp = mkdtemp, replace = rename, cleanup = rm }) {
   let busy = false;
-  return async function exportPdf(filename, html) {
+  const saveReadable = createReadableReportWriter({ write, read, makeTemp, replace, cleanup });
+  return async function exportPdf(filename, html, controls) {
+    const assertCurrent = controls?.assertCurrent || (() => {});
+    const protectedCopy = controls !== undefined;
+    if (protectedCopy && typeof controls.assertCurrent !== 'function') throw new Error('Invalid protected export.');
+    assertCurrent();
     if (busy) throw new Error('A PDF export is already in progress.');
     if (typeof filename !== 'string' || !/^marked-assessment-[a-zA-Z0-9_-]+\.pdf$/.test(filename) || typeof html !== 'string' || Buffer.byteLength(html) > 100 * 1024 * 1024 || !html.startsWith('<!doctype html>')) throw new Error('Invalid assessment PDF.');
     busy = true; let printWindow; let tempDirectory;
     try {
       const result = await dialog.showSaveDialog(parent(), { title: 'Save marked assessment PDF', defaultPath: filename, filters: [{ name: 'PDF document', extensions: ['pdf'] }] });
+      assertCurrent();
       if (result.canceled || !result.filePath) return false;
+      if (protectedCopy && !/\.pdf$/i.test(result.filePath)) throw new Error('Select a PDF destination.');
       const printSession = session.fromPartition(`assessment-pdf-${require('node:crypto').randomUUID()}`, { cache: false });
       printSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
       printSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('data:') }));
@@ -18,8 +26,11 @@ function createReportPdfExporter({ BrowserWindow, dialog, session, parent, write
       printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       printWindow.webContents.on('will-navigate', event => event.preventDefault());
       await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      assertCurrent();
       const pdf = await printWindow.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true });
-      if (!validPdf(pdf)) throw new Error('PDF generation failed.');
+      assertCurrent();
+      if (!validPdf(pdf) || (protectedCopy && pdf.length > 100 * 1024 * 1024)) throw new Error('PDF generation failed.');
+      if (protectedCopy) return await saveReadable(result.filePath, pdf, assertCurrent);
       // Same-directory staging keeps replacement on the destination filesystem.
       // Never truncate or remove the old PDF; a failed rename leaves it intact.
       tempDirectory = await makeTemp(join(dirname(result.filePath), '.assessment-pdf-'));

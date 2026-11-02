@@ -1,3 +1,4 @@
+import { assertReadableExportAllowed } from '../security/readableExports';
 import type { Assessment, AssessmentCategory, Student } from '../types/schema';
 import { exportNativeBackup, usesNativeFiles } from '../services/nativeFiles';
 import type { MarkingAttempt, MarkingCommit, MarkingRubric } from './types';
@@ -62,6 +63,7 @@ export function renderMarkingReport({ commit, rubric, attempt, student, assessme
 
 /** Deliberate local export; the report has no executable content or external resources. */
 export async function exportMarkingReport(input: MarkingReportInput): Promise<boolean> {
+  assertReadableExportAllowed();
   const html = renderMarkingReport(input);
   const filename = `assessment-report-${input.commit.id.replace(/[^a-zA-Z0-9_-]/g, '')}.html`;
   if (usesNativeFiles()) return exportNativeBackup(filename, html);

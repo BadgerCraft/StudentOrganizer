@@ -3,8 +3,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { generateMasterKey, parseEnvelope, decryptBytes, type EncryptionContext } from '../../shared/encryption';
-import { CHUNK_BYTES, createChunkManifest, sealChunk, finalizeChunkManifest, verifyChunkStream } from '../../shared/encryption/chunks';
+import { CHUNK_BYTES, createChunkManifest, sealChunk, finalizeChunkManifest, verifyChunkStream, openSealedChunkIndex, describeSealedChunkIndex, openIndexedChunk, closeSealedChunkIndex } from '../../shared/encryption/chunks';
 const require = createRequire(import.meta.url), { createCipherChunkStore } = require('../../electron/cipherChunkStore.cjs'), { DatabaseSync } = require('node:sqlite');
 const directories: string[] = [];
 const scope = { appId: 'student-organizer', vaultId: 'synthetic-chunk-vault', keyVersion: 1 }, master = generateMasterKey();
@@ -18,6 +19,21 @@ async function artifact(data: Uint8Array, revision = 1, recordId = 'fictional-fi
   return { file, chunks, draft: draft.manifest, seal: await finalizeChunkManifest(master, context, draft.plan, sequence(chunks)) };
 }
 async function stage(store: any, a: Awaited<ReturnType<typeof artifact>>) { for (const [index, ciphertext] of a.chunks.entries()) await store.stage(a.file, index, ciphertext); }
+function trackedDatabase(trace: { sql: string; args: unknown[] }[], afterGet?: (sql: string, args: unknown[]) => void) {
+  return function Database(filename: string, options: object) {
+    const db = new DatabaseSync(filename, options);
+    return new Proxy(db, { get(target, key) {
+      if (key === 'prepare') return (sql: string) => {
+        const stmt = target.prepare(sql);
+        return new Proxy(stmt, { get(query, method) {
+          if (method === 'get') return (...args: unknown[]) => { const result = query.get(...args); trace.push({ sql, args }); afterGet?.(sql,args); return result; };
+          const value = Reflect.get(query,method,query); return typeof value === 'function' ? value.bind(query) : value;
+        } });
+      };
+      const value = Reflect.get(target,key,target); return typeof value === 'function' ? value.bind(target) : value;
+    } });
+  };
+}
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }); });
 describe('ciphertext-only immutable SQLite chunk staging', () => {
   it('publishes only a fully authenticated stream, reopens and stores no plaintext canary', async () => {
@@ -100,4 +116,32 @@ describe('ciphertext-only immutable SQLite chunk staging', () => {
     // No committed chunks exist: publication must fail before invoking any supplied seal verifier.
     await expect(store.publish({ context, plan: large.plan }, large.manifest, null)).rejects.toThrow();
   });
+  it('reads exactly one bounded ciphertext row using the authenticated immutable final-seal descriptor', async () => {
+    const trace: {sql:string;args:unknown[]}[] = [], f = await fixture({ DatabaseSync: trackedDatabase(trace) }), data = new Uint8Array(CHUNK_BYTES+3).fill(17), a = await artifact(data);
+    await stage(f.store,a); await f.store.publish(a.file,a.seal,null); const index = await openSealedChunkIndex(master,a.file.context,a.seal), descriptor = describeSealedChunkIndex(index); trace.length = 0;
+    const ciphertext = await f.store.readChunkAt(descriptor,1); expect(ciphertext).toBe(a.chunks[1]); expect(await openIndexedChunk(master,a.file.context,index,1,ciphertext)).toEqual(data.subarray(CHUNK_BYTES));
+    const blobs = trace.filter(item=>item.sql.startsWith('SELECT ciphertext FROM chunks')); expect(blobs).toHaveLength(1); expect(blobs[0].args).toEqual([a.file.plan.fileId,1]);
+    for (const invalid of [-1,2,0.5,NaN,Infinity,'1']) await expect(f.store.readChunkAt(descriptor,invalid)).rejects.toThrow();
+    await expect(f.store.readChunkAt({ ...descriptor, context:{...descriptor.context,appId:'other-app'} },1)).rejects.toThrow(); closeSealedChunkIndex(index);
+  },90000);
+  it('keeps length preflight and ciphertext fetch in one snapshot during concurrent row growth', async () => {
+    const f = await fixture(), a = await artifact(new Uint8Array([7])); await stage(f.store,a); await f.store.publish(a.file,a.seal,null);
+    const trace: {sql:string;args:unknown[]}[] = []; let changed = false;
+    const reader = createCipherChunkStore({ directory:f.directory,scope,parseEnvelope,verifyManifest,DatabaseSync:trackedDatabase(trace,(sql,args)=>{
+      if (changed || !sql.includes('length(ciphertext)')) return; changed = true;
+      const db = new DatabaseSync(path.join(f.directory,'chunks.sqlite'));
+      try { db.prepare('UPDATE chunks SET ciphertext=zeroblob(?) WHERE file_id=? AND idx=?').run(Math.ceil((CHUNK_BYTES+16)/3)*4+4097,args[0],args[1]); } finally { db.close(); }
+    }) });
+    expect(await reader.readChunkAt(a.file,0)).toBe(a.chunks[0]); expect(changed).toBe(true); trace.length=0;
+    await expect(reader.readChunkAt(a.file,0)).rejects.toThrow(); expect(trace.some(item=>item.sql.startsWith('SELECT ciphertext FROM chunks'))).toBe(false);
+  });
+  it('does not inspect unrelated chunks, and requires shared indexed authentication after transport validation', async () => {
+    const f = await fixture(), data = new Uint8Array(CHUNK_BYTES+2).fill(5), a = await artifact(data); await stage(f.store,a); await f.store.publish(a.file,a.seal,null);
+    const index = await openSealedChunkIndex(master,a.file.context,a.seal), db = new DatabaseSync(path.join(f.directory,'chunks.sqlite'));
+    try { db.prepare('UPDATE chunks SET ciphertext=? WHERE file_id=? AND idx=0').run(Buffer.from('unrelated corrupt row'),a.file.plan.fileId); } finally { db.close(); }
+    const last = await f.store.readChunkAt(describeSealedChunkIndex(index),1); expect(await openIndexedChunk(master,a.file.context,index,1,last)).toEqual(data.subarray(CHUNK_BYTES));
+    const alternate = await sealChunk(master,a.file.context,a.file.plan,1,new Uint8Array([9,9])), changed = new DatabaseSync(path.join(f.directory,'chunks.sqlite'));
+    try { changed.prepare('UPDATE chunks SET ciphertext=?,digest=? WHERE file_id=? AND idx=1').run(Buffer.from(alternate),createHash('sha256').update(alternate).digest('hex'),a.file.plan.fileId); } finally { changed.close(); }
+    expect(await f.store.readChunkAt(a.file,1)).toBe(alternate); await expect(openIndexedChunk(master,a.file.context,index,1,alternate)).rejects.toThrow(); closeSealedChunkIndex(index);
+  },90000);
 });

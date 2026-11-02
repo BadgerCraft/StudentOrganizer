@@ -18,7 +18,7 @@ export function normalizeLegacyMarkingTables(tables: BackupTables, schemaVersion
 }
 
 /** Validate links in the imported snapshot, never against the database that will be replaced. */
-export function validateMarkingBackup(tables: BackupTables): void {
+export function validateMarkingBackup(tables: BackupTables, verifiedAttempts?: WeakSet<object>): void {
   const maps = Object.fromEntries(Object.entries(tables).map(([name, records]) => [name, new Map(records.map(record => [record.id, record]))]));
   function ref(table: string, id: string): any {
     const record = maps[table]?.get(id);
@@ -75,7 +75,7 @@ export function validateMarkingBackup(tables: BackupTables): void {
   }
   for (const name of MARKING_TABLE_NAMES) {
     for (const record of tables[name]) {
-      assertMarkingRecord(name, record);
+      if (name !== 'markingAttempts' || !verifiedAttempts?.has(record)) assertMarkingRecord(name, record);
       base(record);
     }
   }

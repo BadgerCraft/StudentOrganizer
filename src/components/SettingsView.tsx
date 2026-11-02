@@ -1,3 +1,4 @@
+import { EncryptionSettings } from '../security/EncryptionSettings';
 import { BackupSyncSettings } from '../sync/BackupSyncSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { ManualWindowsUpdate } from './ManualWindowsUpdate';
@@ -46,6 +47,7 @@ interface SettingsViewProps {
   onRefresh: () => void;
   onOpenPortability?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -56,10 +58,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   deviceId,
   onRefresh,
   onOpenPortability,
-  onDirtyChange
+  onDirtyChange, onBusyChange
 }) => {
-  const [section, setSection] = useState<'appearance' | 'participation' | 'grading' | 'recovery' | 'updates'>(() => {
-    try { const saved = sessionStorage.getItem('organizer-settings-section'); if (saved && ['appearance','participation','grading','recovery','updates'].includes(saved)) return saved as 'appearance' | 'participation' | 'grading' | 'recovery' | 'updates'; } catch { /* Appearance and navigation remain usable without session storage. */ }
+  const [section, setSection] = useState<'appearance' | 'participation' | 'grading' | 'recovery' | 'updates' | 'protection'>(() => {
+    try { const saved = sessionStorage.getItem('organizer-settings-section'); if (saved && ['appearance','participation','grading','recovery','updates','protection'].includes(saved)) return saved as 'appearance' | 'participation' | 'grading' | 'recovery' | 'updates' | 'protection'; } catch { /* Appearance and navigation remain usable without session storage. */ }
     return 'participation';
   });
   const [identityEpoch] = useState(getIdentityEpoch);
@@ -71,6 +73,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [missingPolicy, setMissingPolicy] = useState(policy?.missingWorkPolicy ?? 'exclude');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [pendingWrites, setPendingWrites] = useState(0);
+  const [encryptionDirty, setEncryptionDirty] = useState(false);
+  const [encryptionBusy, setEncryptionBusy] = useState(false);
+  const [appearanceBusy, setAppearanceBusy] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  useEffect(() => { onBusyChange?.(pendingWrites > 0 || encryptionBusy || appearanceBusy || recoveryBusy); return () => onBusyChange?.(false); }, [pendingWrites, encryptionBusy, appearanceBusy, recoveryBusy, onBusyChange]);
 
   // Event Type Management State
   const eventTypeService = useMemo(() => new ParticipationEventTypeService(db), []);
@@ -100,9 +107,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [editCategory, setEditCategory] = useState<AchievementCategoryCode | 'NONE'>('NONE');
 
   const policyDirty = !!policy && (weightK !== policy.weightK || weightT !== policy.weightT || weightC !== policy.weightC || weightA !== policy.weightA || excludeFormative !== policy.excludeFormative || missingPolicy !== policy.missingWorkPolicy);
-  useEffect(() => { onDirtyChange?.(policyDirty || pendingWrites > 0); return () => onDirtyChange?.(false); }, [policyDirty, pendingWrites, onDirtyChange]);
+  useEffect(() => { onDirtyChange?.(policyDirty || pendingWrites > 0 || encryptionDirty); return () => onDirtyChange?.(false); }, [policyDirty, pendingWrites, encryptionDirty, onDirtyChange]);
   const chooseSection = (next: typeof section) => {
-    if (next !== section && pendingWrites > 0) return;
+    if (next !== section &&  (pendingWrites > 0 || encryptionBusy || appearanceBusy || recoveryBusy)) return;
+    if (next !== section && encryptionDirty && !confirm('Leave encryption preparation? Unsaved recovery checks will be cancelled; the original workspace remains unchanged.')) return;
     setSection(next);
     try { sessionStorage.setItem('organizer-settings-section', next); } catch { /* Noncritical navigation preference. */ }
   };
@@ -327,10 +335,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       <nav aria-label="Settings sections" className="flex flex-wrap gap-2">
-        {(['appearance', 'participation', 'grading', 'recovery', 'updates'] as const).map(item => <button key={item} type="button" aria-pressed={section === item} onClick={() => chooseSection(item)} className="border rounded-lg px-3 py-2 capitalize aria-pressed:bg-blue-100">{item === 'recovery' ? 'Backups & import / export' : item}</button>)}
+        {(['appearance', 'participation', 'grading', 'recovery', 'updates', 'protection'] as const).map(item => <button key={item} type="button" aria-pressed={section === item} onClick={() => chooseSection(item)} className="border rounded-lg px-3 py-2 capitalize aria-pressed:bg-blue-100">{item === 'recovery' ? 'Backups & import / export' : item}</button>)}
       </nav>
-      {section === 'appearance' && <AppearanceSettings />}
-      {section === 'recovery' && <BackupSyncSettings database={db} userId={userId} />}
+      {section === 'appearance' && <AppearanceSettings onBusyChange={setAppearanceBusy} />}
+      {section === 'protection' && <EncryptionSettings database={db} userId={userId} onDirtyChange={setEncryptionDirty} onBusyChange={setEncryptionBusy} />}
+      {section === 'recovery' && <BackupSyncSettings database={db} userId={userId} onBusyChange={setRecoveryBusy} />}
       {section === 'recovery' && onOpenPortability && <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="text-lg font-semibold mb-2">Import, export &amp; recovery</h2>
         <p className="text-sm text-slate-500 mb-4">Import a class roster, export records, or review a complete backup before restoring.</p>
