@@ -9,7 +9,7 @@ const page=await context.newPage(),errors=[],external=[];
 page.on('pageerror',e=>errors.push(String(e)));context.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('blob:'))external.push(r.url());});
 let acceptDialogs=true;page.on('dialog',d=>void (acceptDialogs?d.accept():d.dismiss()));
 const settle=()=>page.waitForFunction(()=>!document.querySelector('#controls').disabled);
-const click=async s=>{await page.click(s);await settle();};
+const click=async s=>{if (['#delete','#name'].includes(s)) await page.locator(s).evaluate(el=>{for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;});await page.click(s);await settle();};
 try {
  await page.goto(base);await settle();assert.equal(await page.locator('#home-view').isVisible(),true);await click('#new');await page.fill('#assignment','Fictional leaf study');await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){IDBObjectStore.prototype.put=put;throw new DOMException('Fictional Home save failure','QuotaExceededError');};});await click('#home');assert.equal(await page.locator('#editor-view').isVisible(),true);assert.equal(await page.inputValue('#assignment'),'Fictional leaf study');assert.match(await page.locator('#status').innerText(),/Not completed/);await click('#home');await page.reload();await settle();assert.equal(await page.locator('#home-view').isVisible(),true);await page.locator('#home-list button').first().click();await settle();assert.equal(await page.inputValue('#assignment'),'Fictional leaf study');await click('#name');
  const pictures=await page.evaluate(()=>['red','blue'].map(color=>{const c=document.createElement('canvas');c.width=300;c.height=400;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,300,400);return c.toDataURL('image/png').split(',')[1];}));
@@ -17,6 +17,7 @@ try {
  await page.setInputFiles('#files',files);await settle();assert.equal(await page.locator('#pages article').count(),2);
  await page.reload();await settle();assert.equal(await page.locator('#pages article').count(),2);await click('#preview');
  await page.getByRole('button',{name:'Rotate 90°'}).first().click();await settle();
+ await page.getByText('Crop photo',{exact:true}).first().click();
  await page.waitForFunction(()=>document.querySelector('.crop-surface canvas')?.width===400);
  const cropSurface=page.locator('.crop-surface').first();await cropSurface.scrollIntoViewIfNeeded();
  const surfaceBox=await cropSurface.boundingBox();assert.ok(surfaceBox);
@@ -32,8 +33,10 @@ try {
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
  assert.ok(parseFloat(await corner.evaluate(el=>el.style.top))>beforeTouch+3,'touch drag adjusts crop');
  await page.getByRole('button',{name:'Apply crop',exact:true}).first().click();await settle();
+ await page.getByText('Crop photo',{exact:true}).first().click();
  const cropTop=parseFloat(await page.getByRole('button',{name:'Crop top-left corner',exact:true}).first().evaluate(el=>el.style.top));
  assert.ok(cropTop>14&&cropTop<16);await page.screenshot({path:'/tmp/student-usability-phone-crop.png',fullPage:true});await page.reload();await settle();
+ await page.getByText('Crop photo',{exact:true}).first().click();
  assert.ok(Math.abs(parseFloat(await page.getByRole('button',{name:'Crop top-left corner',exact:true}).first().evaluate(el=>el.style.top))-cropTop)<.001,'applied crop survives reload');
  assert.equal(await page.locator('input[type=number]').count(),0);assert.equal(await page.locator('#save-group').innerText(),'Save & Finish');
  await page.getByRole('button',{name:'Move down',exact:true}).first().click();await settle();await page.fill('#label','Fictional same name');
@@ -55,14 +58,14 @@ try {
  await click('#late-work');assert.match(await page.locator('#status').innerText(),/Not completed/);assert.equal(await page.inputValue('#archive'),completedId);
  await click('#late-work');const lateId=await page.inputValue('#archive');assert.notEqual(lateId,completedId);assert.equal(await page.locator('#groups article').count(),0);assert.equal(await page.locator('#export').isDisabled(),true);assert.equal(await page.locator('#assignment').isDisabled(),true);
  await page.reload();await settle();assert.equal(await page.inputValue('#archive'),lateId);
- await page.selectOption('#archive',completedId);await settle();await click('#late-work');assert.equal(await page.inputValue('#archive'),lateId);
+ await page.locator('#package-details').evaluate(el=>el.open=true);await page.selectOption('#archive',completedId);await settle();await click('#late-work');assert.equal(await page.inputValue('#archive'),lateId);
  await page.setInputFiles('#files',files.slice(0,1));await settle();await click('#preview');await page.fill('#label','Fictional same name');await click('#save-group');
  await page.setInputFiles('#files',files.slice(1,2));await settle();await click('#preview');await page.fill('#label','Fictional late new student');await click('#save-group');await click('#done');
  const lateDownload=page.waitForEvent('download');await click('#export');const lateFile=await lateDownload;await lateFile.saveAs('/tmp/capture-phone-latework-e2e.zip');const lateZip=new Uint8Array(await readFile(await lateFile.path()));const lateManifest=JSON.parse(strFromU8(unzipSync(lateZip)['manifest.json']));
  assert.equal(lateManifest.assignmentId,manifest.assignmentId);assert.notEqual(lateManifest.packageId,manifest.packageId);assert.equal(lateManifest.submissions.length,2);assert.equal(lateManifest.submissions[0].pages.length,1);assert.equal(lateManifest.submissions[1].pages.length,1);assert.equal(lateManifest.submissions[1].label,'Fictional late new student');assert.notEqual(lateManifest.submissions[0].id,lateManifest.submissions[1].id);assert.ok(!manifest.submissions.some(g=>g.id===lateManifest.submissions[0].id));assert.ok(!manifest.submissions.flatMap(g=>g.pages).some(p=>p.id===lateManifest.submissions[0].pages[0].id));
- await page.selectOption('#archive',completedId);await settle();const originalDownload=page.waitForEvent('download');await click('#export');assert.deepEqual(new Uint8Array(await readFile(await (await originalDownload).path())),zip);
- await click('#delete');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.match(await page.locator('#assignment-history').innerText(),/earlier local package was deleted/);
+ await page.locator('#package-details').evaluate(el=>el.open=true);await page.selectOption('#archive',completedId);await settle();const originalDownload=page.waitForEvent('download');await click('#export');assert.deepEqual(new Uint8Array(await readFile(await (await originalDownload).path())),zip);
+ await click('#delete');await page.locator('#package-details').evaluate(el=>el.open=true);await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.match(await page.locator('#assignment-history').innerText(),/earlier local package was deleted/);
  await click('#late-work');const nextLateId=await page.inputValue('#archive');assert.notEqual(nextLateId,lateId);assert.equal(await page.locator('#groups article').count(),0);
- await click('#new');await page.fill('#assignment','Fictional next assignment');await click('#name');await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.equal(await page.locator('#done').isDisabled(),true);
+ await click('#new');await page.fill('#assignment','Fictional next assignment');await click('#name');await page.locator('#package-details').evaluate(el=>el.open=true);await page.selectOption('#archive',lateId);await settle();assert.equal(await page.locator('#groups article').count(),2);assert.equal(await page.locator('#done').isDisabled(),true);
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS mobile repeated/interrupted flow: edits, duplicate labels, quota retry, restart, freeze/export and retained assignments; Home name/label recovery and failed navigation save, late-work cancel/quota retry/restart, immutable original ZIP, supplemental export and deletion isolation; no external requests.');
 } finally {await browser.close();}
