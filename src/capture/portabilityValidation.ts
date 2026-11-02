@@ -1,3 +1,4 @@
+import { resolveCaptureReference } from '../marking/captureReferences';
 import { MARKING_LIMITS } from '../marking/types';
 import { validateCaptureManifest, captureSha256 } from '../../shared/capturePackage';
 import { base64ToBytes, captureContentHash } from './attachmentService';
@@ -63,7 +64,7 @@ export function validateCaptureBackup(tables: Tables): void {
   for (const sources of grouped.values()) {
     const pages = sources.flatMap(s => s.pages);
     if (new Set(pages.map(p => p.metadata.id)).size !== pages.length) fail();
-    if (pages.length > MARKING_LIMITS.imagePages || pages.reduce((n, p) => n + p.metadata.byteLength, 0) > MARKING_LIMITS.imageBatchBytes) fail();
+    if (pages.length > MARKING_LIMITS.imagePages || pages.some(p => p.metadata.byteLength > MARKING_LIMITS.imageBytes)) fail();
     const orders = sources.map(s => s.rootSequence!).sort((a, b) => a - b);
     if (orders.some((order, index) => order !== index)) fail();
   }
@@ -85,7 +86,9 @@ export function validateCaptureBackup(tables: Tables): void {
         if (attempt.archivedAt && !attempt.keepStudentWork) continue;
         const pageIndex = attempt.imagePages?.findIndex((page: any) => page.id === id) ?? -1;
         const page = attempt.imagePages?.[pageIndex], original = source.pages[index];
-        if (pageIndex !== previousIndex + 1 || !page || page.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
+        if (pageIndex !== previousIndex + 1 || !page) fail();
+        const resolved = page.captureRef ? resolveCaptureReference(attempt, page, source) : page;
+        if (resolved.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
         previousIndex = pageIndex;
       }
     }

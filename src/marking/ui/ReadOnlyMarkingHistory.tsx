@@ -1,15 +1,19 @@
-import type { MarkingAttempt, MarkingContext, MarkingSession } from '../types';
+import type { MarkingActor, MarkingAttempt, MarkingContext, MarkingSession } from '../types';
 import { assertMarkingRecord, sessionCategories } from '../validation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { db } from '../../db/database';
+import { MarkingService } from '../markingService';
+import { getActiveTeacherId, getIdentityEpoch } from '../../services/identityService';
+import { queueCapturePage } from '../capturePageQueue';
 import { DocumentDisplayFailure, DocumentErrorBoundary } from '../../components/DocumentErrorBoundary';
 import { validateSavedMarkingSession } from '../readValidation';
 
 /** Validation and rendering run inside the caller's document boundary. */
-export function ReadOnlyOriginalWork({ attempt }: { attempt: MarkingAttempt }) {
+export function ReadOnlyOriginalWork({ attempt, actor }: { attempt: MarkingAttempt; actor?: MarkingActor }) {
   const [, retry] = useState(0);
   try { assertMarkingRecord('markingAttempts', attempt); }
   catch { return <DocumentDisplayFailure label="This saved original" onRetry={() => retry(value => value + 1)}/>; }
-  return <>{attempt.documents.map(doc => <details key={doc.id}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{attempt.imagePages?.map(page => <details key={page.id}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}</>;
+  return <>{attempt.imagePages?.some(page => page.captureRef) && <CapturedOriginal attempt={attempt} actor={actor}/>} {attempt.documents.map(doc => <details key={doc.id}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{!attempt.imagePages?.some(page => page.captureRef) && attempt.imagePages?.map(page => <details key={page.id}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}</>;
 }
 
 /** No editing callbacks: browsing retained or former-student work never opens a session. */
@@ -49,4 +53,28 @@ export function ReadOnlyMarkingHistory({ attempt, context }: { attempt: MarkingA
     </>;
   }
   return <><p>Rubric: {rubric?.title}</p>{!revisions.length && <p>{attempt.archivedAt ? 'No finalized feedback was published for this submission.' : 'No marking session was started for this submission.'}</p>}{revisions.map(session => <details key={session.id}><summary>Revision {session.revision} · {session.status} · {session.updatedAt}</summary><DocumentErrorBoundary resetKey={`${session.id}:${session.version}:${session.updatedAt}`} label="This saved revision"><Feedback session={session} /></DocumentErrorBoundary></details>)}</>;
+}
+
+/** Retained reference originals are deliberately selected one at a time. */
+function CapturedOriginal({ attempt, actor }: { attempt: MarkingAttempt; actor?: MarkingActor }) {
+  const [selected, setSelected] = useState(''), [url, setUrl] = useState(''), [error, setError] = useState(''), [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let cancelled = false, sourceUrl = ''; setUrl(''); setError('');
+    if (!selected) return;
+    void queueCapturePage(async () => {
+      try {
+        if (cancelled) return;
+        if (!actor) throw new Error('Choose the owning teacher to view this saved original.');
+        const page = await new MarkingService(db).readImagePage(attempt.id, selected, actor);
+        if (cancelled) return;
+        const bytes = Uint8Array.from(atob(page.base64), c => c.charCodeAt(0));
+        sourceUrl = URL.createObjectURL(new Blob([bytes], { type: page.mime }));
+        const image = new Image(); image.src = sourceUrl; await image.decode();
+        if (cancelled || getIdentityEpoch() !== actor.epoch || getActiveTeacherId() !== actor.userId) return;
+        setUrl(sourceUrl);
+      } catch (failure) { if (!cancelled) setError(failure instanceof Error ? failure.message : 'Original unavailable. Retry or restore a complete backup.'); }
+    });
+    return () => { cancelled = true; if (sourceUrl) URL.revokeObjectURL(sourceUrl); };
+  }, [attempt.id, attempt.version, selected, actor?.userId, actor?.epoch, retry]);
+  return <section><label>Saved original page<select aria-label="Saved original page" value={selected} onChange={event => setSelected(event.target.value)}><option value="">Choose a page</option>{attempt.imagePages?.map(page => <option key={page.id} value={page.id}>{page.name}</option>)}</select></label>{error && <p role="alert">{error} <button onClick={() => setRetry(value => value + 1)}>Retry original</button></p>}{url && <img alt={attempt.imagePages?.find(page => page.id === selected)?.name ?? 'Saved original'} className="max-w-full" src={url}/>}</section>;
 }

@@ -12,7 +12,7 @@ export class ClassroomStructureService {
   constructor(private db: OntarioTeacherDB) {}
 
   private tables() {
-    return [...AUTH_TABLES(this.db), this.db.devices, this.db.seatingLayouts, this.db.auditEntries, this.db.syncMutations];
+    return [...AUTH_TABLES(this.db), this.db.devices, this.db.seatingLayouts, this.db.seatPositions, this.db.auditEntries, this.db.syncMutations];
   }
 
   private async record(entityName: 'classSections' | 'seatingLayouts', next: ClassSection | SeatingLayout,
@@ -83,7 +83,17 @@ export class ClassroomStructureService {
       if (!previous || previous.deletedAt !== null) throw new ValidationError('Classroom layout is unavailable.');
       const auth = await assertClassSectionWriteAccess(this.db, actor.userId, previous.classSectionId);
       if (previous.version !== expectedVersion) throw new ConcurrencyError('Classroom layout changed. Refresh before editing.');
-      // Existing resize semantics deliberately remain unchanged: no seat relocation or deletion here.
+      // Read occupancy in the same transaction as the dimension write. Seat writers
+      // also transact over layouts + positions, so a concurrent move cannot bypass this guard.
+      const rows = patch.rows ?? previous.rows;
+      const cols = patch.cols ?? previous.cols;
+      if (rows < previous.rows || cols < previous.cols) {
+        const seats = await this.db.seatPositions.where('seatingLayoutId').equals(id).toArray();
+        if (seats.some(seat => seat.deletedAt === null &&
+          ((rows < previous.rows && seat.row >= rows) || (cols < previous.cols && seat.col >= cols)))) {
+          throw new ValidationError('Move students out of the rows or columns being removed first, then try again. No seats were changed.');
+        }
+      }
       const next = { ...previous, ...patch, updatedAt: new Date().toISOString(), version: previous.version + 1 };
       await this.db.seatingLayouts.put(next);
       await this.record('seatingLayouts', next, previous, actor, auth.organizationId);

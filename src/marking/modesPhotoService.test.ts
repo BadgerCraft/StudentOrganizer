@@ -9,7 +9,7 @@ import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher, setActiveT
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
 import type { AssessmentCategory, ClassEnrollment } from '../types/schema';
 import { MarkingService } from './markingService';
-import type { MarkingActor, MarkingAttempt, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingMode, MarkingRubric, MarkingVisualAnnotation, RubricContent } from './types';
+import type { MarkingActor, MarkingAttempt, MarkingDocument, MarkingDraft, InlineMarkingImagePage, MarkingImagePage, MarkingMode, MarkingRubric, MarkingVisualAnnotation, RubricContent } from './types';
 
 const ASSESSMENT = 'fictional-modes-photo-assessment';
 const SECTION = 'class-eng4u-01';
@@ -18,7 +18,7 @@ const OTHER_TEACHER = 'fictional-other-photo-marker';
 const digest = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 // Real, tiny PNGs keep the service's byte/signature/dimension checks meaningful.
-function pngPage(name = 'fictional-page.png', shade = 150): MarkingImagePage {
+function pngPage(name = 'fictional-page.png', shade = 150): InlineMarkingImagePage {
   const chunk = (name: string, payload: Buffer) => {
     const typeAndData = Buffer.concat([Buffer.from(name), payload]);
     let crc = 0xffffffff;
@@ -160,7 +160,7 @@ describe('Local marking modes and photographed-page integrity', () => {
     const next = await service.saveDraft(session.id, content, session.version, actor);
     expect(next.draft.imageFeedback!.find(page => page.pageId === attempt.imagePages![0].id)!.annotations).toEqual(originalAnnotations);
     expect((await db.markingAttempts.get(attempt.id))?.imagePages).toEqual(attempt.imagePages);
-    for (const original of attempt.imagePages!) expect(digest(Buffer.from(original.base64, 'base64'))).toBe(original.hash);
+    for (const original of attempt.imagePages!) { if (!original.base64) throw new Error('Expected ordinary inline import'); expect(digest(Buffer.from(original.base64, 'base64'))).toBe(original.hash); }
     await expect(service.saveDraft(session.id, session.draft, session.version, actor)).rejects.toThrow(ConcurrencyConflictError);
     expect((await db.markingSessions.get(session.id))?.draft).toEqual(next.draft);
   });

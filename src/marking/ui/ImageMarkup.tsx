@@ -1,3 +1,7 @@
+import { db } from '../../db/database';
+import { MarkingService } from '../markingService';
+import { getActiveTeacherId, getIdentityEpoch } from '../../services/identityService';
+import { queueCapturePage } from '../capturePageQueue';
 import { useFeedbackPressedKeys, type FeedbackPressedKeys } from './useFeedbackPressedKeys';
 import { FeedbackKeyboardControl } from './FeedbackKeyboardControl';
 import { DictationFeedback } from '../../dictation/DictationFeedback';
@@ -17,6 +21,7 @@ export interface ImageMarkupProps {
   /** Includes the owning session/revision, so delayed speech cannot cross drafts. */
   dictationScope?: string;
   pages: MarkingImagePage[];
+  attemptId?: string;
   feedback: MarkingPageFeedback[];
   onChange: (next: MarkingPageFeedback[]) => void;
   rubric: MarkingRubric;
@@ -35,7 +40,7 @@ export interface ImageMarkupProps {
 const colors = { red: '#dc2626', blue: '#2563eb', yellow: '#facc15' };
 const buttonClass = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
-export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, keyboardActive = true, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
+export function ImageMarkup({ attemptId, dictationScope = '', pressedKeys, commentContainer, pages: originalPages, feedback, onChange, rubric, disabled, readOnly = false, keyboardActive = true, onReorder, actor, onComposerDirtyChange, onFeedbackActiveChange, onCropEditingChange }: ImageMarkupProps) {
   const localPressedKeys = useFeedbackPressedKeys(!pressedKeys);
   const feedbackPressedKeys = pressedKeys ?? localPressedKeys;
   // Draft feedback owns the display order; retained attempt bytes keep their original order.
@@ -142,7 +147,7 @@ export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer
     setPreviewKey('');
     const draw = (source: CanvasImageSource) => {
       const canvas = canvasRef.current;
-      if (cancelled || !canvas) return;
+      if (cancelled || !canvas || page.captureRef && (!actor || getIdentityEpoch() !== actor.epoch || getActiveTeacherId() !== actor.userId)) return;
       // Keep the preview bounded; annotations remain in original coordinates regardless of canvas size.
       const ratio = Math.min(1, 1600 / Math.max(size.width, size.height));
       canvas.width = Math.max(1, Math.round(size.width * ratio)); canvas.height = Math.max(1, Math.round(size.height * ratio));
@@ -159,7 +164,11 @@ export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer
     };
     const render = async () => {
       try {
-        const bytes = Uint8Array.from(atob(page.base64), character => character.charCodeAt(0));
+        if (cancelled) return;
+        const resolved = page.captureRef ? (attemptId && actor ? await new MarkingService(db).readImagePage(attemptId, page.id, actor) : undefined) : page;
+        if (cancelled) return;
+        if (!resolved?.base64) throw new Error('Reopen this submission with the original teacher to load its saved page.');
+        const bytes = Uint8Array.from(atob(resolved.base64), character => character.charCodeAt(0));
         const blob = new Blob([new Uint8Array(markingImageDecodeBytes(bytes, page.mime))], { type: page.mime });
         if (typeof createImageBitmap === 'function') {
           disposable = await createImageBitmap(blob, { imageOrientation: 'none' });
@@ -175,9 +184,9 @@ export function ImageMarkup({ dictationScope = '', pressedKeys, commentContainer
         }
       } catch (error) { if (!cancelled) setRenderError(error instanceof Error ? error.message : 'Image preview is unavailable.'); }
     };
-    void render();
+    if (page.captureRef) void queueCapturePage(render); else void render();
     return () => { cancelled = true; disposable?.close(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [renderKey, page?.base64, previewAttempt]);
+  }, [renderKey, page?.base64, page?.captureRef?.attachmentId, page?.captureRef?.pageId, attemptId, actor?.userId, actor?.epoch, previewAttempt]);
 
   function changePage(targetPageId: string, change: (item: MarkingPageFeedback) => MarkingPageFeedback) {
     const state = latest.current;

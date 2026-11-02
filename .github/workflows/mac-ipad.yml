@@ -136,6 +136,7 @@ jobs:
           npm run test:dictation:browser
           npm run test:classroom
           npm run test:qa:integrity
+          npm run test:qa:capacity-seating
           npm run test:desktop:photo-reliability
       - name: Check WebKit browser compatibility
         if: ${{ !cancelled() }}

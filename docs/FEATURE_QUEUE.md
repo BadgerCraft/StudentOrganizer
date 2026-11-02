@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 2 — approved remaining QA fixes
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| QA-05 | Approved by Tyler “Can you build them now then?”: valid large phone submissions must remain usable for marking, preserving every original/page, matching and one student's grading context. | Isolated `codex/qa-capacity-seating-20261102` from main94851bf (49/50 merged). Reproduce, bounded reference-backed originals with unchanged inline safety limits, tests/independent review/new draft PR. Integrate separately completed encryption main before final review; no encryption activation, merge/release/deploy/live data. [Work order](work-orders/QA-CAPACITY-SEATING-2026-11-02.md). |
+| QA-06 | Approved same instruction: shrinking seating must never silently hide occupied edge students. | Transactional occupied-edge rejection and explicit recovery notice; preserve all identities/seats/permissions. Regression + real browser screenshot checks, independent review and same new draft PR. Parent retains merge approval. |
+
 ## October 29 — merge and approved encryption
 
 | Stable ID | Disposition | Next action / gate |

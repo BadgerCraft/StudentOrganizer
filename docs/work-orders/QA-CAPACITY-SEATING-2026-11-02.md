@@ -1,0 +1,32 @@
+# QA-05 / QA-06 follow-up — November 2, 2026
+
+## Authority and starting state
+
+Tyler approved “Can you build them now then?” at 2026-11-02 15:48:21 UTC after the two StudentOrganizer bugs were identified as remaining work. Scope: reproduce, implement, regressions, browser/screenshots, independent review, isolated branch, new draft PR and exact-head CI. No merges, releases, deployments, real student data or new encryption activation. Parent coordinates separate encryption PR51–55 merges and VBS work.
+
+Isolated worktree `/workspace/StudentOrganizer-qa-followup`, branch `codex/qa-capacity-seating-20261102`, starts at main `94851bf2d668d85a33672b688e24c6a9f275eaf5` (PR49 desktop UI and PR50 phone checklist merged). Original `/workspace/StudentOrganizer` remains untouched at9496094. Initial live reads: PR51–55 all open/unmerged; do not assume encryption stack integrated. Refresh main and integrate completed batch before final review when available; never touch that task's branches/workspace.
+
+## Reproductions and intended behavior
+
+Historical exact evidence: [FULL-QA report QA-05/06](FULL-QA-2026-10-24.md). QA05 valid five-page35MiB PNG capture package decodes/imports but bind rejects the marking32MiB inline cap. QA06 occupied row/column shrink succeeds then excludes the student from both visible grid and unseated list. Reproduce on starting main before changes.
+
+- QA05: preserve all original bytes, page order/identities, explicit matching, single student/rubric/attempt and one final judgment. Keep existing inline32MiB, per-image8MiB,10-page, pixel and full-backup limits. Oversize captured work uses explicit local original references with authorized page-at-a-time resolution; no URLs, unchecked sentinel, lossy substitutions or split grading attempts. Ordinary inline imports remain unchanged. Validate reference provenance/ownership/hash/dimensions on read and restore. Exercise retries, interruption, annotation/finalization/reload, archive keep/purge and backup roundtrip. Impossible workloads must leave data intact with recoverable guidance.
+- QA06: reject shrinking an occupied edge inside the authorized layout transaction; no seat move/deletion or audit/version side effects on failure. Tell teacher to move affected occupants first. Visible recovery notice identifies preexisting out-of-grid seats. Cover both axes, empty edges, tombstones, competing writes, read-only access, UI actions and screenshots.
+
+## Ownership and verification plan
+
+Capture reviewer owns capture/marking/reference implementation and tests. Desktop reviewer owns seating/service and focused browser/screenshots. Persistence reviewer independently challenges reference/backup/archive contracts. Coordinator owns shared scripts, queue/work order, main integration and publication; final independent review after integration. Inherited model/high reasoning for identity/mark preservation; escalate conflicting contracts or failed data invariants. Completion requires committed tested patch, new draft PR readback and four relevant exact-head CI workflows terminal; user acceptance and merge remain separate.
+
+Applicable guidance: verify-build, reuse-component-lessons, cloud runtime and explain-back. No repository `.agents/skills` found; catalog skills used. Authoritative index v10 and database v6 read. DB-003/004 apply to Dexie seat identity/index/tombstone semantics: preserve all seats and assert whole-table rollback/retry; do not mechanically hard-delete tombstones for a resize. DB-001/002 SQLite examples are not proof for Dexie; test actual application transactions and replay identities. Runtime policy enforced with current observations; npm initial default cache path ENOENT recovered once with writable `/tmp/studentorganizer-npm-cache`, successful install. No credential values accessed or configuration changes.
+
+## Compatibility and preservation
+
+Reference-bearing marking records require the updated reader; older strict readers reject them rather than silently dropping pages. No database table migration is needed. A rollback must preserve the complete current backup and original capture packages and use a compatible reader (or a verified pre-change backup), not blindly downgrade a teacher database. Independent capture originals retain their existing archive policy: archiving marking without student work removes that attempt’s image references/visual drafts and must never rehydrate it through provenance; it does not newly delete independent capture attachments.
+
+## Checkpoint
+
+Implementation and independent source review complete on starting main94851bf. Coordinator full suite: **91 files,981 passed,one native-only skipped**; production and Control Panel builds PASS. New real seating browser rerun by coordinator PASS; screenshots inspected. Owner real capture browser PASS:36,692,440 pixel-data bytes,49,200,555-byte full backup,all5 original hashes preserved through restart/restore and annotated5page genuine Chromium PDF2,305,838bytes. No page errors/external requests. Standalone strict harness types PASS. Existing focused95 tests plus late-page promotion14 tests passed; initial large-fixture assertion setup and duplicate test declaration were corrected without weakening domain checks. Full final suite supersedes those interim failures.
+
+Independent seating reviewer:33 tests + real browser PASS, no integrity blocker. Independent persistence reviewer: valid source read/restore plus malformed reference/version/owner/missing-source rejection preserve all tables; caught and fixed finalization reference-check gap. Independent UI/export reviewer:68 tests and delayed-read/page-switch/teacher-switch/decode-cancellation/missing-reference retry browser probes PASS; history decode awaits and post-decode actor checks repaired. Fast integrity probes (10/10 PASS) and lifecycle regression (browser+strict types PASS) are retained in repository tests. The coordinator full-suite result above preceded the added10-case file; final integrated suite will include it. [Evidence](evidence/QA-FOLLOWUP-2026-11-02/) preserves repro, browser, review reports and seating screenshots.
+
+Main advanced to90057b3 (PR51 merged) during work;52–55 still open on latest inspection. Commit/integrate refreshed main only in this branch, then reverify and record exact final head/CI. No other task branch/workspace was modified. Physical Windows/Mac/Android camera/native dialogs, storage exhaustion/power-loss and live provider interoperability remain separate limits; no generic hands-on retest requested.

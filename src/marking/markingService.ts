@@ -1,3 +1,4 @@
+import { resolveCaptureReference } from './captureReferences';
 import type { CaptureAttachment } from '../capture/types';
 import { assertCaptureBackupCapacity } from '../capture/backupCapacity';
 import Dexie from 'dexie';
@@ -7,7 +8,7 @@ import type { Assessment, AssessmentCategory, CategoryResult } from '../types/sc
 import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
 import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
-import type { MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
+import { MARKING_LIMITS, type InlineMarkingImagePage, type MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertMarkingRecord, assertRubricContent, sessionCategories } from './validation';
 import { validateMarkingImageBytes, inspectMarkingImage } from './importImages';
 import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
@@ -82,6 +83,7 @@ export class MarkingService {
     assertMarkingRecord('markingRubrics', rubric);
     if (attempt.classSectionId !== context.assessment.classSectionId || rubric.assessmentId !== attempt.assessmentId || rubric.classSectionId !== attempt.classSectionId || !rubric.confirmed) throw new ValidationError('Submission and rubric links are inconsistent.');
     if (attempt.classEnrollmentId) await this.enrollment(context.assessment, attempt.classEnrollmentId, write);
+    if (write && attempt.imagePages?.some(page => page.captureRef)) await this.validateCaptureReferences(attempt);
     return { ...context, attempt, rubric };
   }
   private async sessionContext(sessionId: string, actor: MarkingActor, write: boolean) {
@@ -232,10 +234,11 @@ export class MarkingService {
         if (!rubric.confirmed || rubric.assessmentId !== assessment.id || rubric.classSectionId !== assessment.classSectionId) throw new ValidationError('Choose a confirmed rubric for this assignment.');
         attempt = { ...this.base(assessment, actor), rubricId: rubric.id, mode: 'written', documents: [], imagePages: sources.flatMap(source => this.captureImages(source)), classEnrollmentId: root.classEnrollmentId, previousAttemptId: null };
       }
-      assertMarkingImagePages(attempt.imagePages);
       let offset = 0;
       const provenance = sources.map(source => { const pageIds = attempt.imagePages!.slice(offset, offset + source.pages.length).map(p => p.id); offset += source.pages.length; return { attachmentId: source.id, pageIds }; });
       const next = { ...attempt, captureSources: provenance, version: choice.attemptId ? attempt.version + 1 : attempt.version, updatedAt: new Date().toISOString() };
+      this.useCaptureReferences(next, sources);
+      assertMarkingRecord('markingAttempts', next);
       await this.db.markingAttempts.put(next);
       await this.audit('markingAttempts', next, choice.attemptId ? attempt : null, actor);
       for (const source of sources) await this.db.captureAttachments.update(source.id, { rootAttachmentId: root.id, rootSequence: source.rootSequence ?? 0, markingAttemptId: next.id });
@@ -249,6 +252,58 @@ export class MarkingService {
       } else { const adjusted = { ...session, version: session.version + 1, updatedAt: new Date().toISOString() }; await this.db.markingSessions.put(adjusted); await this.audit('markingSessions', adjusted, session, actor); }
       await assertCaptureBackupCapacity(this.db);
       return next;
+    });
+  }
+  /** References replace duplicated inline storage only; page IDs and judgments stay identical. */
+  private useCaptureReferences(attempt: MarkingAttempt, sources: CaptureAttachment[]) {
+    const pages = attempt.imagePages ?? [];
+    if (!pages.some(page => page.captureRef) && pages.reduce((sum, page) => sum + page.size, 0) <= MARKING_LIMITS.imageBatchBytes) return;
+    attempt.imagePages = pages.map(page => {
+      const binding = attempt.captureSources?.find(value => value.pageIds.includes(page.id));
+      const source = sources.find(value => value.id === binding?.attachmentId);
+      const original = source?.pages[binding!.pageIds.indexOf(page.id)];
+      if (!binding || !source || !original || original.metadata.sha256 !== page.hash || original.metadata.byteLength !== page.size) throw new ValidationError('The original page provenance is inconsistent.');
+      const { base64: _, captureRef: __, ...metadata } = page;
+      return { ...metadata, captureRef: { version: 1 as const, attachmentId: source.id, pageId: original.metadata.id } };
+    });
+  }
+  /** Validate cross-table provenance before marking writes without decoding originals. */
+  private async validateCaptureReferences(attempt: MarkingAttempt) {
+    const sources = new Map<string, CaptureAttachment>();
+    const enrollment = attempt.classEnrollmentId && await this.db.classEnrollments.get(attempt.classEnrollmentId);
+    for (const binding of attempt.captureSources ?? []) {
+      const source = await this.db.captureAttachments.get(binding.attachmentId);
+      if (!source) throw new ValidationError('A saved capture original is missing. Restore a complete backup; the marking draft is preserved.');
+      sources.set(source.id, source);
+    }
+    const root = sources.get(attempt.captureSources?.[0]?.attachmentId ?? '');
+    for (const [index, binding] of (attempt.captureSources ?? []).entries()) {
+      const source = sources.get(binding.attachmentId)!;
+      const receipt = await this.db.captureImportReceipts.where('attachmentId').equals(source.id).first();
+      if (!enrollment || source.studentId !== enrollment.studentId || !root || root.studentId !== enrollment.studentId || root.createdBy !== attempt.createdBy || root.assessmentId !== attempt.assessmentId || root.classSectionId !== attempt.classSectionId || root.classEnrollmentId !== attempt.classEnrollmentId || root.rootAttachmentId !== root.id || root.markingAttemptId !== attempt.id || source.rootAttachmentId !== root.id || source.rootSequence !== index || !receipt || receipt.contentHash !== source.contentHash || receipt.createdBy !== attempt.createdBy || receipt.assessmentId !== attempt.assessmentId || receipt.classSectionId !== attempt.classSectionId || receipt.studentId !== source.studentId || receipt.packageId !== source.packageId || receipt.submissionId !== source.submissionId || receipt.classEnrollmentId !== attempt.classEnrollmentId || binding.pageIds.length !== source.pages.length) throw new ValidationError('The saved capture provenance is inconsistent. Restore a complete backup; the marking draft is preserved.');
+    }
+    const orderedIds = attempt.captureSources!.flatMap(binding => binding.pageIds);
+    if (orderedIds.length !== attempt.imagePages!.length || orderedIds.some((id, index) => id !== attempt.imagePages![index].id)) throw new ValidationError('The saved capture page order is inconsistent.');
+    for (const page of attempt.imagePages!) if (page.captureRef) resolveCaptureReference(attempt, page, sources.get(page.captureRef.attachmentId)!, false);
+  }
+  /** Read one current page through authorization; never hydrate a whole attempt. */
+  async readImagePage(attemptId: string, pageId: string, actor: MarkingActor): Promise<InlineMarkingImagePage> {
+    return this.transaction(actor, false, async () => {
+      const { attempt } = await this.attemptContext(attemptId, actor, false);
+      const page = attempt.imagePages?.find(value => value.id === pageId);
+      if (!page || attempt.archivedAt && !attempt.keepStudentWork) throw new ValidationError('This marking page is no longer retained.');
+      let resolved: InlineMarkingImagePage;
+      if (page.captureRef) {
+        const source = await this.db.captureAttachments.get(page.captureRef.attachmentId);
+        const root = source && (source.rootAttachmentId === source.id ? source : await this.db.captureAttachments.get(source.rootAttachmentId ?? ''));
+        const receipt = source && await this.db.captureImportReceipts.where('attachmentId').equals(source.id).first();
+        const enrollment = attempt.classEnrollmentId && await this.db.classEnrollments.get(attempt.classEnrollmentId);
+        const bindingIndex = attempt.captureSources?.findIndex(value => value.attachmentId === source?.id) ?? -1;
+        if (!source || !enrollment || source.studentId !== enrollment.studentId || !root || root.studentId !== enrollment.studentId || root.createdBy !== attempt.createdBy || root.assessmentId !== attempt.assessmentId || root.classSectionId !== attempt.classSectionId || root.classEnrollmentId !== attempt.classEnrollmentId || root.rootAttachmentId !== root.id || root.markingAttemptId !== attempt.id || source.rootSequence !== bindingIndex || attempt.captureSources?.[0]?.attachmentId !== root.id || !receipt || receipt.contentHash !== source.contentHash || receipt.createdBy !== actor.userId || receipt.assessmentId !== attempt.assessmentId || receipt.classSectionId !== attempt.classSectionId || receipt.studentId !== source.studentId || receipt.packageId !== source.packageId || receipt.submissionId !== source.submissionId || receipt.classEnrollmentId !== attempt.classEnrollmentId) throw new ValidationError('The saved capture source is unavailable. Restore a complete backup.');
+        resolved = resolveCaptureReference(attempt, page, source);
+      } else resolved = page;
+      await Dexie.waitFor(validateMarkingImageBytes(resolved));
+      this.checkActor(actor); return resolved;
     });
   }
   private captureImages(source: CaptureAttachment): MarkingImagePage[] {
@@ -276,7 +331,9 @@ export class MarkingService {
       const pages = this.captureImages(source);
       for (const page of pages) await Dexie.waitFor(validateMarkingImageBytes(page));
       const next = { ...attempt, imagePages: [...(attempt.imagePages ?? []), ...pages], captureSources: [...attempt.captureSources, { attachmentId: source.id, pageIds: pages.map(p => p.id) }], version: attempt.version + 1, updatedAt: new Date().toISOString() };
-      assertMarkingImagePages(next.imagePages);
+      const sources = await this.db.captureAttachments.where('assessmentId').equals(attempt.assessmentId).filter(row => next.captureSources.some(binding => binding.attachmentId === row.id)).toArray();
+      this.useCaptureReferences(next, sources);
+      assertMarkingRecord('markingAttempts', next);
       await this.db.markingAttempts.put(next); await this.audit('markingAttempts', next, attempt, actor);
       for (const session of sessions) {
         const draft = { ...session.draft, imageFeedback: [...(session.draft.imageFeedback ?? []), ...pages.map((p, index) => ({ pageId: p.id, ...source.pages[index].metadata.edits, annotations: [] }))] };
@@ -410,6 +467,7 @@ export class MarkingService {
         return this.owned(existing, actor, 'Commit');
       }
       await this.context(assessment.id, actor, true);
+      if (attempt.imagePages?.some(page => page.captureRef)) await this.validateCaptureReferences(attempt);
       if (attempt.classEnrollmentId) await this.enrollment(assessment, attempt.classEnrollmentId);
       this.version(session, expectedVersion);
       if (!attempt.classEnrollmentId) throw new ValidationError('Confirm a student before finalization.');

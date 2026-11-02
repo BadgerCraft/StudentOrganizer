@@ -1,6 +1,6 @@
 import { Unzlib } from 'fflate';
 import { sha256 } from './importDocuments';
-import { MARKING_LIMITS, type MarkingImagePage } from './types';
+import { MARKING_LIMITS, type InlineMarkingImagePage, type MarkingImagePage } from './types';
 
 type ImageInfo = Pick<MarkingImagePage, 'mime' | 'width' | 'height'>;
 const fail = (message = 'The image is corrupt or has unsupported framing.'): never => { throw new Error(message); };
@@ -309,8 +309,9 @@ async function browserDecode(bytes: Uint8Array, info: ImageInfo): Promise<void> 
  * Node validates structure (and PNG compressed pixels); full JPEG/WebP decoding requires a browser codec.
  */
 export async function validateMarkingImageBytes(page: MarkingImagePage): Promise<void> {
+  if (page.captureRef) fail('Resolve the authorized capture original before validating image bytes.');
   nameValid(page.name);
-  const bytes = decode(page.base64);
+  const bytes = decode(page.base64!);
   if (!Number.isSafeInteger(page.size) || page.size !== bytes.length || bytes.length > MARKING_LIMITS.imageBytes || !/^[a-f0-9]{64}$/i.test(page.hash)) fail('Image size or retained hash is invalid.');
   if (await sha256(bytes) !== page.hash.toLowerCase()) fail('Image bytes do not match the retained hash.');
   const info = inspectMarkingImage(bytes);
@@ -319,8 +320,8 @@ export async function validateMarkingImageBytes(page: MarkingImagePage): Promise
   await browserDecode(bytes, info);
 }
 
-export async function parseMarkingImages(files: File[]): Promise<{ pages: MarkingImagePage[]; errors: { name: string; message: string; file: File }[] }> {
-  const pages: MarkingImagePage[] = [], errors: { name: string; message: string; file: File }[] = [];
+export async function parseMarkingImages(files: File[]): Promise<{ pages: InlineMarkingImagePage[]; errors: { name: string; message: string; file: File }[] }> {
+  const pages: InlineMarkingImagePage[] = [], errors: { name: string; message: string; file: File }[] = [];
   if (files.length > MARKING_LIMITS.imagePages || files.reduce((sum, file) => sum + file.size, 0) > MARKING_LIMITS.imageBatchBytes) {
     return { pages, errors: files.map(file => ({ file, name: file.name, message: 'Import at most 10 images and 32 MB in one batch.' })) };
   }

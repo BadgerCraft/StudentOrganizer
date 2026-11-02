@@ -57,7 +57,8 @@
     "test:marking:keyboard": "node --import tsx scripts/gradingKeyboardSmoke.ts",
     "test:recovery:guidance": "node --import tsx scripts/recoveryGuidanceSmoke.ts",
     "test:encryption": "vitest run shared/encryption src/security",
-    "test:encryption:browser": "node --import tsx scripts/encryptionContractSmoke.ts"
+    "test:encryption:browser": "node --import tsx scripts/encryptionContractSmoke.ts",
+    "test:qa:capacity-seating": "node --import tsx scripts/qaSeatingResizeSmoke.ts && node --import tsx scripts/qaCaptureReferenceSmoke.ts && node --import tsx scripts/qaCaptureReferenceLifecycleSmoke.ts"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

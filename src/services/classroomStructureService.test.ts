@@ -5,6 +5,7 @@ import { seedDatabase } from '../db/seeds';
 import type { ClassSection, SeatingLayout } from '../types/schema';
 import { ClassroomStructureService } from './classroomStructureService';
 import { clearActiveTeacherId, getIdentityEpoch, setActiveTeacherId } from './identityService';
+import { SeatingDomainService } from './seatingService';
 import { listAccessibleClassSections } from './authHelper';
 
 const actor = { userId: 'user-tyler', deviceId: 'fictional-structure-device' };
@@ -90,10 +91,59 @@ describe('classroom structure writes retain atomic authority and attribution', (
     }
   });
 
-  it('projects only layout controls and retains existing resize/seat semantics', async () => {
+  it.each(['rows', 'cols'] as const)('rejects shrinking an occupied %s edge without any writes', async axis => {
+    await db.seatPositions.clear();
+    const enrollment = (await db.classEnrollments.where('classSectionId').equals(section.id).first())!;
+    await db.seatingLayouts.update(layout.id, { rows: 3, cols: 3, isLocked: false });
+    layout = (await db.seatingLayouts.get(layout.id))!;
+    await new SeatingDomainService(db).assignSeat(layout.id, axis === 'rows' ? 2 : 0, axis === 'cols' ? 2 : 0, enrollment.id, actor.userId, actor.deviceId);
+    const before = await snapshot();
+    await expect(service.updateLayout(layout.id, layout.version, { [axis]: 2 }, actor)).rejects.toThrow(/Move.*first/);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each(['rows', 'cols'] as const)('allows empty %s edge removal and ignores tombstones without deleting them', async axis => {
+    await db.seatPositions.clear();
+    const enrollment = (await db.classEnrollments.where('classSectionId').equals(section.id).first())!;
+    const now = new Date().toISOString();
+    await db.seatPositions.add({ id: 'old-deleted-seat', seatingLayoutId: layout.id, classEnrollmentId: enrollment.id,
+      row: layout.rows - 1, col: layout.cols - 1, createdAt: now, updatedAt: now, deletedAt: now, version: 1 });
     const seats = await db.seatPositions.toArray();
-    const changed = await service.updateLayout(layout.id, layout.version, { rows: 2, cols: 2, cardSize: 'compact', id: 'injected', classSectionId: empty.id, deletedAt: 'injected' } as any, actor);
-    expect(changed).toMatchObject({ id: layout.id, classSectionId: section.id, rows: 2, cols: 2, cardSize: 'compact', deletedAt: null, version: layout.version + 1 });
+    const next = await service.updateLayout(layout.id, layout.version, { [axis]: layout[axis] - 1 }, actor);
+    expect(next[axis]).toBe(layout[axis] - 1);
+    expect(next.version).toBe(layout.version + 1);
+    expect(await db.seatPositions.toArray()).toEqual(seats);
+    expect(await db.auditEntries.where('entityId').equals(layout.id).count()).toBe(1);
+    expect(await db.syncMutations.where('entityId').equals(layout.id).count()).toBe(1);
+  });
+
+  it.each([['rows', 'seat-first'], ['rows', 'resize-first'], ['cols', 'seat-first'], ['cols', 'resize-first']] as const)('serializes concurrent %s edge seating and shrinking: %s', async (axis, order) => {
+    await db.seatPositions.clear();
+    await db.seatingLayouts.update(layout.id, { rows: 3, cols: 3, isLocked: false });
+    const enrollment = (await db.classEnrollments.where('classSectionId').equals(section.id).first())!;
+    const seat = () => new SeatingDomainService(db).assignSeat(layout.id, axis === 'rows' ? 2 : 0, axis === 'cols' ? 2 : 0, enrollment.id, actor.userId, actor.deviceId);
+    const resize = () => service.updateLayout(layout.id, layout.version, { [axis]: 2 }, actor);
+    const results = await Promise.allSettled(order === 'seat-first' ? [seat(), resize()] : [resize(), seat()]);
+    expect(results.map(r => r.status)).toEqual(['fulfilled', 'rejected']);
+    const current = (await db.seatingLayouts.get(layout.id))!;
+    const seats = await db.seatPositions.toArray();
+    expect(seats.every(s => s.row < current.rows && s.col < current.cols)).toBe(true);
+    expect(seats.length).toBe(order === 'seat-first' ? 1 : 0);
+    expect(current[axis]).toBe(order === 'seat-first' ? 3 : 2);
+  });
+
+  it('denies read-only resizing even when the edge is empty', async () => {
+    await db.seatPositions.clear();
+    await db.classSectionStaff.toCollection().modify({ role: 'read_only' });
+    const before = await snapshot();
+    await expect(service.updateLayout(layout.id, layout.version, { rows: 2 }, actor)).rejects.toThrow(/Read-only/);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('projects only layout controls and preserves seats on expansion', async () => {
+    const seats = await db.seatPositions.toArray();
+    const changed = await service.updateLayout(layout.id, layout.version, { rows: 20, cols: 20, cardSize: 'compact', id: 'injected', classSectionId: empty.id, deletedAt: 'injected' } as any, actor);
+    expect(changed).toMatchObject({ id: layout.id, classSectionId: section.id, rows: 20, cols: 20, cardSize: 'compact', deletedAt: null, version: layout.version + 1 });
     expect(await db.seatPositions.toArray()).toEqual(seats);
   });
 
