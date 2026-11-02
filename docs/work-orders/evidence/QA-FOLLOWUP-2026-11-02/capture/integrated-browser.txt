@@ -1,0 +1,17 @@
+
+> ontario-teacher-assessment@1.0.0 test:qa:capacity-seating
+> node --import tsx scripts/qaSeatingResizeSmoke.ts && node --import tsx scripts/qaCaptureReferenceSmoke.ts && node --import tsx scripts/qaCaptureReferenceLifecycleSmoke.ts
+
+PASS: occupied row/column reject without writes; real tap move then both shrinks preserve seat identity with exact layout audit/outbox; legacy hidden seat named/revealed by expansion without relocation; read-only denial; zero browser errors/external requests. Screenshots: /tmp/studentorganizer-qa06
+PASS UI ZIP→match→one attempt→five decoded pages (36692440 pixel bytes)
+PASS same-attempt draft/finalize/retry/reopen/backup+restore exact five originals/annotated5page PDF (2305835 bytes), backup=49200555, reload dedup, zero browser errors/external requests
+PASS pending original page switch ignores obsolete read; queue serves selected page
+PASS missing reference shows retry; restored original recovers
+PASS teacher switch while original pending leaves no stale pixels or writes
+PASS delayed actual decoder cancellation releases queue, ignores old pixels, maximum one in-flight decode
+PASS history missing reference hides old image and retry recovers
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

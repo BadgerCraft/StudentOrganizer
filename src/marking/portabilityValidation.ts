@@ -1,3 +1,4 @@
+import { resolveCaptureReference } from './captureReferences';
 import type { MarkingAttempt, MarkingBase, MarkingCommit, MarkingSession } from './types';
 import { assertAttemptDraft, assertMarkingDraft, assertMarkingRecord, sessionCategories } from './validation';
 
@@ -169,7 +170,10 @@ export async function validateMarkingBackupFiles(tables: BackupTables): Promise<
       catch (error) { fail(error instanceof Error ? error.message : 'original file is invalid'); }
     }
     for (const page of attempt.imagePages ?? []) {
-      try { await validateMarkingImageBytes(page); }
+      try {
+        const source = page.captureRef && tables.captureAttachments?.find((row: any) => row.id === page.captureRef!.attachmentId);
+        await validateMarkingImageBytes(page.captureRef ? resolveCaptureReference(attempt, page, source) : page);
+      }
       catch (error) { fail(error instanceof Error ? error.message : 'image original is invalid'); }
     }
   }

@@ -112,6 +112,9 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     .filter(s => s.localSchoolDate === selectedSchoolDate)
     .forEach(s => summaryMap.set(s.classEnrollmentId, s));
 
+  const outsideSeats = seatPositions.filter(p => p.seatingLayoutId === layout.id && p.deletedAt === null &&
+    (p.row < 0 || p.col < 0 || p.row >= layout.rows || p.col >= layout.cols));
+
   const seatedEnrollmentIds = new Set(
     seatPositions.filter(p => p.deletedAt === null).map(p => p.classEnrollmentId)
   );
@@ -234,6 +237,24 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {outsideSeats.length > 0 && (
+        <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">Some saved seats are outside this grid.</p>
+          <p>Open Attendance &amp; seating tools and add rows or columns to show active students’ seats with valid positions, then move students before shrinking the grid. Saved assignments have not changed.</p>
+          <ul className="mt-2 list-disc pl-5">
+            {outsideSeats.map(seat => {
+              const enrollment = enrollments.find(e => e.id === seat.classEnrollmentId);
+              const student = enrollment ? studentMap.get(enrollment.studentId) : undefined;
+              const invalidPosition = !Number.isSafeInteger(seat.row) || !Number.isSafeInteger(seat.col) || seat.row < 0 || seat.col < 0;
+              const inactive = !enrollmentMap.has(seat.classEnrollmentId) || !student;
+              return <li key={seat.id}>{student ? `${student.firstName} ${student.lastName}` : 'Saved student assignment'} — row {seat.row + 1}, column {seat.col + 1}
+                {invalidPosition ? ' — Invalid saved position; expanding the grid will not restore this seat. Keep a backup before seeking help.'
+                  : inactive ? ' — Student is not active or available in this class; expanding the grid will not display this assignment.' : ''}
+              </li>;
+            })}
+          </ul>
+        </div>
+      )}
       {unseatedEnrollments.length > 0 && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-amber-900">{unseatedEnrollments.length} students need desks. Populate seating to place them in empty desks; existing assignments stay in place.{layout.isLocked ? ' Unlock seating first.' : ''}</p>

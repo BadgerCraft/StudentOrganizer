@@ -7,7 +7,11 @@ export interface RubricContent { title: string; levels: string[]; criteria: Rubr
 export interface MarkingRubric extends MarkingBase, RubricContent { confirmed: true }
 export interface MarkingDocument { id: string; name: string; text: string; hash: string; original: null | { name: string; mime: string; base64: string; size: number; hash: string } }
 export type MarkingMode = 'written' | 'oral' | 'rubric';
-export interface MarkingImagePage { id: string; name: string; mime: 'image/jpeg' | 'image/png' | 'image/webp'; base64: string; size: number; hash: string; width: number; height: number }
+export interface MarkingImageMetadata { id: string; name: string; mime: 'image/jpeg' | 'image/png' | 'image/webp'; size: number; hash: string; width: number; height: number }
+export type InlineMarkingImagePage = MarkingImageMetadata & { base64: string; captureRef?: never };
+/** Only persisted, explicitly matched capture originals may back a page. Never a URL. */
+export type CapturedMarkingImagePage = MarkingImageMetadata & { base64?: never; captureRef: { version: 1; attachmentId: string; pageId: string } };
+export type MarkingImagePage = InlineMarkingImagePage | CapturedMarkingImagePage;
 export interface MarkingPoint { x: number; y: number }
 export interface MarkingVisualAnnotation { id: string; kind: 'pen' | 'highlight' | 'comment'; points: MarkingPoint[]; color: 'red' | 'blue' | 'yellow'; width: number; text: string; criterionId: string | null; level: string }
 export interface MarkingPageFeedback { pageId: string; rotation: 0 | 90 | 180 | 270; crop: { x: number; y: number; width: number; height: number }; annotations: MarkingVisualAnnotation[] }

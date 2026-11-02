@@ -9,6 +9,8 @@ import { assertWorkspaceAccess } from '../sync/snapshot';
 import { clearActiveTeacherId, getIdentityEpoch, selectActingTeacher } from '../services/identityService';
 import { createPastedDocument } from '../marking/importDocuments';
 import { MarkingService } from '../marking/markingService';
+import { CaptureAttachmentService } from '../capture/attachmentService';
+import { capturePagePath, captureSha256, type ParsedCapturePackage } from '../../shared/capturePackage';
 const dbs: OntarioTeacherDB[] = [];
 afterEach(async () => { clearActiveTeacherId(); for (const db of dbs.splice(0)) await db.delete(); });
 async function fixture() {
@@ -18,6 +20,54 @@ async function fixture() {
   return { db, bundle, primary };
 }
 describe('native canonical workspace validation', () => {
+  it('reuses reference dimensions only for exact verified originals and attempts, while rechecking changed records and links', async () => {
+    const { db } = await fixture();
+    const identity = await selectActingTeacher(db, 'user-tyler');
+    const actor = { ...identity, epoch: getIdentityEpoch() }, captureActor = { ...identity, identityEpoch: getIdentityEpoch() };
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==';
+    const bytes = Uint8Array.from(atob(png), char => char.charCodeAt(0));
+    const metadata = { id: 'page-one', order: 0, path: capturePagePath('student-one', 'page-one', 'image/png'), mime: 'image/png' as const,
+      byteLength: bytes.length, sha256: await captureSha256(bytes), edits: { rotation: 0 as const, crop: { x: 0, y: 0, width: 1, height: 1 } } };
+    const submission = { id: 'student-one', label: 'Fictional student', pages: [metadata] };
+    const pkg: ParsedCapturePackage = { manifest: { format: 'studentorganizer-capture', version: 2, packageId: 'fictional-cache-package', assignmentId: 'fictional-assignment', assignmentName: 'Fictional work', revision: 1, completed: true, submissions: [submission] }, submissions: [{ ...submission, pages: [{ metadata, bytes }] }] };
+    const capture = new CaptureAttachmentService(db), marking = new MarkingService(db);
+    const enrollment = (await capture.context('assess-eng-essay', captureActor)).roster[0].enrollment.id;
+    const rubric = await marking.saveRubric('assess-eng-essay', { title: 'Fictional rubric', levels: ['Secure'], criteria: [{ id: 'reason', name: 'Reasoning', categoryCode: 'K', descriptors: { Secure: 'Clear' } }] }, actor);
+    const receipt = await capture.confirm('assess-eng-essay', pkg, submission.id, enrollment, captureActor);
+    const inline = await marking.bindCaptureRoot(receipt.attachmentId, { rubricId: rubric.id }, actor);
+    // Use a small valid reference representation; the real >32MiB test covers promotion.
+    await db.markingAttempts.put({ ...inline, imagePages: inline.imagePages!.map(({ base64: _bytes, ...page }) => ({ ...page,
+      captureRef: { version: 1 as const, attachmentId: receipt.attachmentId, pageId: metadata.id } })) });
+    const primary = JSON.parse(await new PortabilityService(db).createFullBackupJSON());
+    const cache = createMainBundleValidationCache();
+    const baseline = await cache.initialize({ format: 'student-organizer-working', version: 1, primary, recovery: { backups: [], options: [], state: [] }, applicationStorage: {} });
+    const candidate = (tables: Record<string, any[]> = {}) => ({ ...baseline, primary: { ...baseline.primary, tables: { ...baseline.primary.tables, ...tables } }, applicationStorage: { 'student-organizer-appearance': 'dark' } });
+    const decode = vi.spyOn(globalThis, 'atob');
+    try {
+      await expect(cache.validateCandidate(candidate())).resolves.toBeDefined();
+      expect(decode).not.toHaveBeenCalled();
+      // An identical replacement is not the trusted immutable object: validate its bytes again.
+      await expect(cache.validateCandidate(candidate({ captureAttachments: structuredClone(baseline.primary.tables.captureAttachments) }))).resolves.toBeDefined();
+      expect(decode).toHaveBeenCalled(); decode.mockClear();
+      await expect(cache.validateCandidate(candidate({ markingAttempts: structuredClone(baseline.primary.tables.markingAttempts) }))).resolves.toBeDefined();
+      expect(decode).toHaveBeenCalled();
+      for (const corruption of ['dimensions', 'reference', 'bytes', 'missing']) {
+        const attempts = structuredClone(baseline.primary.tables.markingAttempts);
+        const sources = structuredClone(baseline.primary.tables.captureAttachments);
+        const changed: Record<string, any[]> = {};
+        if (corruption === 'dimensions') { attempts[0].imagePages[0].width += 1; changed.markingAttempts = attempts; }
+        if (corruption === 'reference') { attempts[0].imagePages[0].captureRef.pageId = 'missing-page'; changed.markingAttempts = attempts; }
+        if (corruption === 'bytes') { sources[0].pages[0].base64 = png.slice(0, -4) + 'AAAA'; changed.captureAttachments = sources; }
+        if (corruption === 'missing') changed.captureAttachments = [];
+        await expect(cache.validateCandidate(candidate(changed)), corruption).rejects.toThrow();
+      }
+      // Cached objects remain immutable and intact after rejected candidates.
+      expect(Object.isFrozen(baseline.primary.tables.captureAttachments[0].pages[0])).toBe(true);
+      expect(baseline.primary.tables.captureAttachments[0].pages[0].base64).toBe(png);
+      await expect(cache.validateCandidate(candidate())).resolves.toBeDefined();
+    } finally { decode.mockRestore(); }
+  });
+
   it('keeps trusted native table metadata and canonical service validation in parity', async () => {
     const { db, primary, bundle } = await fixture();
     expect([...BACKUP_TABLE_NAMES].sort()).toEqual(db.tables.map(t => t.name).sort());

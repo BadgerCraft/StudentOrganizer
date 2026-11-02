@@ -147,7 +147,7 @@ export class CaptureAttachmentService {
         const grouped = await this.db.captureAttachments.where('assessmentId').equals(assessmentId).filter(a => a.id === root.id || a.rootAttachmentId === root.id).toArray();
         const aggregate = [...grouped.flatMap(s => s.pages), ...attachment.pages];
         if (new Set(aggregate.map(p => p.metadata.id)).size !== aggregate.length) throw new Error('Late pages reuse an original page ID already in this submission. Export a new page set.');
-        if (aggregate.length > MARKING_LIMITS.imagePages || aggregate.reduce((n, p) => n + p.metadata.byteLength, 0) > MARKING_LIMITS.imageBatchBytes) throw new Error('A grouped submission supports at most 10 pages and 32 MiB of original images. Nothing from this append was saved.');
+        if (aggregate.length > MARKING_LIMITS.imagePages || aggregate.some(p => p.metadata.byteLength > MARKING_LIMITS.imageBytes)) throw new Error('A grouped submission supports at most 10 pages of at most 8 MiB each. Nothing from this append was saved. Existing pages and marks are unchanged; keep the original ZIP and review the page count before retrying.');
         attachment.rootAttachmentId = root.id; attachment.rootSequence = grouped.length;
         if (root.markingAttemptId) {
           attachment.markingAttemptId = root.markingAttemptId;

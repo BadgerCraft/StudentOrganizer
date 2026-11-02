@@ -2,7 +2,7 @@ import { assertReadableExportAllowed } from '../security/readableExports';
 import { rendererStorageMode } from '../security/rendererStorageMode';
 import { markingImageDecodeBytes } from './importImages';
 import { imageDisplaySize, originalToDisplay } from './imageGeometry';
-import type { MarkingImagePage, MarkingPageFeedback } from './types';
+import type { InlineMarkingImagePage, MarkingImagePage, MarkingPageFeedback } from './types';
 import { renderMarkingReport, type MarkingReportInput } from './report';
 
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -46,7 +46,7 @@ export function drawAnnotatedPage(canvas: HTMLCanvasElement, source: CanvasImage
   });
 }
 
-async function pagePixels(page: MarkingImagePage, feedback: MarkingPageFeedback): Promise<string> {
+async function pagePixels(page: InlineMarkingImagePage, feedback: MarkingPageFeedback): Promise<string> {
   const bytes = Uint8Array.from(atob(page.base64), c => c.charCodeAt(0));
   const blob = new Blob([new Uint8Array(markingImageDecodeBytes(bytes, page.mime))], { type: page.mime });
   const canvas = document.createElement('canvas');
@@ -68,13 +68,16 @@ async function pagePixels(page: MarkingImagePage, feedback: MarkingPageFeedback)
   } finally { bitmap?.close(); if (url) URL.revokeObjectURL(url); canvas.width = canvas.height = 0; }
 }
 
-export async function renderAnnotatedMarkingReport(input: MarkingReportInput): Promise<string> {
+export async function renderAnnotatedMarkingReport(input: MarkingReportInput, resolvePage?: (pageId: string) => Promise<InlineMarkingImagePage>): Promise<string> {
   // Validate every saved record before decoding any original.
   const report = renderMarkingReport(input);
   const pages: string[] = [];
   for (const feedback of input.commit.draft.imageFeedback ?? []) {
     const page = input.attempt.imagePages!.find(p => p.id === feedback.pageId)!;
-    const pixels = await pagePixels(page, feedback);
+    if (page.captureRef && !resolvePage) throw new Error('This report requires the authorized saved capture original. Reopen the submission and retry.');
+    const resolved = page.captureRef ? await resolvePage!(page.id) : page;
+    if (resolved.id !== page.id || resolved.hash !== page.hash || resolved.size !== page.size || resolved.mime !== page.mime || resolved.width !== page.width || resolved.height !== page.height) throw new Error('The report page changed while loading.');
+    const pixels = await pagePixels(resolved, feedback);
     const comments = feedback.annotations.map((annotation, index) => annotation.text.trim() ? `<p><strong>${index + 1}.</strong> ${escape(annotation.text)}</p>` : '').join('');
     pages.push(`<section class="marked-page"><h2>Marked page ${pages.length + 1}: ${escape(page.name)}</h2><img alt="Marked student page ${pages.length + 1}" src="${pixels}">${comments ? `<div class="page-comments">${comments}</div>` : ''}</section>`);
   }
@@ -84,11 +87,11 @@ export async function renderAnnotatedMarkingReport(input: MarkingReportInput): P
 }
 
 /** Desktop writes genuine PDF bytes. Browser fallback is deliberately named printable HTML. */
-export async function exportAnnotatedMarkingReport(input: MarkingReportInput, assertAuthorized?: () => void, revision?: number): Promise<boolean> {
+export async function exportAnnotatedMarkingReport(input: MarkingReportInput, assertAuthorized?: () => void, revision?: number, resolvePage?: (pageId: string) => Promise<InlineMarkingImagePage>): Promise<boolean> {
   const protectedPdf = rendererStorageMode() === 'encrypted' && supportsDesktopPdfExport() && typeof assertAuthorized === 'function' && Number.isSafeInteger(revision) && revision! > 0;
   if (!protectedPdf) assertReadableExportAllowed();
   assertAuthorized?.();
-  const html = await renderAnnotatedMarkingReport(input);
+  const html = await renderAnnotatedMarkingReport(input, resolvePage);
   const filename = `marked-assessment-${input.commit.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   assertAuthorized?.();
   if (protectedPdf) {

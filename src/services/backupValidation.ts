@@ -612,7 +612,7 @@ export function validateBackupDataWithTables(data: any, tables: readonly { name:
     }
 
     validateMarkingBackup(data.tables, verifiedAttempts);
-    validateCaptureBackup(data.tables, verifiedCaptureBytes);
+    validateCaptureBackup(data.tables, verifiedCaptureBytes, verifiedAttempts);
 
     return {
       version: typeof data.version === 'number' ? data.version : 1,

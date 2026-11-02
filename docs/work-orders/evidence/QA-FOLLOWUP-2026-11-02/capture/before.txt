@@ -1,0 +1,3 @@
+{"zipBytes":36702875,"originalBytes":36700510,"attachmentCount":1,"receiptCount":1}
+BIND RESULT: ValidationError: Combined image pages exceed the batch size limit.
+marking attempts after failure 0

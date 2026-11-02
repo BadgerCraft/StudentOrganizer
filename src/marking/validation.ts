@@ -113,12 +113,12 @@ export function assertMarkingDocuments(value: unknown, allowEmpty = false): asse
   if (documents.reduce((total, item) => total + (item.original?.size ?? new TextEncoder().encode(item.text).byteLength), 0) > MARKING_LIMITS.batchBytes) fail('Combined documents exceed batch size limit.');
 }
 
-export function assertMarkingImagePages(value: unknown): asserts value is MarkingImagePage[] {
+export function assertMarkingImagePages(value: unknown, allowCaptureReferences = false): asserts value is MarkingImagePage[] {
   arr(value, 'Image pages', MARKING_LIMITS.imagePages);
   const ids: string[] = []; let bytes = 0;
   for (const item of value) {
     const page = object(item, 'Image page');
-    if (Object.keys(page).some(key => !['id', 'name', 'mime', 'base64', 'size', 'hash', 'width', 'height'].includes(key))) fail('Image pages must contain local bytes, never URLs or unknown source fields.');
+    if (Object.keys(page).some(key => !['id', 'name', 'mime', 'base64', 'size', 'hash', 'width', 'height', 'captureRef'].includes(key))) fail('Image pages must contain local bytes, never URLs or unknown source fields.');
     str(page.id, 'Image page ID', 200); ids.push(page.id);
     str(page.name, 'Image name', 255);
     if (/[\u0000-\u001f\u007f/\\]/u.test(page.name as string)) fail('Image name contains paths or control characters.');
@@ -127,11 +127,19 @@ export function assertMarkingImagePages(value: unknown): asserts value is Markin
     if (!/^[a-f0-9]{64}$/i.test(page.hash)) fail('Image hash must be SHA-256.');
     integer(page.size, 'Image bytes');
     if (page.size > MARKING_LIMITS.imageBytes) fail('Image exceeds the page size limit.');
+    if (page.captureRef !== undefined) {
+      if (!allowCaptureReferences || page.base64 !== undefined) fail('Capture references require an explicitly linked marking attempt.');
+      const ref = object(page.captureRef, 'Capture page reference');
+      if (Object.keys(ref).length !== 3 || ref.version !== 1) fail('Unsupported capture page reference.');
+      str(ref.attachmentId, 'Capture attachment ID', 200); str(ref.pageId, 'Capture page ID', 80);
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(ref.pageId as string)) fail('Invalid capture page identity.');
+    } else {
     bytes += page.size;
     str(page.base64, 'Image bytes', 4 * Math.ceil(MARKING_LIMITS.imageBytes / 3));
     if (!isBase64(page.base64)) fail('Image bytes must be plain base64, never a URL.');
     const size = page.base64.length / 4 * 3 - (page.base64.endsWith('==') ? 2 : page.base64.endsWith('=') ? 1 : 0);
     if (size !== page.size) fail('Image size does not match its retained bytes.');
+    }
     integer(page.width, 'Image width'); integer(page.height, 'Image height');
     if (page.width * page.height > MARKING_LIMITS.imagePixels) fail('Image exceeds the pixel limit.');
   }
@@ -257,8 +265,11 @@ export function assertMarkingRecord(table: MarkingTableName, value: unknown): as
     if (v.mode !== undefined && !['written', 'oral', 'rubric'].includes(v.mode as string)) fail('Unsupported marking mode.');
     if (v.archivedAt !== undefined && v.archivedAt !== null) time(v.archivedAt, 'Archived date');
     if (v.keepStudentWork !== undefined && typeof v.keepStudentWork !== 'boolean') fail('Student-work retention must be explicit.');
-    if (v.imagePages !== undefined) assertMarkingImagePages(v.imagePages);
+    if (v.imagePages !== undefined) assertMarkingImagePages(v.imagePages, true);
     const pages = (v.imagePages ?? []) as MarkingImagePage[];
+    for (const page of pages) if (page.captureRef) {
+      if (!Array.isArray(v.captureSources) || !v.captureSources.some((source: any) => source.attachmentId === page.captureRef!.attachmentId && Array.isArray(source.pageIds) && source.pageIds.includes(page.id))) fail('Capture page reference has no explicit provenance.');
+    }
     assertMarkingDocuments(v.documents, !!v.archivedAt || v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0);
     if (v.archivedAt && !v.keepStudentWork && (v.documents.length || pages.length)) fail('Archived source material must have been removed.');
     if ((v.mode === 'oral' || v.mode === 'rubric') && (v.documents.length || pages.length)) fail('Oral and rubric-only attempts do not import written sources.');

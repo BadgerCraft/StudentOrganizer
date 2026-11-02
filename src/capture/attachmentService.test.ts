@@ -234,7 +234,14 @@ describe('durable capture matching boundary', () => {
     const portability = new PortabilityService(db); await portability.restoreFromJSON(await portability.createFullBackupJSON());
     expect((await service.groupedAttachment('assess-eng-essay', receipt.attachmentId, actor)).pages).toHaveLength(4);
   });
-  it('rejects wrong teacher association and grouped page-count or original-byte overflow atomically', async () => {
+  it('rejects wrong teacher and page overflow; promotes late pages across the inline limit without changing drafts', async () => {
+    const started = performance.now(); let previous = started;
+    const phase = (name: string) => {
+      const now = performance.now();
+      console.log(`[capture-late35] ${name}; elapsed=${Math.round(now - started)}ms; previousPhase=${Math.round(now - previous)}ms`);
+      previous = now;
+    };
+    phase('begin setup and page-count rejection');
     const { marking, markingActor, rubric, receipt } = await markingFixture();
     await expect(marking.bindCaptureRoot(receipt.attachmentId, { rubricId: rubric.id }, { ...markingActor, userId: 'another-teacher' })).rejects.toThrow('teacher changed');
     for (let index = 0; index < 4; index++) {
@@ -249,7 +256,8 @@ describe('durable capture matching boundary', () => {
     expect((await service.groupedAttachment('assess-eng-essay', receipt.attachmentId, actor)).pages).toHaveLength(10);
     expect(await db.captureImportReceipts.count()).toBe(5);
     // Five valid PNG originals of 7 MiB each exercise the byte cap independently
-    // of the ten-page cap. Ancillary text does not change the one-pixel image.
+    // of the ten-page cap. Capture originals now use references above the inline limit. Ancillary text does not change the one-pixel image.
+    phase('begin 35MiB late-page fixture');
     const png = Uint8Array.from(atob(PNG), c => c.charCodeAt(0));
     const chunk = new Uint8Array(7 * 1024 * 1024), view = new DataView(chunk.buffer);
     view.setUint32(0, chunk.length - 12); chunk.set(new TextEncoder().encode('tEXt'), 4);
@@ -260,13 +268,35 @@ describe('durable capture matching boundary', () => {
     const hash = await captureSha256(bytes);
     const metadata = Array.from({ length: 5 }, (_, order) => ({ ...structuredClone(pkg.manifest.submissions[1].pages[0]), id: `large-${order}`, order, path: capturePagePath('student-two', `large-${order}`, 'image/png'), byteLength: bytes.length, sha256: hash }));
     const large: ParsedCapturePackage = { manifest: { ...pkg.manifest, packageId: 'bytes-overflow', submissions: [{ id: 'student-two', label: 'Fictional byte limit', pages: metadata }] }, submissions: [{ id: 'student-two', label: 'Fictional byte limit', pages: metadata.map(metadata => ({ metadata, bytes })) }] };
+    phase('begin existing attempt and draft');
     const separate = await service.confirm('assess-eng-essay', pkg, 'student-two', enrollments[1], actor);
-    await expect(service.confirm('assess-eng-essay', large, 'student-two', enrollments[1], actor, { rootAttachmentId: separate.attachmentId })).rejects.toThrow('32 MiB');
-    expect(await db.captureImportReceipts.count()).toBe(6);
-    expect((await service.groupedAttachment('assess-eng-essay', separate.attachmentId, actor)).pages).toHaveLength(2);
-  // This checks real 35 MiB originals, hashes and transactional rollback, not a
-  // latency target. Allow slower shared Intel CI runners without reducing data.
-  }, 60_000);
+    const attempt = await marking.bindCaptureRoot(separate.attachmentId, { rubricId: rubric.id }, markingActor);
+    let session = await marking.openSession(attempt.id, markingActor);
+    session.draft.overallFeedback = 'Retain existing draft across reference promotion';
+    session.draft.imageFeedback![0].crop = { x: .1, y: .2, width: .7, height: .6 };
+    session.draft.imageFeedback![0].rotation = 270;
+    session = await marking.saveDraft(session.id, session.draft, session.version, markingActor);
+    const beforeResults = await db.categoryResults.toArray();
+    const target = { rootAttachmentId: separate.attachmentId, expectedAttemptVersion: attempt.version, sessionVersions: { [session.id]: session.version } };
+    phase('begin atomic reference promotion');
+    const appended = await service.confirm('assess-eng-essay', large, 'student-two', enrollments[1], actor, target);
+    phase('begin retry and draft-preservation checks');
+    expect(await service.confirm('assess-eng-essay', large, 'student-two', enrollments[1], actor, target)).toEqual(appended);
+    const promoted = (await db.markingAttempts.get(attempt.id))!, preserved = (await db.markingSessions.get(session.id))!;
+    expect(promoted.imagePages!.every(page => page.captureRef && !page.base64)).toBe(true);
+    expect(promoted.imagePages!.slice(0, 2).map(page => page.id)).toEqual(attempt.imagePages!.map(page => page.id));
+    expect(preserved.draft.imageFeedback!.slice(0, 2)).toEqual(session.draft.imageFeedback);
+    expect(preserved.draft.overallFeedback).toBe(session.draft.overallFeedback);
+    expect(preserved.draft.judgments).toEqual(session.draft.judgments);
+    expect(await db.categoryResults.toArray()).toEqual(beforeResults);
+    expect((await marking.readImagePage(attempt.id, promoted.imagePages![6].id, markingActor)).hash).toBe(hash);
+    expect(await db.captureImportReceipts.count()).toBe(7);
+    expect((await service.groupedAttachment('assess-eng-essay', separate.attachmentId, actor)).pages).toHaveLength(7);
+    phase('all assertions complete');
+  // This checks real 35 MiB originals, hashes and reference promotion, not a
+  // latency target. Isolated Intel CI measured 56.7 s against the old 60 s deadline.
+  // Retain all bytes/assertions and log phases; leave room for shared-runner variation.
+  }, 180_000);
   it('roundtrips attachments and receipts; rejects corrupt content and receipt scope before changing data', async () => {
     const receipt = await confirm(service, pkg, enrollments[0], actor); const portability = new PortabilityService(db);
     const json = await portability.createFullBackupJSON(); expect(JSON.parse(json).schemaVersion).toBe(5);

@@ -1,3 +1,4 @@
+import { resolveCaptureReference } from '../marking/captureReferences';
 import { MARKING_LIMITS } from '../marking/types';
 import { validateCaptureManifest, captureSha256 } from '../../shared/capturePackage';
 import { base64ToBytes, captureContentHash } from './attachmentBytes';
@@ -12,7 +13,7 @@ export function normalizeLegacyCaptureTables(tables: Tables, version: number): v
     else if (!Array.isArray(tables[name]) || tables[name].length) fail();
   }
 }
-export function validateCaptureBackup(tables: Tables, verifiedBytes?: WeakSet<object>): void {
+export function validateCaptureBackup(tables: Tables, verifiedBytes?: WeakSet<object>, verifiedAttempts?: WeakSet<object>): void {
   const maps = Object.fromEntries(Object.entries(tables).map(([name, records]) => [name, new Map(records.map(r => [r.id, r]))]));
   const ref = (table: string, id: string) => { const value = maps[table]?.get(id); if (!value) fail(); return value; };
   const keys = new Set<string>();
@@ -65,7 +66,7 @@ export function validateCaptureBackup(tables: Tables, verifiedBytes?: WeakSet<ob
   for (const sources of grouped.values()) {
     const pages = sources.flatMap(s => s.pages);
     if (new Set(pages.map(p => p.metadata.id)).size !== pages.length) fail();
-    if (pages.length > MARKING_LIMITS.imagePages || pages.reduce((n, p) => n + p.metadata.byteLength, 0) > MARKING_LIMITS.imageBatchBytes) fail();
+    if (pages.length > MARKING_LIMITS.imagePages || pages.some(p => p.metadata.byteLength > MARKING_LIMITS.imageBytes)) fail();
     const orders = sources.map(s => s.rootSequence!).sort((a, b) => a - b);
     if (orders.some((order, index) => order !== index)) fail();
   }
@@ -87,7 +88,12 @@ export function validateCaptureBackup(tables: Tables, verifiedBytes?: WeakSet<ob
         if (attempt.archivedAt && !attempt.keepStudentWork) continue;
         const pageIndex = attempt.imagePages?.findIndex((page: any) => page.id === id) ?? -1;
         const page = attempt.imagePages?.[pageIndex], original = source.pages[index];
-        if (pageIndex !== previousIndex + 1 || !page || page.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
+        if (pageIndex !== previousIndex + 1 || !page) fail();
+        // Only exact immutable records verified together by the main-process cache
+        // can reuse dimensions. Relationship and reference metadata checks still run.
+        const reuseDimensions = verifiedBytes?.has(source) && verifiedAttempts?.has(attempt);
+        const resolved = page.captureRef ? resolveCaptureReference(attempt, page, source, !reuseDimensions) : page;
+        if (resolved.base64 !== original.base64 || page.hash !== original.metadata.sha256 || page.size !== original.metadata.byteLength || page.mime !== original.metadata.mime) fail();
         previousIndex = pageIndex;
       }
     }
