@@ -432,3 +432,12 @@ Encryption changes readable data into bytes that require a secret key; authentic
 An encrypted save must be durable before the app reports success. A periodic encrypted snapshot while the ordinary database remains plaintext does not provide encrypted working storage. The current foundation therefore exposes explicit commit and migration contracts, with no production activation until every writer/storage surface, recovery and second-device path is integrated and tested. Independent review found that a retained mutable draft could diverge from encrypted disk; the saved revision now publishes a detached snapshot.
 
 First-stage verification and contract are linked in work-orders/ENCRYPTION-2026-10-29.md. Review question deferred for the continuing product walkthrough: why is successful backup encryption alone insufficient to say the working app is encrypted? No comprehension or activation approval inferred.
+
+
+## November 2 — queued QA repairs walkthrough (prepared; review pending)
+
+QA05 now keeps the complete captured originals and lets one marking session load their pages individually. A35MiB submission no longer needs a second marking attempt or discarded pages. The32MiB direct-picture import limit remains; the capture path reuses already-validated originals through checked local references. Tests preserve hashes, student/page identity, edits, final marks and backup/restore. Older readers cannot interpret these new reference records: keep a compatible reader and complete backup rather than blindly downgrading.
+
+QA06 rejects shrinking occupied edges and explains that students must be moved first. Existing hidden seats are named with recovery guidance. Tests and screenshots show unchanged assignments after rejection, successful move-then-shrink and legacy seat recovery. These are targeted correctness fixes, not changes to the accepted participation layout.
+
+Implementation/review evidence: [QA follow-up](work-orders/QA-CAPACITY-SEATING-2026-11-02.md). User understanding and acceptance remain pending; no fabricated comprehension answer. Merge/release approval remains separate.
