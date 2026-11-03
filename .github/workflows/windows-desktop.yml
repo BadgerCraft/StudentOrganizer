@@ -59,6 +59,30 @@ jobs:
           npx electron-builder --win nsis --publish never --config.directories.output=release/upgrade-B --config.extraMetadata.version=1.0.2
       - name: Test production download, backup, installer replacement and reopen
         run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts
+      - name: Prepare unpublished tested installer candidate
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -Path 'release/upgrade-B/*-x64-nsis.exe' -File)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one tested x64 installer.' }
+          $installer = $installers[0]
+          $tested = Get-Content release/qa-evidence/windows-upgrade/upgrade-results.json -Raw | ConvertFrom-Json
+          $checkout = (git rev-parse HEAD).Trim()
+          if ($checkout -ne $env:GITHUB_SHA) { throw 'Checkout does not match the CI event SHA.' }
+          New-Item -ItemType Directory -Path release/tested-candidate | Out-Null
+          Copy-Item $installer.FullName release/tested-candidate/
+          $copy = "release/tested-candidate/$($installer.Name)"
+          if ((Get-FileHash $copy -Algorithm SHA256).Hash.ToLower() -ne $tested.installers.B.sha256) { throw 'Candidate does not match the installer used in acceptance.' }
+          node scripts/prepare-update-candidate.cjs $copy 1.0.2 x64 $checkout release/tested-candidate/candidate.json
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate descriptor preparation failed.' }
+          @{ checkout = $checkout; event = $env:GITHUB_EVENT_NAME; ref = $env:GITHUB_REF; run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"; testedInstallerSha256 = $tested.installers.B.sha256 } | ConvertTo-Json | Set-Content -Encoding utf8 release/tested-candidate/ci-evidence.json
+          'UNPUBLISHED TEST CANDIDATE: version 1.0.2 is an acceptance fixture and this QA build may be unsigned. The checkout can be a synthetic pull-request merge, not final main. The hash binds the tested installer; it does not prove publisher identity. This is not an approved or published release. Review source, version, publisher trust and exact bytes before any separate publication decision.' | Set-Content -Encoding utf8 release/tested-candidate/README.txt
+      - name: Retain unpublished tested candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-tested-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/tested-candidate/**
+          if-no-files-found: error
+          retention-days: 90
       - name: Record checksums and Windows publisher status
         shell: pwsh
         run: |

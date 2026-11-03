@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 2 — approved upgrade and recovery delivery
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| SO-DELIVERY-RECOVERY | Tyler selected the SO upgrade/recovery delivery batch after PR57 and PR56. Preserve offline data, exact grade/report behavior and the existing explicit updater. | Branch `codex/upgrade-recovery-delivery-20261102` starts at main cccbc34. Add verified per-backup recovery guidance and accurate candidate-provenance wording; exercise real installed replacement, non-default theme, failure and restore using fictional data. Reuse existing update approval, fixed-host download, backup and packaging flows. Independent review, exact-head CI and a nonpublished candidate are pending. No new PR merge, publication, signing credentials, spending, deployment, real records or encryption activation. Database backups omit browser-local theme. Current reusable collection was not readable through the installed skill resource; prior project records for UPD-001–005 and PKG-001–004 remain a historical reference, not a claim of a fresh collection review. |
+
 ## November 2 — approved remaining QA fixes
 
 | Stable ID | Disposition | Next action / gate |

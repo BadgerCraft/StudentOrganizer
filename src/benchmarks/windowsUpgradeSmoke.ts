@@ -545,6 +545,7 @@ async function runInstallRecovery() {
     const installButton = updates.getByRole('button', { name: 'Backup and install', exact: true });
     await installButton.click();
     const dialog = running.page.getByRole('dialog', { name: 'Install Windows update' });
+    assert.ok((await dialog.innerText()).includes(path.join(profileA, 'update-backups')), 'Before installing, show the actual location of the recovery guide and backup');
     await dialog.getByRole('checkbox', { name: 'I understand this installer is unsigned.' }).check();
     const exit = new Promise<void>(resolve => running!.app.process().once('exit', () => resolve()));
     await dialog.getByRole('button', { name: 'Install and reopen', exact: true }).click();
@@ -564,6 +565,8 @@ async function runInstallRecovery() {
     const backups = fs.readdirSync(backupDirectory).filter(name => name.endsWith('.json')).sort();
     assert.ok(backups.length, 'The verified safety backup must survive the post-launch installer failure');
     safetyBackup = path.join(backupDirectory, backups.at(-1)!);
+    const recoveryGuide = fs.readFileSync(safetyBackup.replace(/\.json$/, '.recovery.txt'), 'utf8');
+    assert.ok(recoveryGuide.includes(path.basename(safetyBackup)) && /confirmed restore replaces current data/i.test(recoveryGuide), 'Recovery guide must identify the verified backup and explain restore');
     const backup = JSON.parse(fs.readFileSync(safetyBackup, 'utf8'));
     assert.equal(backup.schemaVersion, 5);
     for (const [table, rows] of Object.entries(before)) {
@@ -774,6 +777,10 @@ async function main() {
     running = await launchInstalled(executable, versions.A);
     await openHub(running.page);
     marking = await runMarkingDesktopAcceptance(running.page, path.join(evidenceDir, 'marking-A'), (trigger, destination) => download(running!.app, trigger, destination));
+    await openSettingsSection(running.page, 'appearance');
+    await running.page.getByRole('combobox', { name: 'Theme' }).selectOption('light');
+    await waitUntil(async () => await running!.page.evaluate(() => localStorage.getItem('student-organizer-appearance') === 'light'), 'save non-default theme');
+    await waitUntil(async () => await running!.page.getByRole('combobox', { name: 'Theme' }).isEnabled(), 'finish saving appearance before navigation');
     await openSettingsSection(running.page, 'updates');
     let updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
@@ -886,6 +893,7 @@ async function main() {
     running = undefined;
     running = await launchInstalled(executable, versions.B);
     assert.equal(running.userData, profileA, 'Replacement must keep the normal installed profile location');
+    assert.equal(await running.page.evaluate(() => localStorage.getItem('student-organizer-appearance')), 'light', 'A-to-B replacement must retain the saved device theme');
     assert.deepEqual(await snapshotAll(running.page), before, 'A-to-B upgrade must preserve every IndexedDB table and record');
     const safetyBackups = path.join(profileA, 'update-backups');
     const backupFiles = fs.readdirSync(safetyBackups).filter(name => name.endsWith('.json'));
@@ -903,6 +911,7 @@ async function main() {
     assert.deepEqual(fs.readFileSync(reportB), fs.readFileSync(marking.reportPath), 'Finalized report bytes must be identical after installing B');
     await running.app.close(); running = undefined;
     running = await launchInstalled(executable, versions.B);
+    assert.equal(await running.page.evaluate(() => localStorage.getItem('student-organizer-appearance')), 'light', 'Theme must survive a second B restart');
     assert.deepEqual(await snapshotAll(running.page), before, 'B ordinary close/restart must preserve every record again');
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     assert.deepEqual(running.errors, []);
