@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 4 — unpublished Windows candidate and owner tool
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| SO-WINDOWS-CANDIDATE | Tyler chose SO upgrade/recovery work and asked for a usable Control Panel and a real unpublished candidate. Main 46afbde passed installed upgrade/recovery; no stable GitHub releases exist. | Prepare Windows x64 Control Panel installer and provisional StudentOrganizer 1.0.2 from a clean production renderer with no QA identity; bind bytes to native A 1.0.1 → B 1.0.2 fictional-data upgrade evidence, source checkout and signature status. Pinned legacy 1.0.0 bootstrap and controlled failed-install recovery remain separate checks. Do not represent a PR merge checkout as merged main or a checksum as publisher trust. Physical device/UAC, owner approval, publication, any new merge, signing credentials, encryption activation and real records remain outside this work. |
+
 ## November 2 — approved upgrade and recovery delivery
 
 | Stable ID | Disposition | Next action / gate |
