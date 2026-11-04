@@ -78,7 +78,7 @@ jobs:
           if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLower() -ne $hash) { throw 'Copied installer hash differs.' }
           @{ checkout = $checkout; event = $env:GITHUB_EVENT_NAME; ref = $env:GITHUB_REF; run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"; file = $installer.Name; sha256 = $hash; signatureStatus = $signature.Status.ToString(); publisher = $signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content -Encoding utf8 release/control-panel/tested-windows/ci-evidence.json
           'UNPUBLISHED TEST PACKAGE. A checksum identifies bytes, not a trusted publisher. Check the recorded Windows signature status; unsigned packages have no verified publisher and Windows may warn or block installation. The checkout may be a synthetic pull-request merge. No release was published.' | Set-Content -Encoding utf8 release/control-panel/tested-windows/README.txt
-          Copy-Item release/control-panel/unpacked-native-smoke-win32-x64.json,release/control-panel/installed-native-smoke-win32-x64.json release/control-panel/tested-windows/
+          Copy-Item release/control-panel/unpacked-native-smoke-win32-x64.json,release/control-panel/installed-native-smoke-win32-x64.json,release/control-panel/installed-acceptance-win32-x64.json release/control-panel/tested-windows/
       - name: Retain tested Windows Control Panel installer
         if: matrix.platform == 'win'
         uses: actions/upload-artifact@v4

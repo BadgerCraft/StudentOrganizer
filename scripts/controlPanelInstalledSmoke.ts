@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -50,6 +50,11 @@ try {
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   installed = false;
+  await writeFile('release/control-panel/installed-acceptance-win32-x64.json', JSON.stringify({
+    installerSha256: sha256(original), perUserInstall: true, fictionalOwnerProfileSmoke: true,
+    installerUnchanged: true, uninstallRemovedExecutable: true,
+    limits: ['disposable hosted runner', 'no physical UAC or managed device acceptance', 'no real student data']
+  }, null, 2) + '\n');
   console.log(`PASS: per-user NSIS install, isolated fictional native smoke and uninstall; installer SHA-256 ${sha256(original)}`);
 } finally {
   if (installed) {
