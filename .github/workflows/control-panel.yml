@@ -9,6 +9,7 @@ on:
       - 'electron/windowsInstallerUpdate.cjs'
       - 'scripts/audit-control-panel-package.cjs'
       - 'scripts/controlPanelNativeSmoke.ts'
+      - 'scripts/controlPanelInstalledSmoke.ts'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/control-panel.yml'
@@ -48,13 +49,44 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck native verification harness
-        run: npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --lib es2022,dom --types node --skipLibCheck --strict scripts/controlPanelNativeSmoke.ts
+        run: npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --lib es2022,dom --types node --skipLibCheck --strict scripts/controlPanelNativeSmoke.ts scripts/controlPanelInstalledSmoke.ts
       - name: Build the separate owner executable (never publish)
         run: npm run control-panel:package:${{ matrix.platform }} -- ${{ matrix.architecture }}
       - name: Audit actual packaged entry and shared contract bytes
         run: node scripts/audit-control-panel-package.cjs "${{ matrix.resources }}"
       - name: Launch actual owner package with disposable fictional profile
         run: node --import tsx scripts/controlPanelNativeSmoke.ts "${{ matrix.executable }}" "${{ matrix.candidate }}"
+      - name: Install, exercise and uninstall the exact Windows package
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          Copy-Item release/control-panel/native-smoke-win32-x64.json release/control-panel/unpacked-native-smoke-win32-x64.json
+          node --import tsx scripts/controlPanelInstalledSmoke.ts "${{ matrix.candidate }}"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Control Panel acceptance failed.' }
+      - name: Prepare unpublished Windows installer evidence
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $installer = Get-Item -LiteralPath '${{ matrix.candidate }}'
+          $checkout = (git rev-parse HEAD).Trim()
+          if ($checkout -ne $env:GITHUB_SHA) { throw 'Checkout does not match CI event SHA.' }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          New-Item -ItemType Directory -Path release/control-panel/tested-windows | Out-Null
+          Copy-Item -LiteralPath $installer.FullName -Destination release/control-panel/tested-windows/
+          $copy = "release/control-panel/tested-windows/$($installer.Name)"
+          if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLower() -ne $hash) { throw 'Copied installer hash differs.' }
+          @{ checkout = $checkout; event = $env:GITHUB_EVENT_NAME; ref = $env:GITHUB_REF; run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"; file = $installer.Name; sha256 = $hash; signatureStatus = $signature.Status.ToString(); publisher = $signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content -Encoding utf8 release/control-panel/tested-windows/ci-evidence.json
+          'UNPUBLISHED TEST PACKAGE. A checksum identifies bytes, not a trusted publisher. Check the recorded Windows signature status; unsigned packages have no verified publisher and Windows may warn or block installation. The checkout may be a synthetic pull-request merge. No release was published.' | Set-Content -Encoding utf8 release/control-panel/tested-windows/README.txt
+          Copy-Item release/control-panel/unpacked-native-smoke-win32-x64.json,release/control-panel/installed-native-smoke-win32-x64.json release/control-panel/tested-windows/
+      - name: Retain tested Windows Control Panel installer
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControlPanel-tested-Windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/control-panel/tested-windows/**
+          if-no-files-found: error
+          retention-days: 90
       - name: Preserve native verification report only (no installers or private data)
         if: always()
         uses: actions/upload-artifact@v4

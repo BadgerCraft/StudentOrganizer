@@ -124,6 +124,88 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The production renderer is built without a QA identity on a fresh runner.
+  # This is an unpublished candidate, never a release or owner approval.
+  release-candidate:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      CANDIDATE_SOURCE: 46afbde6efad0f7dbb3ef60d1882c7a10d02ea4f
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 46afbde6efad0f7dbb3ef60d1882c7a10d02ea4f
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Prepare production renderer and local speech runtime
+        shell: pwsh
+        run: |
+          if (Test-Path Env:VITE_QA_BUILD_ID) { throw 'Candidate must not carry a QA build identity.' }
+          npm run dictation:prepare
+          if ($LASTEXITCODE -ne 0) { throw 'Speech runtime preparation failed.' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Production build failed.' }
+      - name: Build unpublished x64 A and B installers
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis --x64 --publish never --config.directories.output=release/upgrade-A --config.extraMetadata.version=1.0.1
+          if ($LASTEXITCODE -ne 0) { throw 'A installer build failed.' }
+          npx electron-builder --win nsis --x64 --publish never --config.directories.output=release/upgrade-B --config.extraMetadata.version=1.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate installer build failed.' }
+      - name: Test actual candidate upgrade and reopen with fictional data
+        run: npx tsx src/benchmarks/windowsUpgradeSmoke.ts
+      - name: Verify Control Panel preparation with candidate installer bytes
+        shell: pwsh
+        run: |
+          npm run control-panel:package:win -- --x64
+          if ($LASTEXITCODE -ne 0) { throw 'Control Panel package build failed.' }
+          node --import tsx scripts/controlPanelNativeSmoke.ts 'release/control-panel/win-unpacked/Student Organizer Control Panel.exe' 'release/upgrade-B/OntarioTeacherAssessment-1.0.2-x64-nsis.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Control Panel candidate preparation failed.' }
+      - name: Prepare exact unpublished candidate and evidence
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -Path 'release/upgrade-B/OntarioTeacherAssessment-1.0.2-x64-nsis.exe' -File)
+          if ($installers.Count -ne 1) { throw 'Expected one candidate installer.' }
+          $tested = Get-Content release/qa-evidence/windows-upgrade/upgrade-results.json -Raw | ConvertFrom-Json
+          $checkout = (git rev-parse HEAD).Trim()
+          if ($checkout -ne $env:CANDIDATE_SOURCE) { throw 'Checkout differs from the pinned merged source.' }
+          New-Item -ItemType Directory -Path release/unpublished-candidate | Out-Null
+          Copy-Item $installers[0].FullName release/unpublished-candidate/
+          $file = "release/unpublished-candidate/$($installers[0].Name)"
+          $sha = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          if ($sha -ne $tested.installers.B.sha256) { throw 'Candidate does not match the accepted installer.' }
+          node scripts/prepare-update-candidate.cjs $file 1.0.2 x64 $checkout release/unpublished-candidate/candidate.json
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate descriptor failed.' }
+          $descriptor = Get-Content release/unpublished-candidate/candidate.json -Raw | ConvertFrom-Json
+          $sha512 = (Get-FileHash $file -Algorithm SHA512).Hash.ToLower()
+          $descriptorSha512 = [Convert]::ToHexString([Convert]::FromBase64String($descriptor.artifact.sha512)).ToLower()
+          if ($sha512 -ne $descriptorSha512 -or $descriptor.artifact.bytes -ne (Get-Item $file).Length -or $descriptor.sourceCommit -ne $checkout) { throw 'Candidate descriptor does not match retained bytes and checkout.' }
+          $signature = Get-AuthenticodeSignature $file
+          @{ checkout = $checkout; workflowHead = $env:GITHUB_SHA; event = $env:GITHUB_EVENT_NAME; ref = $env:GITHUB_REF; run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"; sha256 = $sha; signature = $signature.Status.ToString(); publisher = $signature.SignerCertificate.Subject; origin = '1.0.1 same-source NSIS fictional-data acceptance'; version = '1.0.2' } | ConvertTo-Json | Set-Content -Encoding utf8 release/unpublished-candidate/ci-evidence.json
+          @'
+          UNPUBLISHED WINDOWS X64 CANDIDATE — NOT A RELEASE
+
+          Version 1.0.2 is provisional. This package was built without a QA renderer identity and tested using fictional data against a same-source 1.0.1 installation. The separately recorded legacy bootstrap and failed-installer recovery tests have their own artifacts and limits.
+
+          In the Windows Control Panel, choose Import candidate + verify installer, select candidate.json and the accompanying NSIS installer, and compare the displayed SHA-512 with the exact tested bytes and CI evidence. Record only checks actually performed; local approval and preparation do not publish or cause an update. Keep the installer and descriptor together.
+
+          Inspect ci-evidence.json for Windows signature status. Unsigned means the publisher is not verified; a checksum verifies bytes, not identity. The candidate source is pinned merged commit 46afbde; the workflow head may be a different synthetic pull-request merge. Confirm the pinned source is still the intended release source before approval. Physical-device acceptance and any publication decision are separate.
+          '@ | Set-Content -Encoding utf8 release/unpublished-candidate/README.txt
+      - name: Retain unpublished candidate only after acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentOrganizer-unpublished-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/unpublished-candidate/**
+            release/qa-evidence/windows-upgrade/upgrade-results.json
+            release/control-panel/native-smoke-win32-x64.json
+          if-no-files-found: error
+          retention-days: 90
+
   # A fresh runner avoids another smoke test's registered app or profile being
   # mistaken for the actual legacy installation. No release token is supplied.
   legacy-bootstrap:
