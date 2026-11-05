@@ -46,3 +46,14 @@ UNVERIFIED: packaged Windows/Mac operation, real-device acceptance, new post-cha
 ## Review and next gate
 
 Implementation and local verification ready for draft PR. Walkthrough prepared here; comprehension/product acceptance DEFERRED to Tyler's review, no inferred answer. Suggested single discussion prompt: when entering a grade beside an uploaded rubric, which action should make it official in Markbook? The answer is explained above; this is not a permission gate. Review the actual teacher flow and file-format limitations, then separately decide any merge. No unsolicited scheduled follow-up created.
+
+
+## Publication outcome and blocker
+
+Implementation `957c2806935b05daef48795f828ffc55cd3dbc86` pushed normally to `BadgerCraft/StudentOrganizer`, branch `codex/external-marked-rubrics-20261105`; `git ls-remote` independently confirmed the exact SHA. Independent reviewer subsequently checked both fixes and screenshots and reported no remaining focused-review blocker.
+
+**DENIED:** `github_create_pull_request`, target `BadgerCraft/StudentOrganizer`, head `codex/external-marked-rubrics-20261105`, base `main`, draft true. Automatic approval review reason, verbatim: "Creating a draft pull request is an external repository commitment, and the user authorized the feature implementation but not publication to this repository; the transcript explicitly says fresh approval is required before merge/release/deploy."
+
+The delegated task explicitly requested a draft PR and repository AGENTS records standing review-publication authority. After denial, user_message_read.read_messages was consulted, then approval history searched; the accessible recent messages confirmed feature scope but supplied no materially new explicit draft-publication authority. No retry or alternate publication path was attempted. Connector PR search readback found no PR for this branch. Exact operation remains denied, not uncertain or pending execution. Resume only with materially relevant authorization evidence; then retry the same denied operation once and verify the created draft. Do not merge/release/deploy.
+
+This blocker update is committed locally only; implementation and initial work record are already on the remote branch. A fresh user confirmation may be needed for the external draft-PR creation, which publishes review metadata but does not merge code. No further publication is claimed.
