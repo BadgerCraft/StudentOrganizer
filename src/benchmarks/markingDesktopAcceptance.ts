@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fictionalMarkedPdf } from '../../scripts/pdfFixture';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,6 +13,7 @@ export interface MarkingDesktopEvidence {
   assessmentTitle: string;
   firstAttemptId: string;
   secondAttemptId: string;
+  pdfAttemptId?: string;
   pendingFeedback: string;
   reportPath: string;
   backupPath: string;
@@ -101,6 +103,16 @@ async function openDraft(page: Page, attemptId: string, expectedText: string) {
     }, `Submission did not settle for ${attemptId}`);
     const reopen = page.getByRole('region', { name: 'Marking session', exact: true }).getByRole('button', { name: 'Reopen as draft revision', exact: true });
     if (await reopen.isVisible()) await reopen.click();
+  }
+  if (await focusedMarking(page)) {
+    await eventually(page, async () => {
+      const document = page.getByTestId('marking-document');
+      return await document.count() && (await document.innerText()).includes(expectedText)
+        && await page.getByRole('button', { name: 'Save now', exact: true }).isEnabled() ? true : undefined;
+    }, 'Selected submission did not finish loading');
+    if (await page.getByText('Finalized revision — current official results shown below', { exact: false }).isVisible()) {
+      await finalStage(page); await page.getByRole('button', { name: 'Reopen as draft revision', exact: true }).click();
+    }
   }
   await eventually(page, async () => {
     const document = page.getByTestId('marking-document');
@@ -287,6 +299,33 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   assert.match(report, /Fictional packaged summary &lt;script&gt;literal text&lt;\/script&gt;/);
   assert.doesNotMatch(report, /<script\b|<img\b|<iframe\b/i);
 
+  let pdfAttemptId: string | undefined;
+  // Capability detection preserves acceptance of the deliberately pinned legacy app.
+  if (await page.getByRole('button', { name: 'Assignment setup', exact: true }).count()) {
+    await page.getByRole('button', { name: 'Assignment setup', exact: true }).click();
+    const externalEntry = page.getByRole('button', { name: /Import already marked rubrics/ });
+    if (await externalEntry.count()) {
+      await externalEntry.click();
+      await page.getByLabel('Upload marked PDFs (class set)', { exact: true }).check();
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      const pdf = Buffer.from(fictionalMarkedPdf({ annotations: true }));
+      await page.getByLabel('Choose marked PDF files', { exact: true }).setInputFiles({ name: 'Fictional-packaged-rubric.pdf', mimeType: 'application/pdf', buffer: pdf });
+      await page.getByRole('button', { name: 'Add work and select students', exact: true }).click();
+      await page.getByRole('group', { name: 'Class students', exact: true }).getByRole('checkbox').first().check();
+      await page.getByRole('button', { name: 'Confirm student and review work', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm and start marking', exact: true }).click();
+      const viewer = page.getByRole('region', { name: 'Uploaded work beside grades' }).getByRole('region', { name: 'Local PDF viewer' });
+      await viewer.getByRole('img', { name: /page 1/ }).waitFor({ timeout: 30000 });
+      await viewer.getByRole('button', { name: 'Next PDF page' }).click();
+      const image = viewer.getByRole('img', { name: /page 2/ }); await image.waitFor({ timeout: 30000 });
+      assert.ok(await image.evaluate(async (image: HTMLImageElement) => { await image.decode(); return image.naturalWidth > 0; }), 'Packaged worker must decode the PDF page');
+      const saved = (await records(page, 'markingAttempts')).find(row => row.assessmentId === assessment.id && row.pdfDocuments?.length);
+      assert.ok(saved); pdfAttemptId = saved.id;
+      assert.deepEqual(Buffer.from(saved.pdfDocuments[0].base64, 'base64'), pdf);
+      await page.screenshot({ path: path.join(artifactsDir, 'pdf-original.png'), fullPage: true });
+    }
+  }
+
   // A revision with an unfinished annotation must survive a real process restart.
   await openDraft(page, first.id, 'Echo phrase. Middle words.');
   await finalStage(page);
@@ -340,8 +379,8 @@ async function runAcceptance(page: Page, artifactsDir: string, download: Marking
   await page.getByTestId('confirm-restore-btn').click();
   await page.getByText(/Database successfully restored/).waitFor();
   assert.deepEqual(await snapshot(page, assessment.id), snapshots, 'Confirmed actual backup restore must recover marking originals, pending revision and official records');
-  return { assessmentId: assessment.id, assessmentTitle, firstAttemptId: first.id, secondAttemptId: second.id, pendingFeedback, reportPath, backupPath, snapshots,
-    checks: ['visible rubric/import/finalization UI', 'TXT and DOCX original bytes and hashes', 'draft leaves official marks unchanged', 'finalized KTCA/feedback', 'real inert HTML report download', 'real full backup with marking records', 'saved pending revision', 'actual full backup preview and confirmed restore replaces later edit'] };
+  return { assessmentId: assessment.id, assessmentTitle, firstAttemptId: first.id, secondAttemptId: second.id, pdfAttemptId, pendingFeedback, reportPath, backupPath, snapshots,
+    checks: [...(pdfAttemptId ? ['packaged PDF worker, retained originals, two-page rendering and backup restore'] : []), 'visible rubric/import/finalization UI', 'TXT and DOCX original bytes and hashes', 'draft leaves official marks unchanged', 'finalized KTCA/feedback', 'real inert HTML report download', 'real full backup with marking records', 'saved pending revision', 'actual full backup preview and confirmed restore replaces later edit'] };
 }
 
 /** New builds require an explicit draft-preserving departure; pinned legacy builds do not. */
@@ -365,6 +404,14 @@ async function verifyRestart(page: Page, evidence: MarkingDesktopEvidence): Prom
   await page.getByRole('heading', { name: evidence.assessmentTitle, exact: true }).waitFor();
   assert.deepEqual(await snapshot(page, evidence.assessmentId), evidence.snapshots, 'Actual process restart must preserve originals, rubric, sessions, pending feedback and official records');
   await page.getByTestId(`open-marking-${evidence.assessmentId}`).click();
+  if (evidence.pdfAttemptId) {
+    await openMarkingQueue(page);
+    await page.getByTestId(`marking-session-open-${evidence.pdfAttemptId}`).click();
+    const image = page.getByRole('region', { name: 'Uploaded work beside grades' }).getByRole('img', { name: /page 1/ });
+    await image.waitFor({ timeout: 30000 });
+    assert.ok(await image.evaluate(async (node: HTMLImageElement) => { await node.decode(); return node.naturalWidth > 0; }));
+    evidence.checks.push('retained PDF visibly reopens after process restart');
+  }
   await openDraft(page, evidence.secondAttemptId, 'Second fictional essay.');
   assert.match(await page.getByTestId('marking-document').innerText(), /Second fictional essay/);
   await openDraft(page, evidence.firstAttemptId, 'Echo phrase. Middle words.');

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPastedDocument, parseMarkingFiles, sha256 } from '../importDocuments';
+import { parseMarkingPdfs } from '../pdfBrowser';
+import { PdfViewer } from './PdfViewer';
 import { parseMarkingImages } from '../importImages';
 import { parseMarkingDocumentArchive } from '../importDocumentArchive';
 import { CaptureMatchingWorkspace } from '../../capture/CaptureMatchingWorkspace';
@@ -10,7 +12,7 @@ const buttonBase = 'border border-slate-400 rounded-lg px-3 py-2 text-sm disable
 const button = `${buttonBase} bg-white text-slate-900`;
 const primary = `${buttonBase} bg-blue-700 text-white font-semibold`;
 const field = 'border border-slate-400 rounded-lg p-2 w-full bg-white text-slate-900';
-type Source = 'documents' | 'archive' | 'paste' | 'pictures' | 'phone';
+type Source = 'pdfs' | 'documents' | 'archive' | 'paste' | 'pictures' | 'phone';
 type Step = 'source' | 'add' | 'students' | 'match' | 'review';
 export interface EvidenceImportWizardProps {
   context: MarkingContext;
@@ -46,11 +48,13 @@ function EvidenceImportSteps({ externallyMarked = false, context, rubricId, user
   const [matches, setMatches] = useState<Record<string, string>>({});
   const [previous, setPrevious] = useState<Record<string, string>>({});
   const [itemChoice, setItemChoice] = useState(''), [studentChoice, setStudentChoice] = useState('');
-  const [readErrors, setReadErrors] = useState<{ id: string; name: string; message: string; file: File; sourceKey?: string; source: 'documents' | 'archive' | 'pictures' }[]>([]);
+  const [readErrors, setReadErrors] = useState<{ id: string; name: string; message: string; file: File; sourceKey?: string; source: 'documents' | 'archive' | 'pictures' | 'pdfs' }[]>([]);
   const [acceptPartial, setAcceptPartial] = useState(false);
   const [notice, setNotice] = useState(''), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [savedCount, setSavedCount] = useState(0);
   const alive = useRef(true), locked = useRef(false);
+  const pdfAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => pdfAbort.current?.abort(), []);
   const receipts = useRef<Record<string, string>>({});
   const creationRubric = useRef('');
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -92,6 +96,10 @@ function EvidenceImportSteps({ externallyMarked = false, context, rubricId, user
         });
         // Failed entries retain the extracted File and retry as individual documents.
         errors = result.errors.map(row => ({ ...row, name: row.path, sourceKey: `${archiveHash}:${row.path}` }));
+      } else if (inputSource === 'pdfs') {
+        pdfAbort.current = new AbortController();
+        const result = await parseMarkingPdfs(inputFiles, pdfAbort.current.signal);
+        incoming = result.documents.map(document => ({ kind: 'pdfs', document })); errors = result.errors;
       } else if (inputSource === 'documents') {
         const result = await parseMarkingFiles(inputFiles);
         incoming = result.documents.map(document => ({ kind: 'documents', document, sourceLabel: retry?.sourceKey ? retry.name : undefined, sourceKey: retry?.sourceKey })); errors = result.errors.map(row => ({ ...row, name: retry?.sourceKey ? retry.name : row.name, sourceKey: retry?.sourceKey }));
@@ -113,7 +121,7 @@ function EvidenceImportSteps({ externallyMarked = false, context, rubricId, user
       // File object identity is deliberate: names (and metadata) can match different work.
       // Retry uses the retained original File, including after a transient read failure.
       setReadErrors(current => [...current.filter(row => replacement ? row !== retry : inputSource === 'paste' || !inputFiles.includes(row.file)),
-        ...errors.map(row => ({ ...row, id: crypto.randomUUID(), source: inputSource === 'archive' && !row.file.name.toLowerCase().endsWith('.zip') ? 'documents' as const : inputSource as 'documents' | 'archive' | 'pictures' }))]);
+        ...errors.map(row => ({ ...row, id: crypto.randomUUID(), source: inputSource === 'archive' && !row.file.name.toLowerCase().endsWith('.zip') ? 'documents' as const : inputSource as 'documents' | 'archive' | 'pictures' | 'pdfs' }))]);
       setAcceptPartial(false);
       setNotice(merged.skipped.length ? `Already added; no extra copies: ${merged.skipped.join(', ')}.` : '');
       // Replacement must leave the separate Add work selection untouched.
@@ -165,7 +173,8 @@ function EvidenceImportSteps({ externallyMarked = false, context, rubricId, user
     finally { locked.current = false; onBusyChange?.(false); if (alive.current) setBusy(false); }
   }
 
-  const reviewWork = (item: EvidenceWork) => item.kind === 'documents'
+  const reviewWork = (item: EvidenceWork) => item.kind === 'pdfs'
+    ? <PdfViewer documents={[item.document]} /> : item.kind === 'documents'
     ? <pre className="whitespace-pre-wrap max-h-56 overflow-auto bg-slate-50 p-2 border rounded" tabIndex={0}>{item.document.text}</pre>
     : <img className="max-h-56 max-w-full object-contain" alt={`Added work: ${item.page.name}`} src={`data:${item.page.mime};base64,${item.page.base64}`} />;
   const removeWork = (id: string) => {
@@ -174,20 +183,21 @@ function EvidenceImportSteps({ externallyMarked = false, context, rubricId, user
   };
   return <section className="border rounded-xl bg-white p-4 space-y-4" aria-label="Add student work" data-testid="evidence-import-wizard" aria-busy={busy}>
     <p className="text-sm text-slate-600">{({ source: '1 · Choose source', add: '2 · Add work', students: '3 · Select students', match: '4 · Match work to students', review: '5 · Review and start marking' })[step]}</p>
+    {busy && source === 'pdfs' && <p role="status">Checking PDF files locally… <button type="button" className={button} onClick={() => pdfAbort.current?.abort()}>Cancel PDF reading</button></p>}
     {error && <p role="alert" className="text-red-800 whitespace-pre-wrap">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : row.source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
+    {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pdfs' ? '.pdf' : row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : row.source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
     {step === 'source' && <>
-      <h3 className="font-bold text-lg">{externallyMarked ? 'Upload already marked rubric files' : 'Where is the student work?'}</h3>{externallyMarked && <p>Choose pictures for a faithful view of visible marks. DOCX/text imports do not preserve table layout, colour or highlighting. PDF is not supported; export pages as PNG or JPEG first. Select several files for a batch. Unconfirmed previews are not saved across a restart; saved submissions remain in the marking queue. Review that queue before reimporting after an interruption.</p>}
-      <div className="grid gap-3 sm:grid-cols-3">{(['phone', 'documents', 'archive', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures' || value === 'phone') !== (items[0].kind === 'pictures') || (!!items.length && value === 'phone'))} onChange={() => { if (captureDirty && value !== 'phone' && !window.confirm('Leave unmatched phone page sets? Saved matches are retained; reopen the ZIP to finish the rest.')) return; setSource(value); setFiles([]); setError(''); }} />{value === 'phone' ? 'Phone-photo ZIP' : value === 'archive' ? 'ZIP of DOCX files (class set)' : value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
-      {!!items.length && <p>Added work is kept. To switch between pictures and text, remove the added work in the next step.</p>}
+      <h3 className="font-bold text-lg">{externallyMarked ? 'Upload already marked rubric files' : 'Where is the student work?'}</h3>{externallyMarked && <p>Choose pictures for a faithful view of visible marks. DOCX/text imports do not preserve table layout, colour or highlighting. PDF is supported locally, including scanned pages; export interactive or password-protected PDFs as flattened unlocked copies first. Select several files for a batch. Unconfirmed previews are not saved across a restart; saved submissions remain in the marking queue. Review that queue before reimporting after an interruption.</p>}
+      <div className="grid gap-3 sm:grid-cols-3">{(['pdfs', 'phone', 'documents', 'archive', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pdfs' ? 'pdfs' : value === 'pictures' || value === 'phone' ? 'pictures' : 'documents') !== items[0].kind) || (!!items.length && value === 'phone')} onChange={() => { if (captureDirty && value !== 'phone' && !window.confirm('Leave unmatched phone page sets? Saved matches are retained; reopen the ZIP to finish the rest.')) return; setSource(value); setFiles([]); setError(''); }} />{value === 'pdfs' ? 'Upload marked PDFs (class set)' : value === 'phone' ? 'Phone-photo ZIP' : value === 'archive' ? 'ZIP of DOCX files (class set)' : value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
+      {!!items.length && <p>Added work is kept. To switch between PDF, pictures and text, remove the added work in the next step.</p>}
       <button className={primary} disabled={!source || inactive} onClick={() => setStep('add')}>Continue</button>
     </>}
     {step === 'add' && source !== 'phone' && <>
-      <h3 className="font-bold text-lg">{source === 'paste' ? 'Paste student work' : source === 'pictures' ? 'Add pictures of student work' : source === 'archive' ? 'Add a ZIP of DOCX student work' : 'Add text or document files'}</h3>
+      <h3 className="font-bold text-lg">{source === 'pdfs' ? 'Add already marked PDF files' : source === 'paste' ? 'Paste student work' : source === 'pictures' ? 'Add pictures of student work' : source === 'archive' ? 'Add a ZIP of DOCX student work' : 'Add text or document files'}</h3>
       {source === 'paste' ? <><label className="block">Work title<input className={field} value={name} disabled={inactive} onChange={e => setName(e.target.value)} /></label><label className="block">Student work<textarea className={`${field} min-h-48`} value={paste} disabled={inactive} onChange={e => setPaste(e.target.value)} placeholder="Paste the student's text here. You can review it before marking." /></label></> : <>
-        <p>{source === 'pictures' ? 'PNG, JPEG and WebP are supported. Up to 10 pages, 8 MB each and 32 MB total. Images stay on this device; text is not extracted.' : source === 'archive' ? 'Choose one ZIP containing up to 40 DOCX essays, 2 MB each and 10 MB total. Review each document and explicitly confirm its student; filenames never assign students.' : 'UTF-8 .txt and Word .docx are supported: up to 10 files, 2 MB each and 10 MB total. Older .doc files are not supported. Save a .doc as .docx or .txt in Word first.'}</p>
-        <label className="block">{source === 'pictures' ? 'Choose pictures' : source === 'archive' ? 'Choose DOCX class ZIP' : 'Choose text/document files'}<input className={field} type="file" multiple={source !== 'archive'} accept={source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive} onChange={e => { const next = Array.from(e.target.files ?? []); e.target.value = ''; if (next.length) setFiles(next); }} /></label>
+        <p>{source === 'pdfs' ? 'Up to 40 PDFs, 8 MB each, 32 MB total and 20 pages per PDF. Pages and embedded images are limited to 8 million pixels; reduce large scans first. Originals stay on this device. Review every page; interactive forms, scripts and password-protected files are unsupported. Export flattened PDFs with all marks visible. No grades are extracted.' : source === 'pictures' ? 'PNG, JPEG and WebP are supported. Up to 10 pages, 8 MB each and 32 MB total. Images stay on this device; text is not extracted.' : source === 'archive' ? 'Choose one ZIP containing up to 40 DOCX essays, 2 MB each and 10 MB total. Review each document and explicitly confirm its student; filenames never assign students.' : 'UTF-8 .txt and Word .docx are supported: up to 10 files, 2 MB each and 10 MB total. Older .doc files are not supported. Save a .doc as .docx or .txt in Word first.'}</p>
+        <label className="block">{source === 'pdfs' ? 'Choose marked PDF files' : source === 'pictures' ? 'Choose pictures' : source === 'archive' ? 'Choose DOCX class ZIP' : 'Choose text/document files'}<input className={field} type="file" multiple={source !== 'archive'} accept={source === 'pdfs' ? '.pdf' : source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive} onChange={e => { const next = Array.from(e.target.files ?? []); e.target.value = ''; if (next.length) setFiles(next); }} /></label>
         {!!files.length && <ul aria-label="Files to add">{files.map((file, index) => <li key={index}>{file.name}</li>)}</ul>}
       </>}
       {!!items.length && <details><summary>{items.length} work item(s) already added</summary>{items.map(item => <article className="border rounded p-2 space-y-2" key={workId(item)}><strong>{workName(item)}</strong>{reviewWork(item)}<button className={button} disabled={inactive} onClick={() => removeWork(workId(item))}>Remove {workName(item)}</button></article>)}</details>}

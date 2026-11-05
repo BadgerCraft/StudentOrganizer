@@ -169,6 +169,10 @@ export async function validateMarkingBackupFiles(tables: BackupTables): Promise<
       try { await validateRetainedOriginal(document); }
       catch (error) { fail(error instanceof Error ? error.message : 'original file is invalid'); }
     }
+    for (const pdf of attempt.pdfDocuments ?? []) {
+      try { const { validateRetainedPdf } = await import('./importPdfs'); await validateRetainedPdf(pdf); }
+      catch (error) { fail(error instanceof Error ? error.message : 'PDF original is invalid'); }
+    }
     for (const page of attempt.imagePages ?? []) {
       try {
         const source = page.captureRef && tables.captureAttachments?.find((row: any) => row.id === page.captureRef!.attachmentId);

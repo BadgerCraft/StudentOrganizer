@@ -31,7 +31,7 @@ export function archiveSnapshot(json: string | null, entityName: string, archive
   if (json === null) return null;
   const value = JSON.parse(json);
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('A retained marking snapshot is invalid. Archive was cancelled without changes.');
-  if (entityName === 'markingAttempts') return JSON.stringify({ ...value, documents: [], imagePages: [], archivedAt, keepStudentWork: false });
+  if (entityName === 'markingAttempts') return JSON.stringify({ ...value, documents: [], imagePages: [], ...(value.pdfDocuments ? { pdfDocuments: [] } : {}), archivedAt, keepStudentWork: false });
   if (!value.draft) throw new Error('A retained marking draft snapshot is invalid. Archive was cancelled without changes.');
   return JSON.stringify({ ...value, draft: archiveDraft(value.draft) });
 }

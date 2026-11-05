@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fictionalMarkedPdf } from './pdfFixture';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
@@ -6,12 +7,13 @@ import { chromium } from 'playwright';
 const harness = `<!doctype html><html class="dark"><head><meta charset="utf-8"></head><body><div id="root"></div><script type="module">
 import React from 'react';import{createRoot}from'react-dom/client';import'/src/index.css';
 import{db}from'/src/db/database';import{seedDatabase}from'/src/db/seeds';import{selectActingTeacher,getIdentityEpoch}from'/src/services/identityService';
-import{MarkingService}from'/src/marking/markingService';import{createPastedDocument}from'/src/marking/importDocuments';import{MarkingWorkspace}from'/src/components/MarkingWorkspace';
+import{PortabilityService}from'/src/services/portabilityService';import{MarkingService}from'/src/marking/markingService';import{createPastedDocument}from'/src/marking/importDocuments';import{MarkingWorkspace}from'/src/components/MarkingWorkspace';
 await seedDatabase(db);const identity=await selectActingTeacher(db,'user-tyler');const actor={userId:identity.userId,deviceId:identity.deviceId,epoch:getIdentityEpoch()};
 const template=await db.assessments.get('assess-eng-essay');const id='fictional-focused-assignment';await db.assessments.add({...template,id,title:'Fictional inquiry',code:'FOCUSED'});
 const cats=(await db.assessmentCategories.where('assessmentId').equals(template.id).toArray()).map(c=>({...c,id:'focused-'+c.categoryCode,assessmentId:id}));await db.assessmentCategories.bulkAdd(cats);
 window.official=async()=>JSON.stringify({s:await db.studentAssessments.toArray(),r:await db.categoryResults.toArray()});
 window.savedAttempts=async()=>await db.markingAttempts.where('assessmentId').equals(id).toArray();
+window.roundtrip=async()=>{const service=new PortabilityService(db);await service.restoreFromJSON(await service.createFullBackupJSON());};
 window.fixture={assessmentId:id};
 createRoot(document.getElementById('root')).render(React.createElement(MarkingWorkspace,{assessmentId:id,userId:identity.userId,onClose:()=>{},onRefresh:()=>{}}));
 </script></body></html>`.replace("const document=await createPastedDocument", "const work=await createPastedDocument").replace('[document],enrollment','[work],enrollment');
@@ -96,7 +98,47 @@ try {
  const layout=await Promise.all([originals.boundingBox(),chips.boundingBox()]);
  assert.ok(layout[0] && layout[1] && layout[0].x+layout[0].width<=layout[1].x,'document and grades are side by side');
  await page.screenshot({path:`${out}/image-beside-grades.png`,fullPage:true});
+ // PDF import preserves the original bytes and renders marked pages locally.
+ await page.getByRole('button',{name:'Assignment setup',exact:true}).click();
+ await page.getByRole('button',{name:/Import already marked rubrics/}).click();
+ await page.getByLabel('Upload marked PDFs (class set)',{exact:true}).check();
+ await page.getByRole('button',{name:'Continue',exact:true}).click();
+ const pdfBytes=fictionalMarkedPdf();
+ await page.getByLabel('Choose marked PDF files',{exact:true}).setInputFiles([
+   {name:'Fictional-A.pdf',mimeType:'application/pdf',buffer:Buffer.from(pdfBytes)},
+   {name:'Fictional-B.pdf',mimeType:'application/pdf',buffer:Buffer.from(pdfBytes)},
+   {name:'Corrupt.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.7 broken %%EOF')}
+ ]);
+ await page.getByRole('button',{name:'Add work and select students'}).click();
+ await page.getByRole('heading',{name:'Who does this work belong to?'}).waitFor({timeout:45000});
+ await page.getByLabel('Continue with only the work successfully added; leave these files out.').check();
+ await students.nth(0).check();await students.nth(1).check();
+ await page.getByRole('button',{name:'Continue to matching'}).click();
+ for (const [i,name] of ['Fictional-A.pdf','Fictional-B.pdf'].entries()) {
+   await page.getByRole('radio',{name,exact:true}).check();await page.getByRole('radio',{name:new RegExp(imageStudentLabels[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))}).check();
+   await page.getByRole('button',{name:'Confirm match',exact:true}).click();
+ }
+ await page.getByRole('button',{name:'Review matches',exact:true}).click();
+ await page.getByRole('button',{name:'Confirm and start marking',exact:true}).click();
+ const viewer=originals.getByRole('region',{name:'Local PDF viewer'});
+ await viewer.getByRole('img',{name:/page 1/}).waitFor({timeout:30000});
+ await viewer.getByRole('button',{name:'Next PDF page'}).click();
+ const pdfImage=viewer.getByRole('img',{name:/page 2/});await pdfImage.waitFor({timeout:30000});
+ const pixel=await pdfImage.evaluate(async(img:HTMLImageElement)=>{await img.decode();const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;const ctx=canvas.getContext('2d')!;ctx.drawImage(img,0,0);return Array.from(ctx.getImageData(45,90,1,1).data);});
+ assert.deepEqual(pixel,[255,255,0,255],'visible yellow highlighting survives PDF rendering');
+ const savedPdfs=await page.evaluate(async()=> (await (window as any).savedAttempts()).filter((a:any)=>a.pdfDocuments?.length));
+ assert.equal(savedPdfs.length,2);assert.equal(savedPdfs[0].pdfDocuments[0].base64,Buffer.from(pdfBytes).toString('base64'));
+ await chips.getByRole('button',{name:/K · Knowledge/}).click();
+ await group.getByRole('button',{name:'Level',exact:true}).click();await group.getByRole('button',{name:'2',exact:true}).click();
+ await page.getByRole('button',{name:'Finish category',exact:true}).click();
+ await page.screenshot({path:`${out}/pdf-beside-grades.png`,fullPage:true});
+ await page.getByRole('button',{name:'Save and next submission',exact:true}).click();
+ await page.waitForFunction(async()=>JSON.parse(await (window as any).official()).r.some((r:any)=>r.assessmentCategoryId==='focused-K'&&r.rawScore==='2'));
+ const beforeRestore=await page.evaluate(()=>(window as any).official());await page.evaluate(()=>(window as any).roundtrip());
+ assert.equal(await page.evaluate(()=>(window as any).official()),beforeRestore);
+ const restored=await page.evaluate(async()=> (await (window as any).savedAttempts()).filter((a:any)=>a.pdfDocuments?.length));assert.deepEqual(restored,savedPdfs);
+
  assert.deepEqual(errors,[]);
- await writeFile(`${out}/results.json`,JSON.stringify({status:'PASS',checks:['category template created without rubric re-entry','two identical files remain separate','unsupported PDF explicit exclusion','manual match correction','review before save','visible text beside grades','draft leaves Markbook unchanged','explicit save transfers exact level','save-next and queue reopen preserve work','identical image batch and decoded original beside grade sidebar']},null,2));
+ await writeFile(`${out}/results.json`,JSON.stringify({status:'PASS',checks:['category template created without rubric re-entry','two identical files remain separate','unsupported PDF explicit exclusion','manual match correction','review before save','visible text beside grades','draft leaves Markbook unchanged','explicit save transfers exact level','save-next and queue reopen preserve work','identical image batch and decoded original beside grade sidebar','PDF original bytes retained, page navigation, yellow highlight pixels, explicit grade save and real-browser backup restore']},null,2));
  console.log('PASS: external rubric batch, matching correction, visible grading and Markbook transfer');
 } finally {await browser.close();await server.close();}

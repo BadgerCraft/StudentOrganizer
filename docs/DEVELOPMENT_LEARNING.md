@@ -448,3 +448,8 @@ Implementation/review evidence: [QA follow-up](work-orders/QA-CAPACITY-SEATING-2
 The new assignment entry imports already marked files and opens grade entry beside them. No rubric reconstruction or automatic grade extraction is needed. A draft is saved local work; explicit Save/finalization changes official Markbook results. Different filenames can represent different students even if their marked contents are identical, so matching preserves file identity and requires explicit enrollment confirmation. DOCX text extraction loses layout/colour; image exports preserve visible marks.
 
 Discussion deferred to review: which action makes a typed grade official? Explanation supplied in the [work order](work-orders/EXTERNAL-MARKED-RUBRICS-2026-11-05.md); no response, recall or acceptance inferred. Review due on the next user-led walkthrough; no reminder/schedule created.
+
+
+### November 5 continuation — local PDF viewing
+
+The same external-rubric flow now accepts PDFs and preserves original bytes, with page/zoom controls beside grades. A worker is a separate cancellable browser execution task: PDF parsing/rendering happens there and returns an image, without executing document scripts or following links. Saved originals and official grades remain separate. Unsupported PDFs fail visibly; Word formatting remains unsupported. Expanded scan/annotation, backup and grade tests pass; native Windows/Mac checks remain pending. This is the material addition to PR60's prepared walkthrough, not a second approval or quiz gate. Review remains deferred.
