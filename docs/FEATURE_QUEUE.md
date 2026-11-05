@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 5 — externally marked rubric intake
+
+| Stable ID | Authority and disposition | Next action / gate |
+| --- | --- | --- |
+| TUV-EXTERNAL-RUBRICS | Tyler requests assignment → batch already marked rubric files → reviewed filename/student matches → visible document with grades linked to Markbook; clarifies easy transfer of already marked information. Isolated implementation, verification and draft PR authorized. PDF, image and text workflow implemented and locally verified; Word formatting remains explicitly limited. | [Scope, limits, checks and walkthrough](work-orders/EXTERNAL-MARKED-RUBRICS-2026-11-05.md). Reuses local import/finalization. Local bounded PDF worker, preserved originals, page/zoom sidebar, backup/archive validation and cancellation now implemented; DOCX remains text-only. Full 1,390-test suite passed (15 existing skips), including lifecycle/integrity tests; production build, PDF rendering/rejection, full transfer/restore, packaged-helper browser and protected native-storage browser checks pass. Original implementation `957c280` pushed/read back; PDF continuation and current head evidence are maintained in PR60. Initial draft-PR denial resolved by newly supplied explicit standing user authority; one same-operation retry created [draft PR60](https://github.com/BadgerCraft/StudentOrganizer/pull/60). Open/unmerged, review pending; Windows and both Mac package jobs passed at `4e32964`, including PDF view/backup/restart. A stale DOCX test-label selector was corrected and locally verified; final-head CI is tracked in PR60. User acceptance remains pending. No merge/release/deploy. |
+
+
 ## November 4 — unpublished Windows candidate and owner tool
 
 | Stable ID | Disposition | Next action / gate |

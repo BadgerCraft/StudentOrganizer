@@ -143,6 +143,8 @@ jobs:
           npm run test:marking:modes-photo
           npm run test:marking:pdf
           npm run test:marking:archive
+          npm run test:marking:external-rubrics
+          npm run test:marking:pdf-import
       - name: Check classroom-use setup, matching, saved results and popup
         run: |
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
@@ -173,6 +175,7 @@ jobs:
           path: |
             screenshots/**
             /tmp/annotation-feedback-results.json
+            /tmp/external-rubrics/**
             /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json
             /tmp/desktop-photo-*

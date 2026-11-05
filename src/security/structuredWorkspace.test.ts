@@ -78,6 +78,8 @@ describe('structured immutable object workspace', () => {
     await expect(StructuredWorkspace.open({ ...f.options, scope: { ...scope, appId: 'other-app' } })).rejects.toThrow();
     const checkpoint = f.checkpoint(); checkpoint.ciphertext = checkpoint.ciphertext.slice(0, -1) + 'x'; await expect(StructuredWorkspace.open(f.options)).rejects.toThrow();
   });
+  // Windows real encrypted SQLite I/O exceeded the default 5s in CI.
+  // Preserve all roundtrip assertions under the same bounded allowance as adjacent fixtures.
   it('maps full source records without losing empty tables, binary row order or exact history strings', async () => {
     const { recordsFromBundle, bundleFromRecords } = require('../../electron/studentOrganizerRecords.cjs');
     const original = { format: 'student-organizer-working', version: 1, primary: { version: 2, schemaVersion: 5, exportedAt: '2026-10-29T00:00:00Z', tables: { students: [{ id: 'ä', name: 'Fictional' }, { id: 'a/b' }, { id: 'a' }, { id: 'Z' }], notes: [] } }, recovery: { backups: [{ id: 'b', createdAt: '2026-10-29T00:00:00Z', reason: 'manual', json: ' { "tables" : [] } \n' }], options: [], state: [] }, applicationStorage: { 'ota.comment-bank.v1.teacher/key': ' [ "Fictional note" ] ' } };
@@ -95,7 +97,7 @@ describe('structured immutable object workspace', () => {
     expect(recordChangesFromLegacyDelta([changed])).toEqual([{ ...changed, value: view.backupCatalog[0] }, { namespace: 'recovery', table: 'backup-content', key: 'b', value: original.recovery.backups[0].json }]);
     expect(recordChangesFromLegacyDelta([{ namespace: 'recovery', table: 'backups', key: 'b', deleted: true }])).toEqual([{ namespace: 'recovery', table: 'backups', key: 'b', deleted: true }, { namespace: 'recovery', table: 'backup-content', key: 'b', deleted: true }]);
     expect(() => bundleFromRecords([...recordsFromBundle(original, ['students', 'notes'])].slice(1), ['students', 'notes'])).toThrow();
-  });
+  }, 30000);
   it('restores complete immutable root references at a new revision and retains an exact pre-restore safety root', async () => {
     const f = await fixture(); const session = await StructuredWorkspace.create(f.options, [row('a', { text: 'old' }), { namespace: 'recovery', table: 'backup-content', key: 'old-history', value: 'old exact history' }]);
     const initial = structuredClone(f.checkpoint());

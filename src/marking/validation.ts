@@ -1,5 +1,5 @@
 import { getClassroomLevel } from '../services/classroomLevels';
-import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
+import type { MarkingAnnotation, MarkingAttempt, MarkingCommit, MarkingDocument, MarkingPdfDocument, MarkingDraft, MarkingRubric, MarkingSession, RubricContent } from './types';
 import { MARKING_LIMITS } from './types';
 import { ValidationError } from '../services/validationError';
 import type { AssessmentCategory } from '../types/schema';
@@ -111,6 +111,34 @@ export function assertMarkingDocuments(value: unknown, allowEmpty = false): asse
   if (!value.length && !allowEmpty) fail('Import at least one document.');
   value.forEach(assertMarkingDocument); const documents = value as MarkingDocument[]; unique(documents.map(item => item.id), 'Document IDs');
   if (documents.reduce((total, item) => total + (item.original?.size ?? new TextEncoder().encode(item.text).byteLength), 0) > MARKING_LIMITS.batchBytes) fail('Combined documents exceed batch size limit.');
+}
+
+/** Shape and allocation limits are checked before decoding any retained PDF bytes. */
+export function assertMarkingPdfs(value: unknown, allowEmpty = false): asserts value is MarkingPdfDocument[] {
+  arr(value, 'PDF documents', MARKING_LIMITS.pdfFiles);
+  if (!allowEmpty && !value.length) fail('Import at least one PDF document.');
+  let total = 0;
+  const ids: string[] = [];
+  for (const item of value) {
+    const pdf = object(item, 'PDF document');
+    if (pdf.version !== 1 || pdf.mime !== 'application/pdf') fail('Unsupported retained PDF format.');
+    str(pdf.id, 'PDF document ID', 200); ids.push(pdf.id);
+    str(pdf.name, 'PDF filename', 255);
+    if (!/\.pdf$/i.test(pdf.name) || /[\u0000-\u001f\u007f/\\]/u.test(pdf.name)) fail('Use a local PDF filename without paths or control characters.');
+    integer(pdf.pageCount, 'PDF page count');
+    if (pdf.pageCount > MARKING_LIMITS.pdfPages) fail('PDFs support at most 20 pages each.');
+    integer(pdf.size, 'PDF byte size');
+    if (pdf.size > MARKING_LIMITS.pdfBytes) fail('Each PDF must be at most 8 MB.');
+    total += pdf.size;
+    str(pdf.hash, 'PDF hash', 64);
+    if (!/^[a-f0-9]{64}$/i.test(pdf.hash)) fail('PDF hash must be SHA-256.');
+    str(pdf.base64, 'PDF bytes', 4 * Math.ceil(MARKING_LIMITS.pdfBytes / 3));
+    if (!isBase64(pdf.base64)) fail('PDF bytes must be valid base64.');
+    const decodedSize = pdf.base64.length / 4 * 3 - (pdf.base64.endsWith('==') ? 2 : pdf.base64.endsWith('=') ? 1 : 0);
+    if (decodedSize !== pdf.size) fail('PDF byte size does not match its retained bytes.');
+  }
+  unique(ids, 'PDF document IDs');
+  if (total > MARKING_LIMITS.pdfBatchBytes) fail('PDF batch exceeds 32 MB.');
 }
 
 export function assertMarkingImagePages(value: unknown, allowCaptureReferences = false): asserts value is MarkingImagePage[] {
@@ -267,12 +295,15 @@ export function assertMarkingRecord(table: MarkingTableName, value: unknown): as
     if (v.keepStudentWork !== undefined && typeof v.keepStudentWork !== 'boolean') fail('Student-work retention must be explicit.');
     if (v.imagePages !== undefined) assertMarkingImagePages(v.imagePages, true);
     const pages = (v.imagePages ?? []) as MarkingImagePage[];
+    if (v.pdfDocuments !== undefined) assertMarkingPdfs(v.pdfDocuments, true);
+    const pdfs = (v.pdfDocuments ?? []) as MarkingPdfDocument[];
     for (const page of pages) if (page.captureRef) {
       if (!Array.isArray(v.captureSources) || !v.captureSources.some((source: any) => source.attachmentId === page.captureRef!.attachmentId && Array.isArray(source.pageIds) && source.pageIds.includes(page.id))) fail('Capture page reference has no explicit provenance.');
     }
-    assertMarkingDocuments(v.documents, !!v.archivedAt || v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0);
-    if (v.archivedAt && !v.keepStudentWork && (v.documents.length || pages.length)) fail('Archived source material must have been removed.');
-    if ((v.mode === 'oral' || v.mode === 'rubric') && (v.documents.length || pages.length)) fail('Oral and rubric-only attempts do not import written sources.');
+    assertMarkingDocuments(v.documents, !!v.archivedAt || v.mode === 'oral' || v.mode === 'rubric' || pages.length > 0 || pdfs.length > 0);
+    if (pdfs.length && (v.documents.length || pages.length)) fail('PDF submissions must be separate from text and image submissions.');
+    if (v.archivedAt && !v.keepStudentWork && (v.documents.length || pages.length || pdfs.length)) fail('Archived source material must have been removed.');
+    if ((v.mode === 'oral' || v.mode === 'rubric') && (v.documents.length || pages.length || pdfs.length)) fail('Oral and rubric-only attempts do not import written sources.');
   } else if (table === 'markingSessions') {
     str(v.attemptId, 'Attempt ID', 200); str(v.rubricId, 'Rubric ID', 200); integer(v.revision, 'Revision');
     if (!['draft', 'finalized'].includes(v.status as string)) fail('Unsupported session status.');

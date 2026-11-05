@@ -8,8 +8,8 @@ import type { Assessment, AssessmentCategory, CategoryResult } from '../types/sc
 import { assertClassSectionWriteAccess, AuthorizationError } from '../services/authHelper';
 import { getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { ConcurrencyConflictError, MarkbookDomainService, ValidationError } from '../services/markbookService';
-import { MARKING_LIMITS, type InlineMarkingImagePage, type MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
-import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertMarkingRecord, assertRubricContent, sessionCategories } from './validation';
+import { MARKING_LIMITS, type InlineMarkingImagePage, type MarkingActor, MarkingAttempt, MarkingBase, MarkingCommit, MarkingContext, MarkingDocument, MarkingPdfDocument, MarkingDraft, MarkingImagePage, MarkingRubric, MarkingSession, RubricContent } from './types';
+import { assertAttemptDraft, assertMarkingDocuments, assertMarkingDraft, assertMarkingImagePages, assertMarkingPdfs, assertMarkingRecord, assertRubricContent, sessionCategories } from './validation';
 import { validateMarkingImageBytes, inspectMarkingImage } from './importImages';
 import { categoryChangeReview, categorySignature, compatibleCategoryTarget } from './categoryRecovery';
 
@@ -211,6 +211,23 @@ export class MarkingService {
       await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
     });
   }
+  async importPdfAttempt(assessmentId: string, rubricId: string, documents: MarkingPdfDocument[], enrollmentId: string | null, actor: MarkingActor): Promise<MarkingAttempt> {
+    this.checkActor(actor); assertMarkingPdfs(documents);
+    const snapshot = clone(documents);
+    // Original integrity checks run before the transaction, with actor/context rechecked inside it.
+    const { validateRetainedPdf } = await import('./importPdfs');
+    for (const document of snapshot) await validateRetainedPdf(document);
+    return this.transaction(actor, true, async () => {
+      const { assessment } = await this.context(assessmentId, actor, true);
+      const rubric = this.owned(await this.db.markingRubrics.get(rubricId), actor, 'Rubric');
+      if (rubric.assessmentId !== assessmentId || rubric.classSectionId !== assessment.classSectionId || !rubric.confirmed) throw new ValidationError('Confirm a rubric for this assessment before importing.');
+      if (enrollmentId) await this.enrollment(assessment, enrollmentId);
+      const existing = live(await this.db.markingAttempts.where('assessmentId').equals(assessmentId).toArray()).filter(a => a.createdBy === actor.userId);
+      if (existing.some(a => a.classEnrollmentId === enrollmentId && a.pdfDocuments?.length === snapshot.length && a.pdfDocuments.every((pdf, index) => pdf.hash.toLowerCase() === snapshot[index].hash.toLowerCase()))) throw new ValidationError('This exact submission is already imported for this student. Select its existing attempt.');
+      const attempt: MarkingAttempt = { ...this.base(assessment, actor), rubricId, mode: 'written', documents: [], pdfDocuments: snapshot, classEnrollmentId: enrollmentId, previousAttemptId: null };
+      await this.db.markingAttempts.add(attempt); await this.audit('markingAttempts', attempt, null, actor); return attempt;
+    });
+  }
   /** Explicitly bind retained capture originals to a chosen never-finalized photo submission. */
   async bindCaptureRoot(rootId: string, choice: { rubricId?: string; attemptId?: string; expectedVersion?: number; sessionVersions?: Record<string, number> }, actor: MarkingActor): Promise<MarkingAttempt> {
     return this.transaction(actor, true, async () => {
@@ -226,7 +243,7 @@ export class MarkingService {
         this.version(attempt, choice.expectedVersion!);
         await this.captureDraftOnly(attempt, root, choice.sessionVersions ?? {});
         const allPages = sources.flatMap(a => a.pages);
-        if (attempt.captureSources?.length || attempt.documents.length || attempt.imagePages?.length !== allPages.length || !attempt.imagePages.every((page, index) => page.base64 === allPages[index].base64 && page.hash === allPages[index].metadata.sha256)) throw new ValidationError('The selected marking submission must contain exactly these original pages in order. Names are not used to associate work.');
+        if (attempt.captureSources?.length || attempt.documents.length || attempt.pdfDocuments?.length || attempt.imagePages?.length !== allPages.length || !attempt.imagePages.every((page, index) => page.base64 === allPages[index].base64 && page.hash === allPages[index].metadata.sha256)) throw new ValidationError('The selected marking submission must contain exactly these original pages in order. Names are not used to associate work.');
       } else {
         const { assessment } = await this.context(root.assessmentId, actor, true);
         await this.enrollment(assessment, root.classEnrollmentId);
@@ -540,7 +557,7 @@ export class MarkingService {
       const sessions = await this.db.markingSessions.where('attemptId').equals(id).toArray();
       const commits = await this.db.markingCommits.where('attemptId').equals(id).toArray();
       if ([...sessions, ...commits].some(row => row.createdBy !== actor.userId || row.assessmentId !== attempt.assessmentId || row.classSectionId !== attempt.classSectionId)) throw new ValidationError('The marking history has inconsistent ownership. Archive was cancelled.');
-      const next: MarkingAttempt = { ...attempt, archivedAt: now, keepStudentWork: keep, ...(keep ? {} : { documents: [], imagePages: [] }), updatedAt: now, version: attempt.version + 1 };
+      const next: MarkingAttempt = { ...attempt, archivedAt: now, keepStudentWork: keep, ...(keep ? {} : { documents: [], imagePages: [], ...(attempt.pdfDocuments ? { pdfDocuments: [] } : {}) }), updatedAt: now, version: attempt.version + 1 };
       const transactionId = crypto.randomUUID();
       const finalDrafts = new Map(commits.map(commit => [commit.id, keep ? clone(commit.draft) : archiveDraft(commit.draft)]));
       const retainedSessions = new Map<string, MarkingSession>();

@@ -1,14 +1,14 @@
-import { MARKING_LIMITS, type MarkingDocument, type MarkingImagePage } from '../types';
-import { assertMarkingDocuments, assertMarkingImagePages } from '../validation';
+import { MARKING_LIMITS, type MarkingDocument, type MarkingImagePage, type MarkingPdfDocument } from '../types';
+import { assertMarkingDocuments, assertMarkingImagePages, assertMarkingPdfs } from '../validation';
 
-export type EvidenceWork = { kind: 'documents'; document: MarkingDocument; sourceKey?: string; sourceLabel?: string } | { kind: 'pictures'; page: MarkingImagePage };
+export type EvidenceWork = { kind: 'documents'; document: MarkingDocument; sourceKey?: string; sourceLabel?: string } | { kind: 'pictures'; page: MarkingImagePage } | { kind: 'pdfs'; document: MarkingPdfDocument };
 export type EvidenceImportGroup = { key: string; enrollmentId: string; previousAttemptId: string | null } & (
-  { kind: 'documents'; documents: MarkingDocument[] } | { kind: 'pictures'; pages: MarkingImagePage[] }
+  { kind: 'documents'; documents: MarkingDocument[] } | { kind: 'pictures'; pages: MarkingImagePage[] } | { kind: 'pdfs'; documents: MarkingPdfDocument[] }
 );
-export const workId = (work: EvidenceWork) => work.kind === 'documents' ? work.document.id : work.page.id;
-export const workName = (work: EvidenceWork) => work.kind === 'documents' ? work.sourceLabel ?? work.document.name : work.page.name;
+export const workId = (work: EvidenceWork) => work.kind !== 'pictures' ? work.document.id : work.page.id;
+export const workName = (work: EvidenceWork) => work.kind === 'documents' ? work.sourceLabel ?? work.document.name : work.kind === 'pdfs' ? work.document.name : work.page.name;
 const fingerprint = (work: EvidenceWork) => work.kind === 'documents'
-  ? `document:${work.sourceKey ?? ''}:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : `picture:${work.page.hash.toLowerCase()}`;
+  ? `document:${work.sourceKey ?? (work.document.original ? work.document.name : '')}:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : work.kind === 'pdfs' ? `pdf:${work.document.name}:${work.document.hash.toLowerCase()}` : `picture:${work.page.name}:${work.page.hash.toLowerCase()}`;
 
 /** Re-selecting successful files during recovery never creates additional work items. */
 export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWork[]) {
@@ -18,7 +18,7 @@ export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWo
     if (seen.has(fingerprint(item))) { skipped.push(workName(item)); continue; }
     seen.add(fingerprint(item)); items.push(item);
   }
-  if (items.some(item => item.kind !== items[0].kind)) throw new Error('Import pictures and text as separate submissions.');
+  if (items.some(item => item.kind !== items[0].kind)) throw new Error('Import PDF, pictures and text as separate batches.');
   if (items[0]?.kind === 'documents') {
     const documents = items.map(item => (item as Extract<EvidenceWork, { kind: 'documents' }>).document);
     if (items.some(item => item.kind === 'documents' && item.sourceKey)) {
@@ -26,6 +26,7 @@ export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWo
       documents.forEach(document => assertMarkingDocuments([document]));
     } else assertMarkingDocuments(documents);
   }
+  if (items[0]?.kind === 'pdfs') assertMarkingPdfs(items.map(item => (item as Extract<EvidenceWork, { kind: 'pdfs' }>).document));
   if (items[0]?.kind === 'pictures') assertMarkingImagePages(items.map(item => (item as Extract<EvidenceWork, { kind: 'pictures' }>).page));
   return { items, skipped };
 }
@@ -56,8 +57,12 @@ export function evidenceImportGroups(items: EvidenceWork[], selected: string[], 
       assertMarkingDocuments(documents);
       return { ...base, kind: 'documents', documents };
     }
+    if (work.every((item): item is Extract<EvidenceWork, { kind: 'pdfs' }> => item.kind === 'pdfs')) {
+      const documents = work.map(item => item.document); assertMarkingPdfs(documents);
+      return { ...base, kind: 'pdfs', documents };
+    }
     if (work.every((item): item is Extract<EvidenceWork, { kind: 'pictures' }> => item.kind === 'pictures')) return { ...base, kind: 'pictures', pages: work.map(item => item.page) };
-    throw new Error('Import pictures and text as separate submissions.');
+    throw new Error('Import PDF, pictures and text as separate batches.');
   });
 }
 
