@@ -41,7 +41,7 @@ try {
   });
   const classZip = zipSync({ 'First/Essay.docx': docx, 'Second/Essay.docx': docx });
   const wizard = page.getByTestId('evidence-import-wizard');
-  await wizard.getByLabel('ZIP of DOCX essays (class set)', { exact: true }).check();
+  await wizard.getByLabel('ZIP of DOCX files (class set)', { exact: true }).check();
   await wizard.getByRole('button', { name: 'Continue', exact: true }).click();
   await wizard.getByLabel('Choose DOCX class ZIP', { exact: true }).setInputFiles({ name: 'Class.zip', mimeType: 'application/zip', buffer: Buffer.from(classZip) });
   await wizard.getByRole('button', { name: 'Add work and select students', exact: true }).click();
