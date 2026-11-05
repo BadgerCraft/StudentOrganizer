@@ -80,3 +80,10 @@ Recommended concrete follow-on (same product objective, not yet implemented):
 5. For Word, recommend teacher-exported PDF with marks included once PDF intake is verified. A dedicated local Word renderer/converter could be evaluated separately against table/highlight/ink/font/page fixtures, but fidelity and packaging are not established by the current dependency. Preserve the working image-export route meanwhile.
 
 This follow-on requires meaningful parser/storage/recovery and packaged verification work; it is not safe to label a UI-only viewer addition complete. No additional implementation authorization question is manufactured here: the requested investigation is complete, while PDF/Word implementation remains explicitly tracked work. Draft-PR publication is still denied as recorded above. This investigation update is local only pending that publication boundary.
+
+
+## Publication resolved — draft PR60
+
+New trusted user history supplied explicit standing authority to create/update PRs for approved implementation work, excluding merge/release/deployment. Readback again established that the denied operation had not executed. One retry of the same draft-PR creation succeeded: [PR60](https://github.com/BadgerCraft/StudentOrganizer/pull/60), open, draft, unmerged, initial implementation head `957c280`. The earlier denial and local-only statements above describe the historical checkpoint, not the current gate. This documentation and fidelity investigation are now being published to the same branch through an ordinary fast-forward push.
+
+No implementation changed after the recorded checks; no duplicate test run is claimed. Current gate is review of the bounded image/text workflow and the concrete PDF/Word follow-on. Native packaged acceptance and exact-head CI remain unverified. Prepared educational walkthrough remains pending; no user acceptance or merge approval inferred.
