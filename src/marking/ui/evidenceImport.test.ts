@@ -109,3 +109,23 @@ describe('class ZIP staging before explicit student matching', () => {
     expect(() => evidenceImportGroups(staged.items, ['student-one'], Object.fromEntries(incoming.map(item => [workId(item), 'student-one'])))).toThrow();
   });
 });
+
+
+describe('externally marked rubric identity', () => {
+  it('keeps identical uploaded rubric bytes for different filenames and confirms separate enrollments', async () => {
+    const result = await parseMarkingFiles([new File(['K: 3'], 'Fictional-A.txt'), new File(['K: 3'], 'Fictional-B.txt')]);
+    const incoming: EvidenceWork[] = result.documents.map(document => ({ kind: 'documents', document }));
+    const staged = mergeEvidenceWork([], incoming);
+    expect(staged.items).toHaveLength(2);
+    expect(mergeEvidenceWork(staged.items, incoming).skipped).toHaveLength(2);
+    const matches = Object.fromEntries(staged.items.map((item, i) => [workId(item), `enrollment-${i}`]));
+    expect(evidenceImportGroups(staged.items, ['enrollment-0', 'enrollment-1'], matches)).toHaveLength(2);
+  });
+  it('keeps identical images with different filenames but skips reselected copies', () => {
+    const a: EvidenceWork = { kind: 'pictures', page: { id: 'a', name: 'Fictional-A.png', mime: 'image/png', base64: 'AQ==', size: 1, hash: 'a'.repeat(64), width: 1, height: 1 } };
+    const b: EvidenceWork = { ...a, page: { ...a.page, id: 'b', name: 'Fictional-B.png' } };
+    const staged = mergeEvidenceWork([], [a, b]);
+    expect(staged.items).toHaveLength(2);
+    expect(mergeEvidenceWork(staged.items, [a, b]).skipped).toHaveLength(2);
+  });
+});

@@ -14,6 +14,7 @@ type Source = 'documents' | 'archive' | 'paste' | 'pictures' | 'phone';
 type Step = 'source' | 'add' | 'students' | 'match' | 'review';
 export interface EvidenceImportWizardProps {
   context: MarkingContext;
+  externallyMarked?: boolean;
   rubricId: string;
   userId: string;
   /** Include both teacher ID and identity epoch. Changing it discards the previous teacher's preview. */
@@ -32,7 +33,7 @@ export function EvidenceImportWizard(props: EvidenceImportWizardProps) {
   return <EvidenceImportSteps key={props.identityKey} {...props} />;
 }
 
-function EvidenceImportSteps({ context, rubricId, userId, validateTeacher, disabled = false, onCreate, onStart, onDirtyChange, onBusyChange }: EvidenceImportWizardProps) {
+function EvidenceImportSteps({ externallyMarked = false, context, rubricId, userId, validateTeacher, disabled = false, onCreate, onStart, onDirtyChange, onBusyChange }: EvidenceImportWizardProps) {
   const [captureDirty, setCaptureDirty] = useState(false);
   const captureDirtyChanged = useCallback((value: boolean) => setCaptureDirty(value), []);
   const [step, setStep] = useState<Step>('source');
@@ -40,7 +41,7 @@ function EvidenceImportSteps({ context, rubricId, userId, validateTeacher, disab
   const [files, setFiles] = useState<File[]>([]);
   const [paste, setPaste] = useState(''), [name, setName] = useState('Pasted work');
   const [items, setItems] = useState<EvidenceWork[]>([]);
-  const [selectionMode, setSelectionMode] = useState<'single' | 'multiple'>('single');
+  const [selectionMode, setSelectionMode] = useState<'single' | 'multiple'>(externallyMarked ? 'multiple' : 'single');
   const [selected, setSelected] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, string>>({});
   const [previous, setPrevious] = useState<Record<string, string>>({});
@@ -177,8 +178,8 @@ function EvidenceImportSteps({ context, rubricId, userId, validateTeacher, disab
     {notice && <p role="status">{notice}</p>}
     {!!readErrors.length && <div className="border border-amber-500 bg-amber-50 p-3"><p className="font-semibold">These files were not added</p><ul>{readErrors.map(row => <li key={row.id}>{row.name}: {row.message} <button type="button" className={button} disabled={inactive || partial} onClick={() => void addWork(row)}>Retry {row.name}</button> <button type="button" className={button} disabled={inactive || partial} onClick={e => e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]')?.click()}>Replace failed file</button><input className="sr-only" type="file" aria-label={`Replace failed file: ${row.name}`} accept={row.source === 'pictures' ? '.png,.jpg,.jpeg,.webp' : row.source === 'archive' ? '.zip' : '.txt,.docx'} disabled={inactive || partial} onChange={e => { const corrected = e.target.files?.[0]; e.target.value = ''; if (corrected) void addWork(row, corrected); }} /></li>)}</ul><p>Retry the original file, or choose Replace failed file to use a corrected file. The failure clears only after the replacement is validated. Successfully added work and matches are kept.</p>{step !== 'add' && <label className="flex gap-2 mt-2"><input type="checkbox" checked={acceptPartial} disabled={inactive || partial} onChange={e => setAcceptPartial(e.target.checked)} />Continue with only the work successfully added; leave these files out.</label>}</div>}
     {step === 'source' && <>
-      <h3 className="font-bold text-lg">Where is the student work?</h3>
-      <div className="grid gap-3 sm:grid-cols-3">{(['phone', 'documents', 'archive', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures' || value === 'phone') !== (items[0].kind === 'pictures') || (!!items.length && value === 'phone'))} onChange={() => { if (captureDirty && value !== 'phone' && !window.confirm('Leave unmatched phone page sets? Saved matches are retained; reopen the ZIP to finish the rest.')) return; setSource(value); setFiles([]); setError(''); }} />{value === 'phone' ? 'Phone-photo ZIP' : value === 'archive' ? 'ZIP of DOCX essays (class set)' : value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
+      <h3 className="font-bold text-lg">{externallyMarked ? 'Upload already marked rubric files' : 'Where is the student work?'}</h3>{externallyMarked && <p>Choose pictures for a faithful view of visible marks. DOCX/text imports do not preserve table layout, colour or highlighting. PDF is not supported; export pages as PNG or JPEG first. Select several files for a batch. Unconfirmed previews are not saved across a restart; saved submissions remain in the marking queue. Review that queue before reimporting after an interruption.</p>}
+      <div className="grid gap-3 sm:grid-cols-3">{(['phone', 'documents', 'archive', 'paste', 'pictures'] as const).map(value => <label key={value} className={`border rounded-lg p-3 flex gap-2 ${source === value ? 'border-blue-700 bg-blue-50' : ''}`}><input type="radio" name="evidence-source" checked={source === value} disabled={inactive || (!!items.length && (value === 'pictures' || value === 'phone') !== (items[0].kind === 'pictures') || (!!items.length && value === 'phone'))} onChange={() => { if (captureDirty && value !== 'phone' && !window.confirm('Leave unmatched phone page sets? Saved matches are retained; reopen the ZIP to finish the rest.')) return; setSource(value); setFiles([]); setError(''); }} />{value === 'phone' ? 'Phone-photo ZIP' : value === 'archive' ? 'ZIP of DOCX files (class set)' : value === 'documents' ? 'Upload a text/document file' : value === 'paste' ? 'Paste text' : 'Upload a picture'}</label>)}</div>
       {!!items.length && <p>Added work is kept. To switch between pictures and text, remove the added work in the next step.</p>}
       <button className={primary} disabled={!source || inactive} onClick={() => setStep('add')}>Continue</button>
     </>}
@@ -218,7 +219,7 @@ function EvidenceImportSteps({ context, rubricId, userId, validateTeacher, disab
     </>}
     {step === 'review' && <>
       <h3 className="font-bold text-lg">Review student work</h3>
-      <p>Each student receives one submission containing only their matched files or pages. Confirming saves the work locally and opens the first student for marking.</p>
+      <p>Each student receives one submission containing only their matched files or pages. Confirming saves the work locally and opens the first student for marking. Existing submissions are kept; exact duplicates for the same student are rejected. If saving is interrupted, reopen saved work from the marking queue before importing again.</p>
       {partial && <p role="status">{savedCount} student submission(s) saved locally. Retry continues with unsaved work and opens marking without importing saved work again.</p>}
       {reviewError && <p role="alert">{reviewError}</p>}
       {groups.map(group => <article className="border rounded-lg p-3 space-y-2" key={group.key}><h4 className="font-semibold">{studentLabel(group.enrollmentId)}{receipts.current[group.key] ? ' · Saved locally' : ''}</h4>{items.filter(item => matches[workId(item)] === group.enrollmentId).map(item => <details key={workId(item)}><summary>{workName(item)}</summary>{reviewWork(item)}</details>)}{group.kind === 'documents' && context.attempts.some(attempt => attempt.classEnrollmentId === group.enrollmentId) && <label className="block">Submission relationship<select className={field} value={previous[group.enrollmentId] ?? ''} disabled={inactive || partial} onChange={e => setPrevious(current => ({ ...current, [group.enrollmentId]: e.target.value }))}><option value="">New submission</option>{context.attempts.filter(attempt => attempt.classEnrollmentId === group.enrollmentId).map(attempt => <option key={attempt.id} value={attempt.id}>Resubmission after {attempt.createdAt} · {attempt.documents.map(doc => doc.name).join(', ')}</option>)}</select></label>}</article>)}

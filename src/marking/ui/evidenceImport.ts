@@ -8,7 +8,7 @@ export type EvidenceImportGroup = { key: string; enrollmentId: string; previousA
 export const workId = (work: EvidenceWork) => work.kind === 'documents' ? work.document.id : work.page.id;
 export const workName = (work: EvidenceWork) => work.kind === 'documents' ? work.sourceLabel ?? work.document.name : work.page.name;
 const fingerprint = (work: EvidenceWork) => work.kind === 'documents'
-  ? `document:${work.sourceKey ?? ''}:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : `picture:${work.page.hash.toLowerCase()}`;
+  ? `document:${work.sourceKey ?? (work.document.original ? work.document.name : '')}:${work.document.hash}:${work.document.original?.hash ?? 'paste'}` : `picture:${work.page.name}:${work.page.hash.toLowerCase()}`;
 
 /** Re-selecting successful files during recovery never creates additional work items. */
 export function mergeEvidenceWork(existing: EvidenceWork[], incoming: EvidenceWork[]) {

@@ -9,11 +9,11 @@ import { DocumentDisplayFailure, DocumentErrorBoundary } from '../../components/
 import { validateSavedMarkingSession } from '../readValidation';
 
 /** Validation and rendering run inside the caller's document boundary. */
-export function ReadOnlyOriginalWork({ attempt, actor }: { attempt: MarkingAttempt; actor?: MarkingActor }) {
+export function ReadOnlyOriginalWork({ attempt, actor, initiallyOpen = false }: { attempt: MarkingAttempt; actor?: MarkingActor; initiallyOpen?: boolean }) {
   const [, retry] = useState(0);
   try { assertMarkingRecord('markingAttempts', attempt); }
   catch { return <DocumentDisplayFailure label="This saved original" onRetry={() => retry(value => value + 1)}/>; }
-  return <>{attempt.imagePages?.some(page => page.captureRef) && <CapturedOriginal attempt={attempt} actor={actor}/>} {attempt.documents.map(doc => <details key={doc.id}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{!attempt.imagePages?.some(page => page.captureRef) && attempt.imagePages?.map(page => <details key={page.id}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}</>;
+  return <>{attempt.imagePages?.some(page => page.captureRef) && <CapturedOriginal attempt={attempt} actor={actor}/>} {attempt.documents.map(doc => <details key={doc.id} open={initiallyOpen || undefined}><summary>Submitted document: {doc.name}</summary><p className="whitespace-pre-wrap">{doc.text}</p></details>)}{!attempt.imagePages?.some(page => page.captureRef) && attempt.imagePages?.map(page => <details key={page.id} open={initiallyOpen || undefined}><summary>Submitted photo: {page.name}</summary><img alt={page.name} className="max-w-full" src={`data:${page.mime};base64,${page.base64}`} /></details>)}</>;
 }
 
 /** No editing callbacks: browsing retained or former-student work never opens a session. */
