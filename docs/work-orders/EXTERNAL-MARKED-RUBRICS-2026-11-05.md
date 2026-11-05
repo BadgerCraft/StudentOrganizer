@@ -57,3 +57,26 @@ Implementation `957c2806935b05daef48795f828ffc55cd3dbc86` pushed normally to `Ba
 The delegated task explicitly requested a draft PR and repository AGENTS records standing review-publication authority. After denial, user_message_read.read_messages was consulted, then approval history searched; the accessible recent messages confirmed feature scope but supplied no materially new explicit draft-publication authority. No retry or alternate publication path was attempted. Connector PR search readback found no PR for this branch. Exact operation remains denied, not uncertain or pending execution. Resume only with materially relevant authorization evidence; then retry the same denied operation once and verify the created draft. Do not merge/release/deploy.
 
 This blocker update is committed locally only; implementation and initial work record are already on the remote branch. A fresh user confirmation may be needed for the external draft-PR creation, which publishes review metadata but does not merge code. No further publication is claimed.
+
+
+## Format fidelity investigation — follow-up requested November 5
+
+Status: **bounded image/text workflow implemented; general marked Word/PDF support remains incomplete**. Safe local PDF rendering is architecturally practical, but is not present or verified in this patch. Faithful Word rendering is not achievable by merely changing the current Mammoth call.
+
+Observed local experiment using installed Mammoth 1.13.0 and a synthetic DOCX containing a table, yellow highlight, red run text and red border:
+
+- `extractRawText` returned only `Fictional marked grade: 3`.
+- `convertToHtml` returned `<table><tr><td><p>Fictional marked grade: 3</p></td></tr></table>`: highlight, red text and border were absent. This is direct evidence against claiming that a simple HTML switch preserves marked appearance.
+- [Mammoth official documentation](https://github.com/mwilliamson/mammoth.js/) also explains its semantic HTML emphasis, ignored table borders, and lack of HTML sanitization. Custom style mappings could recover selected formatting, but would not establish full Word page/mark fidelity. Do not replace stored extracted text or hashes: annotations and restore validation depend on them.
+
+Current constraints: `MarkingDocument.original` validation permits only TXT/DOCX; `validateRetainedOriginal` reparses these formats and checks immutable hashes. Image pages only allow PNG/JPEG/WebP. No PDF renderer is installed. Electron uses sandbox/context isolation and protected-mode download/navigation guards. A generic embedded PDF plugin or external Office app would not by itself prove containment, side-by-side behavior or compatibility with protected storage. No external converter, plaintext temporary file or cloud upload was introduced.
+
+Recommended concrete follow-on (same product objective, not yet implemented):
+
+1. Bundle a pinned PDF.js renderer and matching worker/assets locally. Its [official API](https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib.html) accepts `Uint8Array` data; its [canvas examples](https://mozilla.github.io/pdf.js/examples/) support rendering individual pages with scale/rotation. Use in-memory bytes, never a remote document URL. Proposed design is inference from these APIs, not a completed runtime proof.
+2. Add a versioned retained-PDF attachment contract with original filename, hash and bytes, separate from immutable annotated text. Extend validation/import/backup/restore/archive/sync-allowlist paths together. Do not disguise PDF bytes as images or insert placeholder text merely to satisfy current document validation.
+3. Render one bounded page at a time with page selector and zoom beside the same grade sidebar. Bundle fonts/CMaps where required; prohibit network resource lookup, link navigation, document actions, downloads and scripting. Cancel render/worker activity on teacher change, lock and departure. Bound file/page/pixel counts, worker time and memory; errors must identify an unreadable page rather than silently omit marks.
+4. Verify actual flattened highlight/ink/form appearance, rotation and multipage rubrics using fictional fixtures; explicitly flag unsupported interactive/XFA/dynamic content. Add malformed/encrypted/oversized inputs, network-denial checks, interruption/duplicates, backup round-trip, archive policy and protected Windows/Mac package checks.
+5. For Word, recommend teacher-exported PDF with marks included once PDF intake is verified. A dedicated local Word renderer/converter could be evaluated separately against table/highlight/ink/font/page fixtures, but fidelity and packaging are not established by the current dependency. Preserve the working image-export route meanwhile.
+
+This follow-on requires meaningful parser/storage/recovery and packaged verification work; it is not safe to label a UI-only viewer addition complete. No additional implementation authorization question is manufactured here: the requested investigation is complete, while PDF/Word implementation remains explicitly tracked work. Draft-PR publication is still denied as recorded above. This investigation update is local only pending that publication boundary.
