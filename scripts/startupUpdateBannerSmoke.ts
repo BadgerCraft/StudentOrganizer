@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { STARTUP_UPDATE_FIXTURE, HOLD_UPDATE_WRITE } from './helpers/startupUpdateFixture';
+import { STARTUP_UPDATE_FIXTURE, HOLD_UPDATE_WRITE, READ_UPDATE_BANNER_VISUALS, type UpdateBannerVisuals } from './helpers/startupUpdateFixture';
 import { installFictionalClassroom } from './helpers/classroomFixture';
 
 const root = path.resolve('dist');
@@ -37,6 +37,42 @@ try {
   const update = banner.getByRole('button', { name: 'Update and restart', exact: true });
   await update.waitFor();
   assert.equal(await page.evaluate(() => (window as any).__updates.checks), 0, 'renderer mount/polling must not call remote check');
+  // Assert actual rendered geometry and WCAG normal-text contrast in both supported themes.
+  // Raw browser inspection code remains independent of tsx serialization helpers.
+  const luminance = (css: string) => {
+    const channels = css.match(/[\d.]+/g)?.map(Number); assert.ok(channels && channels.length >= 3, `Unsupported color ${css}`);
+    assert.ok(channels.length === 3 || channels[3] === 1, `Text/background must be opaque: ${css}`);
+    const rgb = channels.slice(0, 3).map(value => { const normalized = value / 255; return normalized <= .04045 ? normalized / 12.92 : ((normalized + .055) / 1.055) ** 2.4; });
+    return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+  };
+  const contrast = (foreground: string, background: string) => { const values = [luminance(foreground), luminance(background)].sort((a, b) => a - b); return (values[1] + .05) / (values[0] + .05); };
+  for (const theme of ['light', 'dark'] as const) {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'appearance', exact: true }).click();
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    await page.waitForFunction(theme => document.documentElement.dataset.theme === theme, theme);
+    await page.getByRole('button', { name: 'Class View', exact: true }).click();
+    for (const width of [1280, 820]) {
+      await page.setViewportSize({ width, height: 900 });
+      const visual = await page.evaluate<UpdateBannerVisuals>(READ_UPDATE_BANNER_VISUALS);
+      assert.equal(visual.theme, theme);
+      assert.equal(visual.banner.top, 0, `${theme}/${width}: update banner remains at the top`);
+      assert.ok(visual.banner.left >= visual.sidebarRight, `${theme}/${width}: sidebar covers banner`);
+      assert.ok(visual.banner.right <= visual.viewport + 1, `${theme}/${width}: banner exceeds viewport`);
+      assert.ok(visual.text.length >= 2 && visual.buttons.length === 1, 'Inspect title, explanation and enabled update action');
+      for (const text of visual.text) {
+        assert.ok(text.left >= visual.sidebarRight && text.right <= visual.banner.right + 1 && text.unobscured, `${theme}/${width}: banner text is obscured`);
+        assert.ok(contrast(text.color, visual.banner.background) >= 4.5, `${theme}/${width}: insufficient text contrast ${text.color} on ${visual.banner.background}`);
+      }
+      for (const button of visual.buttons) {
+        assert.ok(button.unobscured && button.left >= visual.sidebarRight && button.right <= visual.viewport + 1, `${theme}/${width}: update button is obscured`);
+        assert.ok(contrast(button.color, button.background) >= 4.5, `${theme}/${width}: insufficient button text contrast`);
+        assert.ok(button.height >= 36, 'Update button retains a usable hit target');
+      }
+      await page.screenshot({ path: `${evidence}/green-update-banner-${theme}-${width}.png`, fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
   await page.screenshot({ path: `${evidence}/green-update-banner.png`, fullPage: true });
   // Dirty classroom participation remains intact; no download begins.
   await page.getByTestId('student-seat-card').first().click();

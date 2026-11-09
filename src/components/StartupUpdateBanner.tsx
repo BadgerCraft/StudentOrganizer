@@ -75,7 +75,7 @@ export function StartupUpdateBanner({ safetyReason, onBusyChange }: {
     setPhase('Cancelling update…');
     try { await bridge!.cancel?.(); } catch { setError('Cancellation is pending. Wait for the update operation to stop.'); }
   }
-  return <section aria-label="Update available" className="bg-emerald-100 text-emerald-950 border-b border-emerald-300 px-4 py-3 flex flex-wrap items-center justify-between gap-3" data-testid="startup-update-banner">
+  return <section aria-label="Update available" className="bg-emerald-100 text-emerald-800 border-b border-emerald-300 px-4 py-3 flex flex-wrap items-center justify-between gap-3" data-testid="startup-update-banner">
     <div className="min-w-0"><p className="font-semibold">Student Organizer {displayedOffer.version} is available</p>
       <p className="text-sm" role="status">{busy ? progress?.status === 'downloading' ? `Downloading update: ${Math.floor(progress.percent ?? 0)}%` : phase : !capable ? displayedOffer.message || 'Automatic installation is unavailable for this build. Keep using this version.' : phase || 'Update saves a recovery backup on this device, then restarts the app.'}</p>
       {error && <p role="alert" className="text-sm font-medium">{error}</p>}

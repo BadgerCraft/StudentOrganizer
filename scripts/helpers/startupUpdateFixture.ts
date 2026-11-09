@@ -26,3 +26,29 @@ export const HOLD_UPDATE_WRITE = String.raw`new Promise((resolve, reject) => {
     keepAlive(); transaction.oncomplete = () => database.close(); resolve();
   };
 })`;
+
+export interface UpdateVisualElement {
+  left: number; right: number; top: number; bottom: number; width: number; height: number;
+  color: string; background: string; unobscured: boolean;
+}
+export interface UpdateBannerVisuals {
+  theme: string; viewport: number; sidebarRight: number;
+  banner: UpdateVisualElement; text: UpdateVisualElement[]; buttons: UpdateVisualElement[];
+}
+
+// Computed pixels, geometry and hit testing are measured in the actual production renderer.
+export const READ_UPDATE_BANNER_VISUALS = String.raw`(() => {
+  const banner = document.querySelector('[data-testid="startup-update-banner"]');
+  const sidebar = document.querySelector('[aria-label="Main navigation"]');
+  const measure = element => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+    const hit = document.elementFromPoint(box.left + Math.min(4, box.width / 2), box.top + box.height / 2);
+    return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height,
+      color: style.color, background: style.backgroundColor,
+      unobscured: !!hit && (hit === element || element.contains(hit)) && !sidebar.contains(hit) };
+  };
+  return { theme: document.documentElement.dataset.theme, viewport: innerWidth,
+    sidebarRight: sidebar.getBoundingClientRect().right, banner: measure(banner),
+    text: Array.from(banner.querySelectorAll('p')).map(measure),
+    buttons: Array.from(banner.querySelectorAll('button:not(:disabled)')).map(measure) };
+})()`;

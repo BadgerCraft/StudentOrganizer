@@ -1,9 +1,25 @@
 import { runInNewContext } from 'node:vm';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { STARTUP_UPDATE_FIXTURE, HOLD_UPDATE_WRITE } from '../../scripts/helpers/startupUpdateFixture';
+import { STARTUP_UPDATE_FIXTURE, HOLD_UPDATE_WRITE, READ_UPDATE_BANNER_VISUALS } from '../../scripts/helpers/startupUpdateFixture';
 
 describe('self-contained browser update fixtures', () => {
+  it('evaluates visual-inspection code without serialized-function helper globals', () => {
+    const text = { box: { left: 200, right: 700, top: 16, bottom: 40, width: 500, height: 24 }, style: { color: 'rgb(6, 95, 70)', backgroundColor: 'rgba(0, 0, 0, 0)' }, getBoundingClientRect() { return this.box; }, contains: () => false };
+    const button = { ...text, box: { left: 900, right: 1060, top: 16, bottom: 56, width: 160, height: 40 }, style: { color: 'rgb(255, 255, 255)', backgroundColor: 'rgb(6, 95, 70)' } };
+    const sidebar = { getBoundingClientRect: () => ({ right: 184 }), contains: () => false };
+    const banner = { ...text, box: { left: 184, right: 1280, top: 0, bottom: 72, width: 1096, height: 72 }, style: { color: 'rgb(6, 95, 70)', backgroundColor: 'rgb(209, 250, 229)' }, contains: () => true, querySelectorAll: (selector: string) => selector === 'p' ? [text] : [button] };
+    const document = { documentElement: { dataset: { theme: 'light' } }, querySelector: (selector: string) => selector.includes('startup-update-banner') ? banner : sidebar, elementFromPoint: (x: number) => x >= button.box.left ? button : x >= text.box.left ? text : banner };
+    const result = runInNewContext(READ_UPDATE_BANNER_VISUALS, { document, innerWidth: 1280, getComputedStyle: (element: typeof text) => element.style });
+    expect(result).toMatchObject({ theme: 'light', sidebarRight: 184, banner: { left: 184 }, text: [{ unobscured: true }], buttons: [{ width: 160, height: 40, unobscured: true }] });
+    // Another child of this same banner must not count as a visible measured control.
+    document.elementFromPoint = () => text;
+    const occluded = runInNewContext(READ_UPDATE_BANNER_VISUALS, { document, innerWidth: 1280, getComputedStyle: (element: typeof text) => element.style });
+    expect(occluded.text[0].unobscured).toBe(true);
+    expect(occluded.buttons[0].unobscured).toBe(false);
+
+  });
+
   it('initializes and runs every bridge method without Node/tsx helper globals', async () => {
     const context = { window: {} as any };
     runInNewContext(STARTUP_UPDATE_FIXTURE, context);

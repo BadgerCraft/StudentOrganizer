@@ -553,7 +553,10 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-100 selection:text-blue-900">
-      <StartupUpdateBanner safetyReason={updateSafety} onBusyChange={handleUpdateBusy} />
+      {/* Share the sidebar gutter, but keep progress/cancel outside the inert workspace. */}
+      <div className="app-shell">
+        <StartupUpdateBanner safetyReason={updateSafety} onBusyChange={handleUpdateBusy} />
+      </div>
       <div
         id="app-workspace"
         className={`app-shell flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
