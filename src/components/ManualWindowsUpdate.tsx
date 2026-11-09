@@ -3,8 +3,8 @@ import { db } from '../db/database';
 import { PortabilityService } from '../services/portabilityService';
 import { ModalDialog } from './ModalDialog';
 
-type CheckResult = { status: 'available' | 'current' | 'unpublished' | 'unsupported' | 'error'; version?: string; installationAvailable?: boolean };
-type InstallResult = {
+export type CheckResult = { status: 'idle' | 'checking' | 'available' | 'current' | 'unpublished' | 'unsupported' | 'error'; version?: string; installationAvailable?: boolean; message?: string };
+export type InstallResult = {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'cancelled' | 'error' | 'unsupported' | 'current';
   installationAvailable: boolean; version?: string; percent?: number;
   signature?: 'unsigned' | 'valid'; publisher?: string; backupPath?: string; recoveryDirectory?: string; error?: string;
@@ -12,7 +12,7 @@ type InstallResult = {
 declare global {
   interface Window {
     desktopUpdates?: {
-      platform: string; check: () => Promise<CheckResult>;
+      platform: string; mode?: 'github-release' | 'approved-release'; startupStatus?: () => Promise<CheckResult>; check: () => Promise<CheckResult>;
       status?: () => Promise<InstallResult>; download?: () => Promise<InstallResult>;
       cancel?: () => Promise<InstallResult>; install?: (backup: string, acknowledgeUnsigned: boolean) => Promise<InstallResult>;
     };
@@ -39,6 +39,7 @@ export function ManualWindowsUpdate({ installationBlocked = false }: { installat
     return () => { alive = false; clearInterval(timer); };
   }, [bridge]);
 
+  if (bridge?.mode === 'github-release') return <DirectUpdateSettings />;
   if (bridge?.platform !== 'win32') return null;
   async function check() {
     setBusy(true); setLocalError('');
@@ -115,5 +116,29 @@ export function ManualWindowsUpdate({ installationBlocked = false }: { installat
         </div>
       </div>
     </ModalDialog>
+  </section>;
+}
+
+function DirectUpdateSettings() {
+  const [result, setResult] = useState<CheckResult>();
+  const [busy, setBusy] = useState(false);
+  const bridge = window.desktopUpdates!;
+  useEffect(() => {
+    let alive = true, pending = false;
+    const refresh = async () => { if (pending || !bridge.startupStatus) return; pending = true; try { const value = await bridge.startupStatus(); if (alive) setResult(value); } catch {} finally { pending = false; } };
+    void refresh(); const timer = setInterval(() => void refresh(), 500);
+    return () => { alive = false; clearInterval(timer); };
+  }, [bridge]);
+  const check = async () => { setBusy(true); try { setResult(await bridge.check()); } catch { setResult({ status: 'error' }); } finally { setBusy(false); } };
+  const message = result?.status === 'available' ? `Version ${result.version} is available. ${result.installationAvailable ? 'Use Update and restart in the green banner above.' : result.message || 'Automatic installation is unavailable for this build.'}`
+    : result?.status === 'current' ? 'You have the current stable release.'
+    : result?.status === 'unpublished' ? 'No stable update is published. You can keep using this version.'
+    : result?.status === 'error' ? 'Updates could not be checked. Keep working offline or try again.'
+    : result?.status === 'unsupported' ? result.message || 'Automatic updates require a supported installed desktop build.' : 'Checking for a stable update…';
+  return <section aria-label="Desktop updates" className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-3">
+    <h2 className="text-base font-bold text-slate-900">Desktop updates</h2>
+    <p className="text-sm text-slate-600">Student Organizer checks GitHub when it starts. No classroom records, report drafts or device identifiers are sent. When a supported update is ready, the green banner lets you download it, save a local recovery backup and restart with one click.</p>
+    <p role="status">{message}</p>
+    <button type="button" disabled={busy} onClick={() => void check()} className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">{busy ? 'Checking…' : 'Check for updates'}</button>
   </section>;
 }

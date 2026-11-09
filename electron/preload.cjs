@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktopUpdates', Object.freeze({
   platform: process.platform,
+  mode: process.argv.includes('--so-update-mode=approved-release') ? 'approved-release' : 'github-release',
+  startupStatus: () => ipcRenderer.invoke('startup-update:status'),
   check: () => ipcRenderer.invoke('manual-update:check'),
   status: () => ipcRenderer.invoke('installer-update:status'),
   download: () => ipcRenderer.invoke('installer-update:download'),

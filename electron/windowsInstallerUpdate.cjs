@@ -66,7 +66,7 @@ async function assertWritableInstallation(directory) {
     if (handle) { await handle.close(); await fs.rm(probe, { force: true }); }
   }
 }
-async function inspectSignature(file, { execute = promisify(execFile), environment = process.env } = {}) {
+async function inspectSignature(file, { execute = promisify(execFile), environment = process.env, includeCertificate = false } = {}) {
   // The path is data in an environment variable, never PowerShell source or a renderer argument.
   const systemRoot = Object.entries(environment).find(([key]) => key.toLowerCase() === 'systemroot')?.[1] || 'C:\\Windows';
   const powershell = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
@@ -78,12 +78,17 @@ async function inspectSignature(file, { execute = promisify(execFile), environme
   signatureEnv.PSModulePath = path.win32.join(path.win32.dirname(powershell), 'Modules');
   signatureEnv.STUDENTORGANIZER_SIGNATURE_FILE = file;
   const { stdout } = await execute(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-    "$ErrorActionPreference = 'Stop'; $s = Get-AuthenticodeSignature -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE; @{status=$s.Status.ToString();publisher=$s.SignerCertificate.Subject} | ConvertTo-Json -Compress"],
+    "$ErrorActionPreference = 'Stop'; $s = Get-AuthenticodeSignature -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE; $fingerprint = $null; if ($s.SignerCertificate) { $h = [System.Security.Cryptography.SHA256]::Create(); try { $fingerprint = [System.BitConverter]::ToString($h.ComputeHash($s.SignerCertificate.RawData)).Replace('-', '').ToLowerInvariant() } finally { $h.Dispose() } }; @{status=$s.Status.ToString();publisher=$s.SignerCertificate.Subject;certificateSha256=$fingerprint;productVersion=(Get-Item -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE).VersionInfo.ProductVersion;productName=(Get-Item -LiteralPath $env:STUDENTORGANIZER_SIGNATURE_FILE).VersionInfo.ProductName} | ConvertTo-Json -Compress"],
   { windowsHide: true, timeout: 15000, maxBuffer: 16384, env: signatureEnv });
   const result = JSON.parse(stdout.trim());
   if (result.status === 'NotSigned') return { signature: 'unsigned' };
   if (result.status !== 'Valid') throw new Error('Windows rejected the installer signature.');
-  return { signature: 'valid', publisher: String(result.publisher || '').slice(0, 512) };
+  if (!includeCertificate) return { signature: 'valid', publisher: String(result.publisher || '').slice(0, 512) };
+  if (typeof result.certificateSha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(result.certificateSha256) ||
+      typeof result.publisher !== 'string' || !result.publisher.trim() || result.publisher.length > 512) throw new Error('Windows did not identify a complete signer certificate.');
+  return { signature: 'valid', publisher: result.publisher, certificateSha256: result.certificateSha256.toLowerCase(),
+    productVersion: typeof result.productVersion === 'string' ? result.productVersion : '',
+    productName: typeof result.productName === 'string' ? result.productName : '' };
 }
 function isInstalledNsis({ platform, packaged, env = process.env, exePath, exists }) {
   return platform === 'win32' && packaged && !env.PORTABLE_EXECUTABLE_FILE && !env.PORTABLE_EXECUTABLE_DIR &&
@@ -172,12 +177,46 @@ async function installAndReopen(updater, { launchProcess = spawn, timeout = 1500
     if (launchErrorListener) updater.removeListener('error', launchErrorListener);
   }
 }
-function createInstallerUpdate({ supported, currentVersion, userData, installationDirectory, arch = process.arch, updater, tokenFactory, signature = inspectSignature,
-  approvalLookup = (value, targetArch) => require('./releaseDelivery.cjs').lookupVersionApproved(value, targetArch),
+function createInstallerUpdate({ supported, currentVersion, userData, installationDirectory, exePath, mode = 'approved-release', arch = process.arch, updater, tokenFactory, signature = file => inspectSignature(file, { includeCertificate: mode === 'github-release' }),
+  approvalLookup = (value, targetArch) => mode === 'github-release'
+    ? require('./githubReleaseDelivery.cjs').lookupVersion(value, targetArch)
+    : require('./releaseDelivery.cjs').lookupVersionApproved(value, targetArch),
   backup = saveBackup, hash = hashFile, canReplace = () => assertWritableInstallation(installationDirectory), launch = installAndReopen, metadataTimeout = 10000, downloadTimeout = 15 * 60 * 1000 }) {
+  if (!['approved-release', 'github-release'].includes(mode)) throw new Error('Unknown update delivery policy.');
+  const direct = mode === 'github-release';
+  const delivery = () => require(direct ? './githubReleaseDelivery.cjs' : './releaseDelivery.cjs');
+  let trustedInstallation = !direct, installedSignature, capabilityPending;
+  let capabilityMessage = direct ? supported
+    ? 'Checking whether this installation supports trusted updates.'
+    : 'One-click updates require an installed per-user Windows build. Portable builds and this platform do not support automatic replacement.' : undefined;
   let state = { status: supported ? 'idle' : 'unsupported', installationAvailable: supported };
   let active = false, cancellation, timedOut = false, downloaded, approvedRelease;
-  const snapshot = () => ({ ...state, ...(supported ? { recoveryDirectory: path.join(userData, 'update-backups') } : {}) });
+  const snapshot = () => ({ ...state, installationAvailable: supported && trustedInstallation,
+    ...(capabilityMessage ? { message: capabilityMessage } : {}),
+    ...(supported ? { recoveryDirectory: path.join(userData, 'update-backups') } : {}) });
+  async function capability() {
+    if (!supported || !direct) return snapshot();
+    if (capabilityPending) return capabilityPending;
+    capabilityPending = (async () => {
+      try {
+        if (typeof exePath !== 'string' || !exePath) throw new Error('Missing installed executable.');
+        const inspected = await signature(exePath);
+        // A remote manifest cannot nominate its own trusted publisher. The currently
+        // installed, OS-validated certificate is the trust anchor for this channel.
+        delivery().assertSignature(null, inspected, inspected);
+        if (inspected.productName !== 'Ontario Teacher Assessment') throw new Error('Installed application product identity is not trusted.');
+        await canReplace();
+        installedSignature = inspected; trustedInstallation = true; capabilityMessage = undefined;
+      } catch (error) {
+        installedSignature = undefined; trustedInstallation = false;
+        capabilityMessage = error.code === 'ERR_INSTALL_ELEVATION_REQUIRED'
+          ? 'One-click updates require a writable per-user installation. Use the installer manually for this installation.'
+          : 'One-click updates require a signed installed app and an update signed by the same trusted certificate. This build needs a manual signed upgrade first.';
+      }
+      return snapshot();
+    })();
+    try { return await capabilityPending; } finally { capabilityPending = undefined; }
+  }
   const fail = (message) => { state = { status: 'error', installationAvailable: supported, error: message }; return snapshot(); };
   if (supported) {
     updater.autoDownload = false;
@@ -210,7 +249,20 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
     if (!downloaded || updater.installerPath !== downloaded.file || (await hash(downloaded.file)) !== downloaded.sha512) throw new Error('The downloaded installer changed or its checksum is invalid. Download it again.');
     if (token?.cancelled) throw new Error('cancelled');
     const inspected = await signature(downloaded.file);
-    require('./releaseDelivery.cjs').assertSignature(approvedRelease, inspected);
+    if (direct) {
+      const current = await signature(exePath);
+      delivery().assertSignature(approvedRelease, current, installedSignature);
+      delivery().assertSignature(approvedRelease, inspected, installedSignature);
+      if (current.productName !== installedSignature.productName || inspected.productName !== installedSignature.productName) {
+        throw new Error('Signed installer product name does not match the installed application.');
+      }
+      // The manifest alone cannot prove version: an older signed installer may
+      // otherwise be relabelled as a new GitHub release. PE version resources are
+      // covered by Authenticode; NSIS may append the numeric fourth component.
+      if (![approvedRelease.version, `${approvedRelease.version}.0`].includes(inspected.productVersion)) {
+        throw new Error('Signed installer product version does not match the release.');
+      }
+    } else delivery().assertSignature(approvedRelease, inspected);
     if (token?.cancelled) throw new Error('cancelled');
     return inspected;
   }
@@ -221,6 +273,11 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
     state = { status: 'checking', installationAvailable: true };
     try {
       await cleanDownload();
+      if (direct) {
+        await capability();
+        if (!trustedInstallation) return fail(capabilityMessage);
+        if (cancellation.cancelled) throw new Error('cancelled');
+      }
       const result = await updater.checkForUpdates();
       if (cancellation.cancelled) throw new Error('cancelled');
       if (!validateManifest(result?.updateInfo, currentVersion, arch)) {
@@ -230,8 +287,8 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
       timer = setTimeout(() => { timedOut = true; cancellation.cancel(); }, downloadTimeout);
       const info = result.updateInfo;
       const published = await approvalLookup(info.version, arch);
-      if (!published) throw new Error('Version has no published owner approval.');
-      approvedRelease = require('./releaseDelivery.cjs').assertManifest(published.document, info, arch);
+      if (!published) throw new Error('Version has no eligible published release.');
+      approvedRelease = delivery().assertManifest(published.document, info, arch);
       if (cancellation.cancelled) throw new Error('cancelled');
       state = { status: 'downloading', installationAvailable: true, version: info.version, percent: 0 };
       const files = await updater.downloadUpdate(cancellation);
@@ -281,6 +338,6 @@ function createInstallerUpdate({ supported, currentVersion, userData, installati
         : 'Installation was stopped because the local backup, installer verification or process launch failed. Your installed app and records are unchanged.');
     } finally { active = false; }
   }
-  return { status: snapshot, download, cancel, install };
+  return { status: snapshot, capability, download, cancel, install };
 }
 module.exports = { TABLES, MAX_BACKUP, validateBackup, saveBackup, hashFile, assertWritableInstallation, inspectSignature, isInstalledNsis, validateManifest, allowedUpdateRequest, sanitizeHeaders, configureUpdaterSession, installAndReopen, createInstallerUpdate };

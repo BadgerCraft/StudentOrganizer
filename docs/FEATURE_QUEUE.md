@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 9 — direct GitHub startup updates
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| SO-GITHUB-UPDATES | Tyler requested replacing the Control Panel release-approval gate with a startup GitHub check, green top banner and one-click update/restart, while retaining the option to restore Control Panel later. Implementation, fictional verification and draft review preparation are authorized. | [Draft PR62](https://github.com/BadgerCraft/StudentOrganizer/pull/62), isolated `codex/seamless-github-updates-20261109` from main `7860bb6`; PR60/61 stay separate. Direct stable GitHub discovery and signed Windows backup/install/reopen path implemented. Source `fafbaff` passed 1,425 tests / 15 skips, complete functional browser acceptance, all Windows native jobs, Intel Mac, protected-browser, Control Panel and capture checks. Its screenshot exposed sidebar occlusion/dark contrast; minimal repair adds explicit light/dark and responsive geometry/contrast assertions, with current CI evidence in PR62. Mac arm64 also passed after one bounded upstream-HTTP500 retry. Actual signed/device acceptance remains unverified: unsigned Windows copies need a trusted signed bootstrap; Mac discovery works but native one-click replacement is unimplemented. Existing free-only boundary retained. Review/visual CI, actual signed replacement, bootstrap, Mac native path and physical-device acceptance remain separate gates. Prepared walkthrough awaits Tyler; no understanding or acceptance inferred. No merge, release, deployment, signing/account setup, spending, encryption activation or real records. Current behavior, verification and release prerequisites: [update guide](WINDOWS_MANUAL_UPDATES.md#november-9--direct-github-startup-updates). |
+
 ## November 4 — unpublished Windows candidate and owner tool
 
 | Stable ID | Disposition | Next action / gate |

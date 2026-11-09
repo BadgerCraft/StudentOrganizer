@@ -3,6 +3,8 @@ const path = require('path');
 const { pathToFileURL, fileURLToPath } = require('url');
 const { existsSync } = require('node:fs');
 const { createInstallerUpdate, isInstalledNsis, configureUpdaterSession } = require('./windowsInstallerUpdate.cjs');
+const { MODE: updateDeliveryMode } = require('./desktopUpdatePolicy.cjs');
+const { createStartupUpdateCheck } = require('./startupUpdateCheck.cjs');
 
 app.name = 'ontario-teacher-assessment';
 const ownsInstance = app.requestSingleInstanceLock();
@@ -12,6 +14,7 @@ const { createManualCheck, trustedCaller } = require('./manualUpdater.cjs');
 const manualCheck = createManualCheck({ platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion() });
 let updateWindow;
 let installerUpdates;
+let startupUpdates;
 let encryptionRuntime, encryptionController, encryptedOrganizerDrive, activeLaunchPolicy;
 let replacingWorkspaceWindow = false;
 let encryptionShuttingDown = false;
@@ -84,7 +87,16 @@ function requireUpdateCaller(event, args, expectedCount) {
 }
 ipcMain.handle('manual-update:check', (event, ...args) => {
   requireUpdateCaller(event, args, 0);
-  return manualCheck().then(result => ({ ...result, installationAvailable: !protectedWorkspace() && installerUpdates?.status().installationAvailable === true }));
+  if (updateDeliveryMode === 'github-release') return startupUpdates.check().then(protectUpdateStatus);
+  return manualCheck().then(result => protectUpdateStatus({ ...result, installationAvailable: installerUpdates?.status().installationAvailable === true }));
+});
+function protectUpdateStatus(result) {
+  return protectedWorkspace() ? { ...result, installationAvailable: false,
+    message: 'Installer recovery is not yet compatible with protected workspaces. Keep this version until an encrypted recovery path is available.' } : result;
+}
+ipcMain.handle('startup-update:status', (event, ...args) => {
+  requireUpdateCaller(event, args, 0);
+  return protectUpdateStatus(startupUpdates.status());
 });
 for (const method of ['status', 'download', 'cancel']) ipcMain.handle(`installer-update:${method}`, (event, ...args) => {
   requireUpdateCaller(event, args, 0);
@@ -119,6 +131,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      additionalArguments: [`--so-update-mode=${updateDeliveryMode}`],
       webSecurity: true,
       devTools: process.env.NODE_ENV === 'development',
       ...(policy.partition ? { partition: policy.partition } : {})
@@ -210,8 +223,11 @@ app.whenReady().then(async () => {
   const updater = supported ? require('electron-updater').autoUpdater : undefined;
   if (supported) configureUpdaterSession(session.fromPartition('electron-updater', { cache: false }));
   installerUpdates = createInstallerUpdate({ supported, currentVersion: app.getVersion(), userData: app.getPath('userData'), updater,
+    mode: updateDeliveryMode, exePath: app.getPath('exe'),
     installationDirectory: path.dirname(app.getPath('exe')),
     tokenFactory: () => new (require('builder-util-runtime').CancellationToken)() });
+  startupUpdates = createStartupUpdateCheck({ platform: process.platform, packaged: app.isPackaged,
+    currentVersion: app.getVersion(), mode: updateDeliveryMode, capability: () => installerUpdates.capability() });
   encryptionRuntime = await require('./encryptionNativeRuntime.cjs').createNativeEncryptionRuntime({
     directory: path.join(app.getPath('userData'), 'protected-workspace'),
     // Production conversion remains disabled until the reviewed whole-app and
@@ -242,6 +258,8 @@ app.whenReady().then(async () => {
     authorize: signal => authorizeDesktop({ config: organizerConfig(), openExternal: url => shell.openExternal(url), signal })
   });
   createWindow();
+  // Do not await network or signing checks before the local classroom opens.
+  void startupUpdates.start();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

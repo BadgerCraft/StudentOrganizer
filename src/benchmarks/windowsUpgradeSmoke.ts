@@ -1,3 +1,4 @@
+import { reserveInspectorPort, selectApprovedPolicyBeforeResume } from '../../scripts/helpers/approvedUpdateFixture';
 import { observeRecoveryFixture, recoveryFixtureProcessScript, type RecoveryFixtureProcess } from '../../scripts/helpers/installRecoveryFixture';
 import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
@@ -90,7 +91,25 @@ async function snapshotAll(page: Page): Promise<Record<string, any[]>> {
   }));
 }
 async function launchInstalled(executable: string, version: string) {
-  const app = await electron.launch({ executablePath: executable, timeout: 60000 });
+  // Existing unsigned A/B acceptance intentionally exercises the retained owner-
+  // approved channel. Select it only in this disposable process before main runs;
+  // default direct-channel acceptance is a separate test, never inferred here.
+  const historicalBootstrap = legacyBootstrap && version === '1.0.0';
+  const port = historicalBootstrap ? undefined : await reserveInspectorPort();
+  const pending = electron.launch({ executablePath: executable, timeout: 60000,
+    args: port ? [`--inspect-brk=127.0.0.1:${port}`] : [] });
+  // Attach a rejection handler immediately while the independent inspector connects.
+  void pending.catch(() => {});
+  let selection;
+  try {
+    selection = port ? await selectApprovedPolicyBeforeResume(port, path.join(path.dirname(executable), 'resources', 'app.asar', 'package.json'))
+      : { fixtureMode: 'historical-bootstrap', productionMode: 'historical', packagedFilesChanged: false };
+  } catch (error) {
+    await pending.then(app => app.close()).catch(() => {});
+    throw error;
+  }
+  const app = await pending;
+  fs.appendFileSync(path.join(evidenceDir, 'update-policy-fixtures.jsonl'), JSON.stringify({ version, ...selection }) + '\n');
   assert.equal(await app.evaluate(({ app }) => app.getVersion()), version, 'Real installed binary must have the expected version');
   const page = await app.firstWindow();
   await page.getByTestId('nav-dashboard-btn').waitFor();
@@ -531,7 +550,7 @@ async function runInstallRecovery() {
     const updates = running.page.getByRole('region', { name: 'Windows updates' });
     await updates.waitFor();
     assert.deepEqual(await configureFixtureFeed(running.app, feed, { name: failureFilename, bytes: failureBytes.length, sha512 }), { autoDownload: false, autoInstallOnAppQuit: false });
-    assert.equal(requests.length, 0, 'Recovery fixture must not check or download before a click');
+    assert.equal(requests.length, 0, 'Instrumented approved-policy recovery fixture must not check or download before a click');
     await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
     await updates.getByRole('status').filter({ hasText: `Version ${pair.B} is available.` }).waitFor();
     await updates.getByRole('button', { name: 'Download update', exact: true }).click();
@@ -790,7 +809,7 @@ async function main() {
     await state(running.page); // Reads installed updater state without network.
     const metadata = await configureFixtureFeed(running.app, feed, { name: filename, bytes: bytes.length, sha512 });
     assert.deepEqual(metadata, { autoDownload: false, autoInstallOnAppQuit: false });
-    assert.equal(requests.length, 0, 'Startup/opening settings must not check or download');
+    assert.equal(requests.length, 0, 'Instrumented approved-policy A startup/opening settings must not check or download');
     await updates.getByRole('button', { name: 'Check for updates', exact: true }).click();
     await updates.getByRole('status').filter({ hasText: `Version ${versions.B} is available.` }).waitFor();
     assert.equal(requests.filter(url => url.includes('.exe')).length, 0, 'Checking must not download installer');
@@ -878,6 +897,9 @@ async function main() {
     writeEvidence('install-timeline.json', installTimeline);
     assert.deepEqual(running.errors, []);
     // Observe a genuinely installer-reopened B, before any instrumented relaunch.
+    // This B process uses the unchanged production github-release policy. Its
+    // fixed-public-GitHub startup metadata traffic is not intercepted/counted by
+    // this harness; the legacy fixture's zero-request assertions do not cover B.
     let nextNativeSample = 0;
     const reopened = await waitUntil(async () => {
       const processes = await installedProcess(executable);
@@ -915,7 +937,7 @@ async function main() {
     assert.deepEqual(await snapshotAll(running.page), before, 'B ordinary close/restart must preserve every record again');
     await openHub(running.page); await verifyAfterRestart(running.page, marking);
     assert.deepEqual(running.errors, []);
-    fs.writeFileSync(path.join(evidenceDir, 'upgrade-results.json'), JSON.stringify({ versions, installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])), reopened, profilePreserved: true, tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), checks: ['actual installed A', 'production Settings/preload/IPC check-download-install', 'no startup/quit-time automatic download/install', 'real corrupted-byte checksum rejection and retry', 'real download cancellation and retry', 'unsaved Settings install guard and safe Later deferral', 'explicit unsigned approval', 'actual safety backup before quit', 'real pending-update ordinary quit/restart leaves A unchanged', 'real NSIS A-to-B replacement', 'actual automatic visible B reopen', 'identical all-table data and marking report after upgrade', 'second B restart preservation'], requests, requestHeaders, metadataRequests, checksumErrors: errors, marking }, null, 2) + '\n');
+    fs.writeFileSync(path.join(evidenceDir, 'upgrade-results.json'), JSON.stringify({ versions, installers: Object.fromEntries(Object.entries(installers).map(([key, file]) => [key, { file: path.basename(file), sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }])), reopened, profilePreserved: true, tablesPreserved: Object.fromEntries(Object.entries(before).map(([table, rows]) => [table, rows.length])), deliveryPolicy: 'approved-release', policySelectionEvidence: 'update-policy-fixtures.jsonl', directGitHubInstallVerified: false, nativeReopenPolicy: 'github-release', nativeReopenMetadataTraffic: 'not intercepted; may query fixed public GitHub metadata', checks: ['actual installed A', 'production Settings/preload/IPC check-download-install', 'instrumented approved-policy A has no startup checks/downloads; no automatic ordinary-quit installation', 'real corrupted-byte checksum rejection and retry', 'real download cancellation and retry', 'unsaved Settings install guard and safe Later deferral', 'explicit unsigned approval', 'actual safety backup before quit', 'real pending-update ordinary quit/restart leaves A unchanged', 'real NSIS A-to-B replacement', 'actual automatic visible B reopen under unchanged direct-GitHub production policy; startup metadata traffic not intercepted', 'identical all-table data and marking report after upgrade', 'second B restart preservation'], requests, requestHeaders, metadataRequests, checksumErrors: errors, marking }, null, 2) + '\n');
     console.log('PASS: Real installed A upgraded through production IPC/download/hash/signature/backup/NSIS installer to B, automatically reopened, and preserved every record, original, rubric, pending feedback, official mark and report across another restart; corrupt/cancel/retry paths also passed.');
   } catch (error) {
     // Save the primary error before touching a possibly installer-closed app.

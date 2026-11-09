@@ -1,3 +1,4 @@
+import { runUpdateWork, useUpdateEditor } from '../services/updateSafety';
 import { rendererStorageMode } from '../security/rendererStorageMode';
 import { protectedStorageBoundary, lockEncryptedRuntime } from '../security/encryptedRuntime';
 import { unwrapEncryption } from '../security/encryptionBridge';
@@ -88,12 +89,14 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   const portability = new PortabilityService(db);
   const protectedMode = rendererStorageMode() !== 'legacy';
+  const [fileReads, setFileReads] = useState(0);
   const [protectedRestoreToken, setProtectedRestoreToken] = useState<string | null>(null);
+  useUpdateEditor(fileReads > 0 || isProcessing || !!pendingBackupContent || !!protectedRestoreToken || (importStep !== 'success' && (!!rosterText.trim() || mappingDirty || previewDirty || candidateRows.length > 0)));
   const backupPreviewGeneration = useRef(0);
   useEffect(() => () => { backupPreviewGeneration.current++; }, []);
 
   // Section 1: Roster Preview Handler
-  const handlePreviewStudents = async () => {
+  const handlePreviewStudents = async () => runUpdateWork(async () => {
     if (!classSection || !rosterText.trim()) return;
     setPreviewError(null);
     setIsProcessing(true);
@@ -117,10 +120,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  };
+  });
 
   // Section 1: Confirmed Transactional Import Handler
-  const handleConfirmImport = async () => {
+  const handleConfirmImport = async () => runUpdateWork(async () => {
     if (!classSection || previewSectionId !== classSection.id || !includedRows.length || mappingDirty || previewDirty || isProcessing) return;
     setIsProcessing(true);
     setPreviewError(null);
@@ -147,9 +150,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  };
+  });
 
-  const recheckPreview = async () => {
+  const recheckPreview = async () => runUpdateWork(async () => {
     if (!classSection || isProcessing) return;
     setIsProcessing(true);
     setPreviewError(null);
@@ -160,9 +163,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setPreviewSectionId(classSection.id);
     } catch (err: any) { setPreviewError(err.message || 'Could not validate preview.'); }
     finally { setIsProcessing(false); }
-  };
+  });
 
-  const applyMapping = async () => {
+  const applyMapping = async () => runUpdateWork(async () => {
     if (!table || !mapping || !classSection || isProcessing) return;
     setIsProcessing(true);
     setPreviewError(null);
@@ -176,7 +179,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setPreviewSectionId(classSection.id);
     } catch (err: any) { setPreviewError(err.message || 'Could not apply mapping.'); }
     finally { setIsProcessing(false); }
-  };
+  });
 
   // Section 1: File upload helper for roster (.csv, .tsv, .txt)
   const handleRosterFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,7 +191,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       e.target.value = '';
       return;
     }
+    setFileReads(count => count + 1);
     const reader = new FileReader();
+    reader.onloadend = () => setFileReads(count => count - 1);
     reader.onload = evt => {
       const text = evt.target?.result;
       if (typeof text === 'string') {
@@ -222,7 +227,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } catch (err: any) { if (exportContext.current.alive && exportContext.current.generation === generation) setReadableExportStatus(err.message || 'CSV export did not complete.'); }
     finally { readableExportPending.current = false; if (exportContext.current.alive) setIsProcessing(false); }
   };
-  const handleExportMarkbook = async () => {
+  const handleExportMarkbook = async () => runUpdateWork(async () => {
     if (!classSection) return;
     if (protectedMode) return protectedCsv('markbook');
     try {
@@ -232,9 +237,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } catch (err: any) {
       alert(err.message);
     }
-  };
+  });
 
-  const handleExportParticipation = async () => {
+  const handleExportParticipation = async () => runUpdateWork(async () => {
     if (!classSection) return;
     if (protectedMode) return protectedCsv('participation');
     try {
@@ -244,10 +249,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } catch (err: any) {
       alert(err.message);
     }
-  };
+  });
 
   // Section 3: Backup Download
-  const handleCreateBackup = async () => {
+  const handleCreateBackup = async () => runUpdateWork(async () => {
     if (backupExportPending.current || isProcessing) return; backupExportPending.current = true; setIsProcessing(true); setBackupExportError(''); setBackupDownloadStatus(null);
     try {
       if (protectedMode) {
@@ -269,10 +274,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       if (protectedMode) setBackupExportError('Encrypted backup export was not verified. Check the selected destination and available storage; keep your recovery code and use another verified backup.');
       else alert(err.message);
     } finally { backupExportPending.current = false; setIsProcessing(false); }
-  };
+  });
 
   // Both pickers use the same validator and require explicit confirmation before restore.
-  const previewBackup = async (content: string) => {
+  const previewBackup = async (content: string) => runUpdateWork(async () => {
     const generation = ++backupPreviewGeneration.current; setProtectedRestoreToken(null);
     try {
       if (protectedMode) throw Error('Use the native encrypted backup file chooser.');
@@ -284,9 +289,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setPendingBackupMetadata(null);
       if (generation === backupPreviewGeneration.current) setRestoreError(err.message || 'Invalid backup file.');
     }
-  };
+  });
 
-  const handleChooseBackup = async () => {
+  const handleChooseBackup = async () => runUpdateWork(async () => {
     if (backupPickerPending.current || isProcessing) return;
     if (protectedMode) {
       backupPickerPending.current = true; setIsProcessing(true); const generation = ++backupPreviewGeneration.current;
@@ -314,7 +319,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } catch {
       setRestoreError('The selected backup could not be read. Existing records are unchanged. Try a local copy in Files.');
     }
-  };
+  });
 
   const handleBackupFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (protectedMode) { e.target.value = ''; return; }
@@ -324,7 +329,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     setPendingBackupMetadata(null);
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileReads(count => count + 1);
     const reader = new FileReader();
+    reader.onloadend = () => setFileReads(count => count - 1);
     reader.onload = evt => {
       const content = evt.target?.result;
       if (typeof content === 'string') void previewBackup(content);
@@ -336,7 +343,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   };
 
   // Section 3: Confirmed Backup Restore Execution
-  const handleConfirmRestore = async () => {
+  const handleConfirmRestore = async () => runUpdateWork(async () => {
     if (isProcessing || restorePending.current || (!pendingBackupContent && !protectedRestoreToken)) return;
     restorePending.current = true; setIsProcessing(true);
     setRestoreError(null);
@@ -358,7 +365,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     } finally {
       restorePending.current = false; setIsProcessing(false);
     }
-  };
+  });
 
   const includedRows = candidateRows.filter(row => !excluded.has(row.rowNumber));
   const targetChanged = previewSectionId !== classSection?.id;

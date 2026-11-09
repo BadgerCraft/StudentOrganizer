@@ -129,6 +129,7 @@ jobs:
           npm test
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
           npm run test:focused-organizer
+          npm run test:updates:browser
           BROWSER_ENGINE=webkit npm run test:marking:keyboard
           npm run test:encryption:browser
           npm run test:encryption:storage-browser
@@ -172,6 +173,7 @@ jobs:
           name: shared-browser-evidence-${{ github.run_number }}
           path: |
             screenshots/**
+            docs/work-orders/evidence/UPDATES-2026-11-09/**
             /tmp/annotation-feedback-results.json
             /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json

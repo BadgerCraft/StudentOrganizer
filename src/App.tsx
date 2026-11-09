@@ -1,3 +1,6 @@
+import { StartupUpdateBanner } from './components/StartupUpdateBanner';
+import { getTopmostModalId } from './components/ModalDialog';
+import { updateSafetyReason, runUpdateWork } from './services/updateSafety';
 import { useAutomaticBackups } from './sync/BackupSyncSettings';
 import { listAccessibleClassSections } from './services/authHelper';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -29,6 +32,13 @@ import type { UUID, Student, User, ParticipationEvent } from './types/schema';
 declare const __QA_BUILD_ID__: string;
 
 export function App() {
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const updateBusyRef = useRef(false);
+  const handleUpdateBusy = useCallback((busy: boolean) => {
+    updateBusyRef.current = busy;
+    document.getElementById('app-workspace')?.toggleAttribute('inert', busy);
+    setUpdateBusy(busy);
+  }, []);
   const [currentView, setCurrentView] = useState<'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability'>(() => {
     try {
       const saved = sessionStorage.getItem('ontario_active_view');
@@ -40,7 +50,7 @@ export function App() {
   });
 
   const handleViewChange = (view: 'dashboard' | 'seating' | 'markbook' | 'assessments' | 'participation' | 'settings' | 'portability') => {
-    if (view === currentView || !confirmParticipationDiscard()) return;
+    if (updateBusyRef.current || view === currentView || !confirmParticipationDiscard()) return;
     setCurrentView(view);
     try {
       sessionStorage.setItem('ontario_active_view', view);
@@ -59,6 +69,7 @@ export function App() {
   const handleSettingsDirty = useCallback((dirty: boolean) => { settingsDraftDirty.current = dirty; }, []);
   const handleParticipationDraftChange = useCallback((dirty: boolean) => { participationDraftDirty.current = dirty; }, []);
   const confirmParticipationDiscard = () => {
+    if (updateBusyRef.current) return false;
     if (settingsActionBusy.current) { setParticipationError('Wait for the Settings save or protection step to finish before changing context.'); return false; }
     if (participationActionBusy.current) { setParticipationError('Wait for the participation action to finish before changing context.'); return false; }
     return (!participationDraftDirty.current && !settingsDraftDirty.current) || window.confirm(
@@ -84,9 +95,9 @@ export function App() {
   const [markingTarget, setMarkingTarget] = useState<{assessmentId:string; enrollmentId?:string} | null>(null);
   useEffect(() => {
     const workspace = document.getElementById('app-workspace');
-    workspace?.toggleAttribute('inert', !!markingTarget || isTeacherSelectorOpen);
+    workspace?.toggleAttribute('inert', !!markingTarget || isTeacherSelectorOpen || updateBusy);
     return () => workspace?.removeAttribute('inert');
-  }, [markingTarget, isTeacherSelectorOpen]);
+  }, [markingTarget, isTeacherSelectorOpen, updateBusy]);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
 
@@ -509,7 +520,7 @@ export function App() {
   useEffect(() => {
     const undo = (event: KeyboardEvent) => {
       const target = event.target;
-      if (event.defaultPrevented || event.repeat || event.isComposing || event.altKey || event.shiftKey ||
+      if (updateBusyRef.current || event.defaultPrevented || event.repeat || event.isComposing || event.altKey || event.shiftKey ||
         !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' ||
         currentView !== 'seating' || markingTarget || isTeacherSelectorOpen || profileEnrollmentId || editingStudent || isBugReportOpen ||
         (!lastUndo && !lastRetraction) ||
@@ -533,12 +544,23 @@ export function App() {
 
   const isSelectionRequired = isTeacherSelectorOpen && !appIdentity && !switchingFromTeacherId;
 
+  const updateSafety = () => {
+    if (!appIdentity || isTeacherSelectorOpen || markingTarget || profileEnrollmentId || editingStudent || isBugReportOpen || getTopmostModalId()) return 'Save or close the open editor before updating. Your edits have been kept.';
+    if (settingsDraftDirty.current || participationDraftDirty.current) return 'Save your unfinished changes before updating. Your edits have been kept.';
+    if (settingsActionBusy.current || participationActionBusy.current || undoBusy.current) return 'Wait for the current save to finish before updating.';
+    return updateSafetyReason();
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-100 selection:text-blue-900">
+      {/* Share the sidebar gutter, but keep progress/cancel outside the inert workspace. */}
+      <div className="app-shell">
+        <StartupUpdateBanner safetyReason={updateSafety} onBusyChange={handleUpdateBusy} />
+      </div>
       <div
         id="app-workspace"
         className={`app-shell flex-1 flex flex-col ${isSelectionRequired ? 'pointer-events-none select-none' : ''}`}
-        aria-hidden={isTeacherSelectorOpen || markingTarget ? 'true' : undefined}
+        aria-hidden={isTeacherSelectorOpen || markingTarget || updateBusy ? 'true' : undefined}
       >
         {/* Persistent Navigation Header */}
         <Header
@@ -644,7 +666,7 @@ export function App() {
               This class section does not currently have an active seating chart layout.
             </p>
             <button
-              onClick={async () => {
+              onClick={() => void runUpdateWork(async () => {
                 if (!appIdentity) {
                   setIsTeacherSelectorOpen(true);
                   return;
@@ -656,7 +678,7 @@ export function App() {
                 } catch (error) {
                   alert(error instanceof Error ? error.message : 'Classroom layout could not be created.');
                 }
-              }}
+              })}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
             >
               Initialize Classroom Grid (4x5)

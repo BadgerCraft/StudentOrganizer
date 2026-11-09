@@ -1,3 +1,4 @@
+import { runUpdateWork } from '../services/updateSafety';
 import { ClassSettingsService } from '../services/classSettingsService';
 import { getAppIdentity, getActiveTeacherId, getIdentityEpoch, subscribeIdentityChange } from '../services/identityService';
 import { AuthorizationError } from '../services/authHelper';
@@ -111,7 +112,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
     setShowUnitForm(true);
   };
 
-  const saveUnit = async (event: React.FormEvent) => {
+  const saveUnit = async (event: React.FormEvent) => runUpdateWork(async () => {
     event.preventDefault();
     if (unitSaving) return;
     setUnitSaving(true);
@@ -129,7 +130,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       onRefresh();
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Unit could not be saved.'); }
     finally { setUnitSaving(false); }
-  };
+  });
 
   // New assessment form state
   const [title, setTitle] = useState('');
@@ -161,7 +162,7 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
     return true;
   });
 
-  const handleCreateAssessment = async (e: React.FormEvent) => {
+  const handleCreateAssessment = async (e: React.FormEvent) => runUpdateWork(async () => {
     e.preventDefault();
     if (createBusy.current) return;
     createBusy.current = true; setCreating(true);
@@ -179,9 +180,9 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       onRefresh();
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be saved.'); }
     finally { createBusy.current = false; setCreating(false); }
-  };
+  });
 
-  const handleArchive = async (assessId: UUID) => {
+  const handleArchive = async (assessId: UUID) => runUpdateWork(async () => {
     if (!confirm('Archive this assessment?')) return;
     setActionError(null);
     try {
@@ -190,15 +191,15 @@ export const AssessmentHubView: React.FC<AssessmentHubViewProps> = ({
       await service.archiveAssessment(assessId, assessment.version, await actor());
       onRefresh();
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be archived.'); }
-  };
+  });
 
-  const handleDuplicate = async (a: Assessment) => {
+  const handleDuplicate = async (a: Assessment) => runUpdateWork(async () => {
     setActionError(null);
     try {
       await service.duplicateAssessment(a.id, a.version, await actor());
       onRefresh();
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Assessment could not be duplicated.'); }
-  };
+  });
   const createDraft = JSON.stringify({ title, selectedUnitId, assessmentType, dueDate, kChecked, kMax, kWeight, tChecked, tMax, tWeight, cChecked, cMax, cWeight, aChecked, aMax, aWeight });
   const openCreate = () => {
     assessmentEpoch.current = getIdentityEpoch();

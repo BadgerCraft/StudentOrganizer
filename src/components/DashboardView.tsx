@@ -1,3 +1,4 @@
+import { runUpdateWork } from '../services/updateSafety';
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -88,7 +89,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setShowCreateModal(false);
   };
 
-  const handleSaveDisplaySettings = async (e: React.FormEvent) => {
+  const handleSaveDisplaySettings = async (e: React.FormEvent) => runUpdateWork(async () => {
     e.preventDefault();
     if (savingDisplay) return;
     setSavingDisplay(true);
@@ -101,9 +102,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } catch (error) {
       setDisplayError(error instanceof Error ? error.message : 'Could not save display settings. Try again.');
     } finally { setSavingDisplay(false); }
-  };
+  });
 
-  const handleCreateClass = async (e: React.FormEvent) => {
+  const handleCreateClass = async (e: React.FormEvent) => runUpdateWork(async () => {
     e.preventDefault();
     setCreateError(null);
     try {
@@ -129,9 +130,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } catch (err: any) {
       setCreateError(err?.message || 'Failed to create class section.');
     }
-  };
+  });
 
-  const handleDuplicateClass = async (section: ClassSection, _course: Course) => {
+  const handleDuplicateClass = async (section: ClassSection, _course: Course) => runUpdateWork(async () => {
     try {
       const currentIdentity = await getAppIdentity(db);
       if (userId && userId !== currentIdentity.userId) {
@@ -146,9 +147,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } catch (err: any) {
       alert(`Could not duplicate class: ${err?.message || err}`);
     }
-  };
+  });
 
-  const handleArchiveClass = async (section: ClassSection) => {
+  const handleArchiveClass = async (section: ClassSection) => runUpdateWork(async () => {
     const identityEpoch = getIdentityEpoch();
     if (!confirm('Are you sure you want to archive this class?')) return;
     try {
@@ -158,7 +159,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Class could not be archived.');
     }
-  };
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
