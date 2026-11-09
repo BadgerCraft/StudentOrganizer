@@ -291,3 +291,87 @@ describe('Windows PowerShell signature subprocess contract', () => {
 });
 
 it('keeps capture matching capacity aligned with mandatory native backup bound', () => { expect(CAPTURE_BACKUP_MAX_BYTES).toBe(MAX_BACKUP); });
+
+
+describe('direct GitHub signed installer policy', () => {
+  const certificate = 'a'.repeat(64);
+  const signer = { signature: 'valid', publisher: 'CN=Fictional Publisher', certificateSha256: certificate, productVersion: '1.0.1', productName: 'Ontario Teacher Assessment' };
+  function directSetup(extra: Record<string, unknown> = {}) {
+    const signature = vi.fn(async (_file: string) => ({ ...signer }));
+    const canReplace = vi.fn(async () => {});
+    const approvalLookup = vi.fn(async () => ({ document: { mode: 'github-release', platform: 'win32', version: '1.0.1', arch: 'x64',
+      sourceCommit: '8'.repeat(40), artifact: { name: manifest.files[0].url, bytes: 42 } } }));
+    return { ...setup({ mode: 'github-release', exePath: '/installed/app.exe', signature, canReplace, approvalLookup, ...extra }), signature, canReplace, approvalLookup };
+  }
+  it('offers capability only after native trust and per-user writability; installs once without unsigned approval', async () => {
+    const { controller, updater, signature, backup } = directSetup();
+    expect(controller.status().installationAvailable).toBe(false);
+    expect(await controller.capability()).toMatchObject({ installationAvailable: true });
+    expect(updater.checkForUpdates).not.toHaveBeenCalled();
+    expect(await controller.download()).toMatchObject({ status: 'downloaded', signature: 'valid' });
+    expect(backup).not.toHaveBeenCalled();
+    expect(await controller.install(backupJSON, false)).toMatchObject({ status: 'installing' });
+    expect(signature.mock.calls.filter(([file]) => file === '/installed/app.exe').length).toBeGreaterThanOrEqual(4);
+    expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
+    await controller.install(backupJSON, false);
+    expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
+  });
+  it.each(['unsigned', 'unknown', 'no-certificate', 'elevation', 'wrong-product'])('blocks %s installed builds before metadata/download', async failure => {
+    const { controller, updater, signature, canReplace } = directSetup();
+    if (failure === 'unsigned') signature.mockResolvedValue({ signature: 'unsigned' } as any);
+    if (failure === 'wrong-product') signature.mockResolvedValue({ ...signer, productName: 'Other Product' });
+    if (failure === 'unknown') signature.mockRejectedValue(new Error('signature subprocess failed'));
+    if (failure === 'no-certificate') signature.mockResolvedValue({ signature: 'valid', publisher: signer.publisher } as any);
+    if (failure === 'elevation') canReplace.mockRejectedValue(Object.assign(new Error('requires elevation'), { code: 'ERR_INSTALL_ELEVATION_REQUIRED' }));
+    expect(await controller.capability()).toMatchObject({ installationAvailable: false, message: expect.any(String) });
+    expect(await controller.download()).toMatchObject({ status: 'error', installationAvailable: false });
+    expect(updater.checkForUpdates).not.toHaveBeenCalled();
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(updater.quitAndInstall).not.toHaveBeenCalled();
+  });
+  it.each(['unsigned', 'different-certificate', 'different-publisher', 'old-product-version', 'missing-product-version', 'different-product'])('rejects %s downloaded installers even with unsigned acknowledgement', async failure => {
+    const { controller, updater, signature, backup } = directSetup();
+    signature.mockImplementation(async file => file === '/installed/app.exe' ? signer : failure === 'unsigned'
+      ? { signature: 'unsigned' } as any : failure === 'different-certificate' ? { ...signer, certificateSha256: 'b'.repeat(64) }
+      : failure === 'old-product-version' ? { ...signer, productVersion: '1.0.0' }
+      : failure === 'missing-product-version' ? { ...signer, productVersion: '' }
+      : failure === 'different-product' ? { ...signer, productName: 'Other Product' } : { ...signer, publisher: 'CN=Other' });
+    expect(await controller.download()).toMatchObject({ status: 'error' });
+    await controller.install(backupJSON, true);
+    expect(backup).not.toHaveBeenCalled(); expect(updater.quitAndInstall).not.toHaveBeenCalled();
+  });
+  it('rechecks the installed signer after backup and never executes changed trust', async () => {
+    const { controller, updater, signature, backup } = directSetup();
+    expect(await controller.download()).toMatchObject({ status: 'downloaded' });
+    backup.mockImplementation(async () => {
+      signature.mockImplementation(async file => file === '/installed/app.exe' ? { ...signer, certificateSha256: 'b'.repeat(64) } : signer);
+      return '/local/verified-backup.json';
+    });
+    expect(await controller.install(backupJSON, false)).toMatchObject({ status: 'error' });
+    expect(updater.quitAndInstall).not.toHaveBeenCalled();
+  });
+  it('recovers a failed trust check after a newly signed installation without latching stale capability', async () => {
+    const { controller, signature } = directSetup();
+    signature.mockResolvedValueOnce({ signature: 'unsigned' } as any);
+    expect((await controller.capability()).installationAvailable).toBe(false);
+    expect((await controller.capability()).installationAvailable).toBe(true);
+  });
+  it('explains unsupported direct builds without pretending a trust check is still running', async () => {
+    const { controller, signature } = directSetup({ supported: false });
+    expect(await controller.capability()).toMatchObject({ status: 'unsupported', installationAvailable: false, message: expect.stringContaining('installed per-user Windows build') });
+    expect(signature).not.toHaveBeenCalled();
+  });
+  it('rejects unknown policy values instead of falling back to a permissive channel', () => {
+    expect(() => directSetup({ mode: 'unknown' })).toThrow('Unknown update delivery policy');
+  });
+});
+
+it('extracts the native SHA-256 certificate fingerprint only for the direct trust path', async () => {
+  const certificateSha256 = 'AB'.repeat(32);
+  const execute = vi.fn(async () => ({ stdout: JSON.stringify({ status: 'Valid', publisher: 'CN=Fictional', certificateSha256, productVersion: '1.0.1.0', productName: 'Ontario Teacher Assessment' }) }));
+  expect(await inspectSignature('C:/signed.exe', { execute, includeCertificate: true })).toEqual({ signature: 'valid', publisher: 'CN=Fictional', certificateSha256: certificateSha256.toLowerCase(), productVersion: '1.0.1.0', productName: 'Ontario Teacher Assessment' });
+  expect((execute.mock.calls[0] as any)[1][4]).toContain('$s.SignerCertificate.RawData');
+  for (const fingerprint of [undefined, 'bad', 'ab'.repeat(31)]) {
+    await expect(inspectSignature('C:/signed.exe', { includeCertificate: true, execute: async () => ({ stdout: JSON.stringify({ status: 'Valid', publisher: 'CN=Fictional', certificateSha256: fingerprint }) }) })).rejects.toThrow();
+  }
+});

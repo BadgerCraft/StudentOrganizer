@@ -1,3 +1,4 @@
+import { runUpdateWork } from '../services/updateSafety';
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -135,7 +136,7 @@ export const ParticipationLedgerView: React.FC<ParticipationLedgerViewProps> = (
     return currentIdentity;
   };
 
-  const handleSaveNote = async () => {
+  const handleSaveNote = async () => runUpdateWork(async () => {
     if (!editingEvent) return;
     try {
       const id = await getIdentity();
@@ -152,7 +153,7 @@ export const ParticipationLedgerView: React.FC<ParticipationLedgerViewProps> = (
     } catch (err: any) {
       setActionError(err.message || 'Failed to update observation note.');
     }
-  };
+  });
 
   const handleOpenRetract = (ev: ParticipationEvent) => {
     setRetractingEvent(ev);
@@ -160,7 +161,7 @@ export const ParticipationLedgerView: React.FC<ParticipationLedgerViewProps> = (
     setActionError(null);
   };
 
-  const handleConfirmRetract = async () => {
+  const handleConfirmRetract = async () => runUpdateWork(async () => {
     if (!retractingEvent) return;
     try {
       const id = await getIdentity();
@@ -177,7 +178,7 @@ export const ParticipationLedgerView: React.FC<ParticipationLedgerViewProps> = (
     } catch (err: any) {
       setActionError(err.message || 'Failed to retract observation.');
     }
-  };
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

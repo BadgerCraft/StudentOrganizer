@@ -15,6 +15,7 @@
     "benchmark:browser": "tsx src/benchmarks/runBrowserBenchmark.ts",
     "test:workflow": "tsx src/benchmarks/visualTestWorkflow.ts",
     "test:browser:ux": "tsx src/benchmarks/browserUxE2ETest.ts",
+    "test:updates:browser": "node --import tsx scripts/startupUpdateBannerSmoke.ts",
     "electron:dev": "electron .",
     "package:win": "npm run build && electron-builder --win nsis portable",
     "package:mac": "npm run build && electron-builder --mac dmg zip",

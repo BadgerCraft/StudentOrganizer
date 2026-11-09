@@ -45,6 +45,17 @@ async function fixture(mode: 'legacy' | 'encrypted' | 'enrollment-pending', fail
   return { handlers, windows, violations, routes, app, locks: () => ({ runtimeLocks, hostLocks }), quits: () => quits };
 }
 describe('actual Electron main wiring with synthetic native dependencies', () => {
+  it('passes the fixed direct policy to preload and keeps startup status owned-frame-only and protected', async () => {
+    const legacy = await fixture('legacy');
+    expect(legacy.windows[0].options.webPreferences.additionalArguments).toEqual(['--so-update-mode=github-release']);
+    expect(legacy.handlers.get('startup-update:status')('trusted')).toMatchObject({ status: 'unsupported', installationAvailable: false });
+    expect(() => legacy.handlers.get('startup-update:status')('foreign')).toThrow('Update action denied');
+    expect(() => legacy.handlers.get('startup-update:status')('trusted', 'https://other.test')).toThrow('Update action denied');
+    const encrypted = await fixture('encrypted');
+    expect(encrypted.handlers.get('startup-update:status')('trusted')).toMatchObject({ installationAvailable: false, message: expect.stringContaining('protected workspaces') });
+    expect(await encrypted.handlers.get('manual-update:check')('trusted')).toMatchObject({ installationAvailable: false });
+    expect(encrypted.routes).not.toContain('plaintext-install');
+  });
   it.each(['encrypted', 'enrollment-pending'] as const)('chooses an ephemeral partition and protected marker before loading %s', async mode => {
     const f = await fixture(mode), window = f.windows[0]; expect(window.options.webPreferences.partition).not.toMatch(/^persist:/); expect(window.loaded[1]).toEqual({ hash: 'encrypted-workspace' });
     expect((await f.handlers.get('encryption:status')('trusted')).value.ephemeralPartition).toBe(true);

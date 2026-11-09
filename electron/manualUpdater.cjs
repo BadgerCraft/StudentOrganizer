@@ -1,4 +1,4 @@
-// Manual metadata lookup only. No installer download/execution or renderer-selected URLs.
+// Metadata lookup only. No installer download/execution or renderer-selected URLs.
 const https = require('node:https');
 const { fileURLToPath } = require('node:url');
 const ENDPOINT = 'https://api.github.com/repos/BadgerCraft/StudentOrganizer/releases/latest';
@@ -58,7 +58,7 @@ function requestLatest() {
       request?.destroy(error);
     }, 10000);
     try {
-      request = https.get(ENDPOINT, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'StudentOrganizer-manual-update-check' }, timeout: 10000 }, response => {
+      request = https.get(ENDPOINT, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'StudentOrganizer-release-check' }, timeout: 10000 }, response => {
         // Redirects are never followed. This request contains no local records or device IDs.
         if (response.statusCode === 404) { response.resume(); finish(null, null); return; }
         if (response.statusCode !== 200) { response.resume(); finish(new Error('Release unavailable')); return; }

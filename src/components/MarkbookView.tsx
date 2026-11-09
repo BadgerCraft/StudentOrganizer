@@ -1,3 +1,4 @@
+import { runUpdateWork, useUpdateEditor } from '../services/updateSafety';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
@@ -119,6 +120,8 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     currentFeedback: string;
     expectedCellState: NonNullable<SaveMarkbookCellParams['expectedCellState']>;
   } | null>(null);
+
+  useUpdateEditor(!!activeCell);
 
   const [editScore, setEditScore] = useState('');
   const [editFormat, setEditFormat] = useState<ScoreInputFormat>('classroom_level');
@@ -266,7 +269,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     setSaveError(null);
   };
 
-  const handleSaveCell = async (e: React.FormEvent) => {
+  const handleSaveCell = async (e: React.FormEvent) => runUpdateWork(async () => {
     e.preventDefault();
     if (!activeCell) return;
     setSaveError(null);
@@ -301,7 +304,7 @@ export const MarkbookView: React.FC<MarkbookViewProps> = ({
     } catch (err: any) {
       setSaveError(err?.message || 'Failed to save result.');
     }
-  };
+  });
 
   const getCategoryColor = (code: string) => {
     switch (code) {

@@ -1,3 +1,4 @@
+import { runUpdateWork, useUpdateEditor } from '../services/updateSafety';
 import { safePhotoSource } from '../utils/localPhoto';
 import { createPortal } from 'react-dom';
 import { consumeStudentPress, registerStudentPress } from './studentPress';
@@ -79,6 +80,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
   const [draggedSeat, setDraggedSeat] = useState<SeatPosition | null>(null);
   const [tapMoveMode, setTapMoveMode] = useState(false);
   const [tapMoveSource, setTapMoveSource] = useState<SeatPosition | null>(null);
+  useUpdateEditor(!!tapMoveSource);
   const [seatingBusy, setSeatingBusy] = useState(false);
   const [seatingError, setSeatingError] = useState<string | null>(null);
   const [moveBusy, setMoveBusy] = useState(false);
@@ -133,7 +135,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     grid.push(rowArr);
   }
 
-  const updateLayout = async (changes: Partial<Pick<SeatingLayout, 'rows' | 'cols' | 'isLocked' | 'cardSize'>>) => {
+  const updateLayout = async (changes: Partial<Pick<SeatingLayout, 'rows' | 'cols' | 'isLocked' | 'cardSize'>>) => runUpdateWork(async () => {
     const identityEpoch = getIdentityEpoch();
     setSeatingError(null);
     try {
@@ -143,7 +145,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     } catch (error) {
       setSeatingError(error instanceof Error ? error.message : 'Classroom layout could not be updated.');
     }
-  };
+  });
   const handleToggleLock = () => updateLayout({ isLocked: !layout.isLocked });
   const handleToggleSize = () => updateLayout({ cardSize: layout.cardSize === 'standard' ? 'compact' : 'standard' });
   const handleAddRow = () => updateLayout({ rows: layout.rows + 1 });
@@ -159,7 +161,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     return currentIdentity;
   };
 
-  const runSeatingAction = async (action: 'populate' | 'alphabetical' | 'randomize') => {
+  const runSeatingAction = async (action: 'populate' | 'alphabetical' | 'randomize') => runUpdateWork(async () => {
     if (seatingBusy) return;
     setSeatingBusy(true);
     setSeatingError(null);
@@ -175,12 +177,12 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     } finally {
       setSeatingBusy(false);
     }
-  };
+  });
   const handleArrangeAlphabetically = () => runSeatingAction('alphabetical');
   const handlePopulate = () => runSeatingAction('populate');
   const handleConfirmRandomize = () => runSeatingAction('randomize');
 
-  const handleToggleAttendance = async (enrollmentId: UUID, e: React.MouseEvent) => {
+  const handleToggleAttendance = async (enrollmentId: UUID, e: React.MouseEvent) => runUpdateWork(async () => {
     e.stopPropagation();
     const id = await getIdentity();
     await attendanceService.toggleAttendance(
@@ -191,7 +193,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
       id.deviceId
     );
     onRefresh();
-  };
+  });
 
   // Drag and drop handlers
   const handleDragStart = (pos: SeatPosition) => {
@@ -199,15 +201,15 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     setDraggedSeat(pos);
   };
 
-  const handleDrop = async (targetRow: number, targetCol: number) => {
+  const handleDrop = async (targetRow: number, targetCol: number) => runUpdateWork(async () => {
     if (!draggedSeat || layout.isLocked) return;
     const id = await getIdentity();
     await seatingService.assignSeat(layout.id, targetRow, targetCol, draggedSeat.classEnrollmentId, id.userId, id.deviceId);
     setDraggedSeat(null);
     onRefresh();
-  };
+  });
 
-  const handleTapSeat = async (row: number, col: number, seat: SeatPosition | null) => {
+  const handleTapSeat = async (row: number, col: number, seat: SeatPosition | null) => runUpdateWork(async () => {
     if (!tapMoveMode) {
       if (seat) onToggleSelectStudent(seat.classEnrollmentId);
       return;
@@ -233,7 +235,7 @@ export const SeatingChartView: React.FC<SeatingChartViewProps> = ({
     } finally {
       setMoveBusy(false);
     }
-  };
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
