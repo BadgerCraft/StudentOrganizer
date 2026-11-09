@@ -1,5 +1,11 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 9 UTC — interactive preview audit and proposed pilot
+
+| Stable ID | Disposition | Next action / gate |
+| --- | --- | --- |
+| SO-INTERACTIVE-PREVIEW | Priority 1 in Tyler's engineering-reflection brief: audit build/test friction, document options and define the smallest interactive-feedback pilot. Documentation completed on an isolated branch; engineering remains proposed. An evaluable experience, not a merge alone, is the intended deliverable. | [Audit and pilot](CODING_WORKFLOW.md#interactive-review-workflow-and-preview-audit-2026-11-09-utc): reuse the real Vite renderer and existing fictional fixture in a disposable, agent-prepared review session. First prove a user-accessible interactive route; no personal desktop or reachable preview endpoint was verified in this audit. If existing shared preview access fails, request only the necessary hosting/deployment decision. Then implement the bounded launcher after scope approval and measure opening actions, time to useful interaction and actual feedback. No production seeding, encryption activation, real student data, new repository, merge, release or deployment is authorized by this planning record. Preserve PR60 as a separate unmerged feature. |
+
 ## November 4 — unpublished Windows candidate and owner tool
 
 | Stable ID | Disposition | Next action / gate |
