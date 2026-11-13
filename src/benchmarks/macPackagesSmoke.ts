@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runReportPdfDesktopAcceptance } from './reportPdfDesktopAcceptance';
@@ -122,6 +123,7 @@ async function checkApp(appPath: string, format: string) {
     app = await electron.launch({ executablePath, timeout: 45000 });
     const userDataPath = await app.evaluate(({ app }) => app.getPath('userData'));
     let page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
     await page.waitForURL('file://**');
     await page.waitForFunction(() => typeof (window as any).desktopReports?.exportPdf === 'function');
     await runReportPdfDesktopAcceptance(app, page, path.join(evidence, `${marker}-pdf`));
@@ -282,6 +284,7 @@ async function checkApp(appPath: string, format: string) {
     app = undefined;
     app = await electron.launch({ executablePath, timeout: 45000 });
     page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
     page.on('pageerror', error => errors.push(error.message));
     await openClass(page);
     await openHub(page);

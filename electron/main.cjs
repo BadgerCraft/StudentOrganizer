@@ -79,7 +79,7 @@ ipcMain.handle('assessment-report:cancel', (event, ...args) => {
   requireUpdateCaller(event, args, 0); protectedReports.cancel();
 });
 function requireUpdateCaller(event, args, expectedCount) {
-  const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
+  const indexUrl = pathToFileURL(path.join(__dirname, '../dist/roles.html')).href;
   if (args.length !== expectedCount || !updateWindow || !trustedCaller(event, updateWindow.webContents, indexUrl)) throw new Error('Update action denied');
 }
 ipcMain.handle('manual-update:check', (event, ...args) => {
@@ -106,7 +106,7 @@ app.on('second-instance', () => {
 });
 
 function createWindow() {
-  const indexPath = path.join(__dirname, '../dist/index.html');
+  const indexPath = path.join(__dirname, '../dist/roles.html');
   const policy = createEncryptionLaunchPolicy({ mode: encryptionRuntime.status().mode, indexPath });
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -241,6 +241,11 @@ app.whenReady().then(async () => {
     host: encryptionController.transferHost, configured: () => !!organizerConfig(),
     authorize: signal => authorizeDesktop({ config: organizerConfig(), openExternal: url => shell.openExternal(url), signal })
   });
+  await require('./controlPanel.cjs').attachControlPanel({ ipcMain, dialog, getWindow: () => updateWindow,
+    index: pathToFileURL(path.join(__dirname, '../dist/roles.html')).href,
+    // Preserve owner preparation records from the former standalone console. No teacher database migration.
+    storeFile: path.join(app.getPath('userData'), 'control-panel', 'local-approval.json'),
+    legacyStoreFile: path.join(app.getPath('appData'), 'StudentOrganizer-ControlPanel', 'local-approval.json') });
   createWindow();
 
   app.on('activate', () => {

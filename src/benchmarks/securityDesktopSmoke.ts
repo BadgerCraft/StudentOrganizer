@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { openSettingsSection, showClassTools } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { _electron as electron, type ElectronApplication } from 'playwright';
@@ -21,6 +22,7 @@ async function main() {
     app = await electron.launch({ executablePath: path.resolve('release/win-unpacked/Ontario Teacher Assessment.exe'),
       args: [`--user-data-dir=${profile}`] });
     const page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.locator('[data-testid="teacher-selector-modal"]').waitFor({ state: 'visible' });

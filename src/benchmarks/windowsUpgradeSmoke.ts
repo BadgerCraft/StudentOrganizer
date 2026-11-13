@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { observeRecoveryFixture, recoveryFixtureProcessScript, type RecoveryFixtureProcess } from '../../scripts/helpers/installRecoveryFixture';
 import { openRecovery, showClassTools, openAssignmentCreation, openSettingsSection } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
@@ -93,6 +94,7 @@ async function launchInstalled(executable: string, version: string) {
   const app = await electron.launch({ executablePath: executable, timeout: 60000 });
   assert.equal(await app.evaluate(({ app }) => app.getVersion()), version, 'Real installed binary must have the expected version');
   const page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
   await page.getByTestId('nav-dashboard-btn').waitFor();
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -150,7 +152,7 @@ async function boundaryDiagnostics(app: ElectronApplication, page: Page) {
     const path = (process as any).getBuiltinModule('path');
     const fs = (process as any).getBuiltinModule('fs');
     const { pathToFileURL, fileURLToPath } = (process as any).getBuiltinModule('url');
-    const index = path.join(app.getAppPath(), 'dist', 'index.html');
+    const index = path.join(app.getAppPath(), 'dist', 'roles.html');
     let expectedCanonicalFile = '';
     try { expectedCanonicalFile = fs.realpathSync.native(index); } catch (error) { expectedCanonicalFile = String(error); }
     const expected = pathToFileURL(index).href;

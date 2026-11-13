@@ -33,6 +33,7 @@ async function fixture(mode: 'legacy' | 'encrypted' | 'enrollment-pending', fail
     if (id === './encryptedOrganizerDrive.cjs') return { createEncryptedOrganizerDrive: ({ host: capability }: any) => { expect(capability).toHaveProperty('assertTransferContext'); expect(capability).not.toBe(host); return transport('encrypted'); } };
     if (id === './windowsInstallerUpdate.cjs') return { isInstalledNsis: () => false, configureUpdaterSession() {}, createInstallerUpdate: () => ({ status: () => ({ installationAvailable: true }), install: () => { routes.push('plaintext-install'); } }) };
     if (id === './reportPdf.cjs') return { createReportPdfExporter: () => () => { routes.push('pdf'); return true; } };
+    if (id === './controlPanel.cjs') return { attachControlPanel: async (options: any) => { expect(options.index).toContain('/dist/roles.html'); expect(options.storeFile).toContain('control-panel'); expect(options.legacyStoreFile).toContain('StudentOrganizer-ControlPanel'); } };
     if (id === './dictationIpc.cjs') return { attachDictation() {} };
     if (id === './encryptionNativeRuntime.cjs') return { createNativeEncryptionRuntime: async () => { if (failStart) throw Error('PRIVATE_INIT_DETAILS'); return runtime; } };
     if (id === './structuredEncryptionHost.cjs') return { createStructuredEncryptionHost() {} };

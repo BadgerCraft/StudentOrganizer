@@ -12,6 +12,7 @@ export default defineConfig({
       content: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     } }]
   }],
+  build: { rollupOptions: { input: { teacher: 'index.html', roles: 'roles.html' } } },
   server: {
     port: 3000
   }

@@ -1,3 +1,5 @@
+> November 13: the intended entry is now Student Organizer → Administrator. The standalone shell below is retained for compatibility/regression, not a second required installation. See the root README and latest Control Panel work record.
+
 # Student Organizer Control Panel
 
 A separate owner-facing Electron executable for Tyler, with update approval/delivery preparation and a permanently labelled fictional dashboard. Teacher settings remain teacher-controlled. There is no telemetry collector, teacher database access, student record payload, account management or publishing client.

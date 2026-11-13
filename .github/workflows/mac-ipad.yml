@@ -58,6 +58,8 @@ jobs:
           CSC_FOR_PULL_REQUEST: 'true'
       - name: Check packaged local speech runtime without audio
         run: node scripts/dictationRuntimeSmoke.cjs "release/mac${{ matrix.arch == 'arm64' && '-arm64' || '' }}/Ontario Teacher Assessment.app/Contents/Resources/dictation-runtime" "release/dictation-runtime-${{ matrix.arch }}.json"
+      - name: Check integrated roles and native Control Panel actions
+        run: node --import tsx scripts/integratedRolesNativeSmoke.ts "release/mac${{ matrix.arch == 'arm64' && '-arm64' || '' }}/Ontario Teacher Assessment.app/Contents/MacOS/Ontario Teacher Assessment"
       - name: Launch actual disk-image and archive apps; check restart persistence
         run: npm run test:mac:packages
       - name: Compile bundled iOS app without credentials
@@ -128,6 +130,7 @@ jobs:
         run: |
           npm test
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+          npm run test:roles:browser
           npm run test:focused-organizer
           BROWSER_ENGINE=webkit npm run test:marking:keyboard
           npm run test:encryption:browser
@@ -172,6 +175,7 @@ jobs:
           name: shared-browser-evidence-${{ github.run_number }}
           path: |
             screenshots/**
+            artifacts/roles/**
             /tmp/annotation-feedback-results.json
             /tmp/annotation-feedback.png
             /tmp/markinator-modes-photo-results.json

@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { prepare, recordTest, approve, revoke, candidate, state, exportPreview, previewOffer } = require('../../electron/updateApproval.cjs');
 const { createManualCheck } = require('../../electron/manualUpdater.cjs');
 const { createInstallerUpdate, hashFile } = require('../../electron/windowsInstallerUpdate.cjs');
-const { atomicJSON, verifyArtifact, assertPreviewDestination } = require('../../apps/control-panel/electron/store.cjs');
+const { atomicJSON, verifyArtifact, assertPreviewDestination } = require('../../electron/controlPanelStore.cjs');
 const bytes = Buffer.from('FICTIONAL NON-EXECUTABLE INSTALLER FIXTURE\n');
 const sample = () => ({ schemaVersion: 1, product: 'StudentOrganizer', version: '1.0.2', arch: 'x64', sourceCommit: '81058d87d669ff4cd787b06c25fe84217581f2ad', artifact: {
   name: 'OntarioTeacherAssessment-1.0.2-x64-nsis.exe', bytes: bytes.length, sha512: createHash('sha512').update(bytes).digest('base64') } });

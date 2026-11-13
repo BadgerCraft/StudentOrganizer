@@ -4,7 +4,7 @@ const { createDictation } = require('./dictation.cjs');
 const { trustedCaller } = require('./manualUpdater.cjs');
 
 function attachDictation({ app, window, ipcMain, dialog, systemPreferences }) {
-  const indexUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
+  const indexUrl = pathToFileURL(path.join(__dirname, '../dist/roles.html')).href;
   const service = createDictation({
     runtime: path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, '..'), 'dictation-runtime', process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli'),
     userData: app.getPath('userData')
