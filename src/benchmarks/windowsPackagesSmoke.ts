@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { installFictionalClassroom } from '../../scripts/helpers/classroomFixture';
 import { runMarkingDesktopAcceptance, verifyAfterRestart } from './markingDesktopAcceptance';
@@ -71,6 +72,7 @@ async function launch(executable: string) {
       if (!page) await delay(250);
     }
     if (!page) throw new Error('No packaged file:// app window appeared.');
+    await enterTeacherWorkspace(page);
     return { child, browser, page };
   } catch (error) {
     await browser?.close();
