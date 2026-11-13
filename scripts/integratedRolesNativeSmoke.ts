@@ -40,7 +40,7 @@ try {
   await page.getByText('Import cancelled.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Choose another role' }).click();
   await page.getByRole('button', { name: 'Teacher Open your classroom workspace' }).click();
-  await page.getByRole('heading', { name: 'Enter Teacher here', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Confirm teacher for this session', exact: true }).waitFor();
   await page.locator('[data-testid^="select-teacher-"]').filter({ hasText: 'Legacy Entry Fictional' }).click();
   await page.getByTestId('teacher-selector-modal').waitFor({ state: 'hidden' });
   assert.match(await page.getByTestId('header-teacher-btn').innerText(), /Legacy Entry Fictional/);
