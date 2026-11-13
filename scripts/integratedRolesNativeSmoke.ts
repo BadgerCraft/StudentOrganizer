@@ -12,13 +12,14 @@ try {
   let page = await app.firstWindow();
   // Seed the prior file entry in the same disposable native profile. This
   // checks storage-origin continuity, not an old binary/schema migration.
+  const seedWindow = app.waitForEvent('window');
   await app.evaluate(async ({ app, BrowserWindow }) => {
     const path = (process as any).getBuiltinModule('path');
     const seed = new BrowserWindow({ show: false, webPreferences: { session: BrowserWindow.getAllWindows()[0].webContents.session, nodeIntegration: false, contextIsolation: true, sandbox: true } });
     await seed.loadFile(path.join(app.getAppPath(), 'dist/index.html'));
   });
-  page = (await app.windows()).find(candidate => candidate.url().endsWith('/index.html'))!;
-  assert.ok(page, 'Prior-entry fixture window must exist');
+  page = await seedWindow;
+  await page.waitForURL('file://**/index.html');
   await page.getByRole('heading', { name: 'Enter Teacher here', exact: true }).waitFor();
   await page.getByLabel('Teacher name', { exact: true }).fill('Legacy Entry Fictional');
   await page.getByRole('button', { name: 'Save and use teacher', exact: true }).click();
