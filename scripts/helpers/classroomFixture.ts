@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from './enterTeacherWorkspace';
 import Dexie from 'dexie';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import type { Page } from 'playwright';
@@ -50,5 +51,6 @@ export async function installFictionalClassroom(page: Page) {
     };
   }), rows);
   await page.reload();
+  if (new URL(page.url()).pathname.endsWith('/roles.html')) await enterTeacherWorkspace(page);
   await page.locator('[data-testid^="select-teacher-"]').first().waitFor();
 }

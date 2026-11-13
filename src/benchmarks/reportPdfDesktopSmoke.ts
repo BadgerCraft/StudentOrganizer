@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { _electron as electron } from 'playwright';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -11,6 +12,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry
 const app = await electron.launch({ executablePath: path.resolve('release/win-unpacked/Ontario Teacher Assessment.exe'), args: [`--user-data-dir=${profile}`], env, timeout: 45000 });
 try {
   const page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
   await page.waitForURL('file://**');
   await page.waitForFunction(() => typeof (window as any).desktopReports?.exportPdf === 'function');
   await runReportPdfDesktopAcceptance(app, page, path.resolve('release/qa-evidence/packaged-pdf'));

@@ -441,3 +441,10 @@ QA05 now keeps the complete captured originals and lets one marking session load
 QA06 rejects shrinking occupied edges and explains that students must be moved first. Existing hidden seats are named with recovery guidance. Tests and screenshots show unchanged assignments after rejection, successful move-then-shrink and legacy seat recovery. These are targeted correctness fixes, not changes to the accepted participation layout.
 
 Implementation/review evidence: [QA follow-up](work-orders/QA-CAPACITY-SEATING-2026-11-02.md). User understanding and acceptance remain pending; no fabricated comprehension answer. Merge/release approval remains separate.
+
+
+## November 13 — integrated roles (walkthrough prepared)
+
+Before: two executables. After: one installed app with Administrator and Teacher workspace choices and an unavailable Student option. A workspace choice is navigation, not authentication: anyone at this device can choose Administrator. Existing teacher identity still attributes classroom writes. Sharing the Control Panel implementation avoids two diverging copies, while a separate preparation file preserves the former record and leaves teacher storage unchanged.
+
+Review question deferred: what does selecting Administrator change, and what does it not protect? No user understanding inferred. Main merge/release remain separately approved actions. Full verification/limits: Control Panel work record, November 13 section.

@@ -9,7 +9,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const approval = require('../../electron/updateApproval.cjs');
 const delivery = require('../../electron/releaseDelivery.cjs');
-const { preparePublicationBundle } = require('../../apps/control-panel/electron/store.cjs');
+const { preparePublicationBundle } = require('../../electron/controlPanelStore.cjs');
 const { createManualCheck } = require('../../electron/manualUpdater.cjs');
 const { createInstallerUpdate, hashFile, TABLES } = require('../../electron/windowsInstallerUpdate.cjs');
 const bytes = Buffer.from('FICTIONAL NON-EXECUTABLE DELIVERY FIXTURE\n');

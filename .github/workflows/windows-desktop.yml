@@ -43,6 +43,8 @@ jobs:
         run: node scripts/windowsCredentialLedgerSmoke.cjs
       - name: Verify packaged encrypted SQLite storage with synthetic bytes
         run: npx tsx src/benchmarks/encryptionNativeSmoke.ts
+      - name: Check integrated roles and native Control Panel actions
+        run: node --import tsx scripts/integratedRolesNativeSmoke.ts "release/win-unpacked/Ontario Teacher Assessment.exe"
       - name: Check actual packaged PDF renderer and controlled save cancellation
         run: npx tsx src/benchmarks/reportPdfDesktopSmoke.ts
       - name: Check actual installed update IPC boundary before replacement builds

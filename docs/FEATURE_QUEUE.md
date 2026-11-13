@@ -1,5 +1,12 @@
 # StudentOrganizer — authoritative feature and execution queue
 
+## November 13 — integrated Control Panel and role entry
+
+| Stable ID | Authority / disposition | Next action / gate |
+| --- | --- | --- |
+| SO-INTEGRATED-ROLES | Tyler explicitly requested integrating Control Panel into SO, selecting Administrator/Teacher at launch, and a greyed-out Student option marked currently unavailable. Roles are navigation, not authentication; no new permissions. Implementation on `codex/integrated-role-entry-20261113` from main `7860bb6`. | Shared UI/native controller and desktop entry implemented; local build/typechecks and focused tests pass. Full regression, rendered/native CI and final review evidence pending. Preserve teacher data/identity, local-only preparation and fictional analytics. No merge, release, deployment, real records or activation. [Current work record](work-orders/CONTROL-PANEL-2026-10-20.md#november-13--integrated-role-entry). |
+
+
 ## November 4 — unpublished Windows candidate and owner tool
 
 | Stable ID | Disposition | Next action / gate |

@@ -89,7 +89,7 @@ describe('IPC ownership and microphone consent', () => {
     });
     const { attachDictation } = ipcModule.exports;
     const handlers: Record<string, (...args: any[]) => any> = {};
-    const frame = { url: new URL('../../dist/index.html', import.meta.url).href };
+    const frame = { url: new URL('../../dist/roles.html', import.meta.url).href };
     const permissions: any = {};
     const contents = Object.assign(new EventEmitter(), { mainFrame: frame, isDestroyed: () => false, send: vi.fn(), session: { setPermissionCheckHandler: (fn: any) => permissions.check = fn, setPermissionRequestHandler: (fn: any) => permissions.request = fn } });
     const window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false, isFocused: () => true });

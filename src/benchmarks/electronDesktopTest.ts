@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { _electron as electron } from 'playwright';
 import path from 'path';
 import fs from 'fs';
@@ -87,6 +88,7 @@ async function main() {
   });
 
   let page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
   await page.waitForLoadState('domcontentloaded');
 
   const pageUrl = page.url();
@@ -173,6 +175,7 @@ async function main() {
   });
 
   page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
   await page.waitForLoadState('domcontentloaded');
 
   const persistedStudent = await page.evaluate(async (num) => {

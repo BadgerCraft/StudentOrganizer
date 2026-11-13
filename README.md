@@ -1,5 +1,14 @@
 # Ontario Teacher Assessment
 
+## Role entry (November 13, 2026)
+
+Installed Student Organizer now opens a role choice: **Administrator** opens the integrated Control Panel, **Teacher** opens the existing classroom application, and **Student** is disabled with “Currently unavailable”. These are workspace choices, not accounts or access controls. Teacher attribution and protected-storage checks remain unchanged. Administrator can return to the chooser; after entering Teacher, relaunch to select another role so this change does not silently discard active teaching drafts.
+
+The production desktop entry is `dist/roles.html`. For browser development use `/roles.html`; `/index.html` remains the isolated teacher renderer for existing development/regression harnesses. Both are bundled locally. The Control Panel is shared source inside the same application and native process, not a separately launched executable. Former standalone packaging is retained only for compatibility/regression evidence, not the intended new user workflow.
+
+Control Panel preparation is stored under the existing SO profile's `control-panel` directory. A valid former standalone record is read only if the integrated record does not exist; subsequent changes save to SO and do not overwrite the old record. Corrupt integrated records never silently fall back. Fictional analytics remain labeled and do not collect classroom activity. No permission system, live analytics, publishing, release or student-facing implementation is added.
+
+
 A local-first assessment and participation app for Ontario secondary teachers. The interface uses the Achievement Chart categories: Knowledge, Thinking, Communication, and Application. The current code uses React, TypeScript, Vite, Dexie (IndexedDB), and Electron for desktop packaging.
 
 ## Work on the app

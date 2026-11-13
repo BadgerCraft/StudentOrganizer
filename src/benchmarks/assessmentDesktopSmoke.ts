@@ -1,3 +1,4 @@
+import { enterTeacherWorkspace } from '../../scripts/helpers/enterTeacherWorkspace';
 import { openRecovery, showClassTools, openAssignmentCreation } from '../../scripts/helpers/organizerNavigation';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 import path from 'path';
@@ -23,6 +24,7 @@ async function main() {
   try {
     app = await electron.launch({ executablePath });
     let page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
     page.on('pageerror', error => pageErrors.push(error.message));
     await openAssessmentHub(page);
 
@@ -39,6 +41,7 @@ async function main() {
 
     app = await electron.launch({ executablePath });
     page = await app.firstWindow();
+    await enterTeacherWorkspace(page);
     page.on('pageerror', error => pageErrors.push(error.message));
     await openAssessmentHub(page);
     await page.getByRole('heading', { name: assessmentTitle }).waitFor({ state: 'visible' });
